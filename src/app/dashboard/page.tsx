@@ -1,4 +1,4 @@
-// User Dashboard — Shows subscribed modules and subscription status
+// User Dashboard — Checkos-Kontostand, Module, Transaktionen
 // Force dynamic rendering (needs session + DB)
 export const dynamic = "force-dynamic";
 
@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getBalance, getTransactions } from "@/lib/checkos";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -17,37 +18,65 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  let subscriptions: {
+  let balance = 0;
+  let transactions: {
     id: string;
-    status: string;
-    currentPeriodEnd: Date | null;
-    module: {
-      slug: string;
-      name: string;
-      description: string;
-      icon: string | null;
-    };
+    amount: number;
+    type: string;
+    description: string | null;
+    moduleSlug: string | null;
+    qualityTier: string | null;
+    createdAt: Date;
+  }[] = [];
+  let activeModules: {
+    slug: string;
+    name: string;
+    description: string;
+    icon: string | null;
   }[] = [];
 
   try {
-    subscriptions = await prisma.subscription.findMany({
-      where: {
-        userId: session.user.id,
-        status: "active",
-      },
-      include: {
-        module: {
-          select: {
-            slug: true,
-            name: true,
-            description: true,
-            icon: true,
-          },
-        },
-      },
+    balance = await getBalance(session.user.id);
+    transactions = await getTransactions(session.user.id, 10);
+
+    // Aktive Module laden (die User tatsächlich nutzen kann)
+    const modules = await prisma.module.findMany({
+      where: { isActive: true },
+      select: { slug: true, name: true, description: true, icon: true },
+      orderBy: { sortOrder: "asc" },
     });
+    activeModules = modules;
   } catch {
     // DB not connected — show empty state
+  }
+
+  // Transaktions-Typ Label
+  function getTypeLabel(type: string): string {
+    switch (type) {
+      case "purchase":
+        return "Kauf";
+      case "usage":
+        return "Verbrauch";
+      case "gift":
+        return "Geschenk";
+      case "referral":
+        return "Empfehlung";
+      case "welcome":
+        return "Willkommen";
+      case "wheel":
+        return "Glücksrad";
+      case "daily_wheel":
+        return "Tägliches Rad";
+      default:
+        return type;
+    }
+  }
+
+  // Transaktions-Typ Farbe
+  function getTypeColor(amount: number): string {
+    return amount >= 0
+      ? "text-emerald-600"
+      : "text-red-500";
   }
 
   return (
@@ -63,72 +92,114 @@ export default async function DashboardPage() {
             <p className="text-gray-600 mt-1">Willkommen in deinem Checko Dashboard.</p>
           </div>
 
-          {/* Subscribed Modules */}
-          {subscriptions.length > 0 ? (
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Deine aktiven Module
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {subscriptions.map((sub) => (
-                  <Link
-                    key={sub.id}
-                    href={`/dashboard/${sub.module.slug}`}
-                    className="group block"
-                  >
-                    <div className="bg-white rounded-xl border border-gray-200 p-6 h-full transition-all hover:shadow-lg hover:border-emerald-300">
-                      <div className="flex items-start justify-between mb-3">
-                        <span className="text-3xl">{sub.module.icon || "🔧"}</span>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
-                          Aktiv
-                        </span>
+          {/* Checkos Balance Widget */}
+          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-lg">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-emerald-100 text-sm font-medium mb-1">Dein Checkos-Guthaben</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-4xl">🦎</span>
+                  <span className="text-4xl sm:text-5xl font-bold">{balance}</span>
+                  <span className="text-xl text-emerald-100">Checkos</span>
+                </div>
+              </div>
+              <Link
+                href="/dashboard/checkos"
+                className="bg-white text-emerald-700 px-6 py-3 rounded-lg font-semibold hover:bg-emerald-50 transition shadow-md"
+              >
+                🪙 Checkos aufladen
+              </Link>
+            </div>
+          </div>
+
+          {/* Module & Transactions Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Aktive Module */}
+            <div className="lg:col-span-2">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Verfügbare Module</h2>
+              {activeModules.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {activeModules.map((mod) => (
+                    <Link
+                      key={mod.slug}
+                      href={`/dashboard/${mod.slug}`}
+                      className="group block"
+                    >
+                      <div className="bg-white rounded-xl border border-gray-200 p-5 h-full transition-all hover:shadow-lg hover:border-emerald-300">
+                        <div className="flex items-start gap-3 mb-3">
+                          <span className="text-2xl">{mod.icon || "🔧"}</span>
+                          <div>
+                            <h3 className="font-semibold text-gray-900 group-hover:text-emerald-700 transition">
+                              {mod.name}
+                            </h3>
+                            <p className="text-gray-500 text-sm line-clamp-2 mt-1">
+                              {mod.description}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <h3 className="text-lg font-semibold text-gray-900 group-hover:text-emerald-700 transition mb-2">
-                        {sub.module.name}
-                      </h3>
-                      <p className="text-gray-600 text-sm line-clamp-2">
-                        {sub.module.description}
-                      </p>
-                      {sub.currentPeriodEnd && (
-                        <p className="text-gray-400 text-xs mt-3">
-                          Nächste Abrechnung:{" "}
-                          {new Date(sub.currentPeriodEnd).toLocaleDateString("de-CH")}
-                        </p>
-                      )}
-                    </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+                  <span className="text-4xl block mb-3">📦</span>
+                  <p className="text-gray-500">Noch keine Module verfügbar.</p>
+                  <Link
+                    href="/#module"
+                    className="inline-block mt-4 text-emerald-600 hover:text-emerald-700 font-medium"
+                  >
+                    Module entdecken →
                   </Link>
-                ))}
+                </div>
+              )}
+            </div>
+
+            {/* Letzte Transaktionen */}
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Letzte Transaktionen</h2>
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                {transactions.length > 0 ? (
+                  <div className="divide-y divide-gray-100">
+                    {transactions.map((tx) => (
+                      <div key={tx.id} className="px-4 py-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">
+                              {getTypeLabel(tx.type)}
+                            </span>
+                            {tx.description && (
+                              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                {tx.description}
+                              </p>
+                            )}
+                          </div>
+                          <span className={`text-sm font-bold ${getTypeColor(tx.amount)}`}>
+                            {tx.amount > 0 ? "+" : ""}
+                            {tx.amount}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {new Date(tx.createdAt).toLocaleDateString("de-CH", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-4 py-8 text-center">
+                    <span className="text-3xl block mb-2">📋</span>
+                    <p className="text-gray-500 text-sm">Noch keine Transaktionen.</p>
+                  </div>
+                )}
               </div>
             </div>
-          ) : (
-            <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-              <span className="text-5xl block mb-4">🦎</span>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                Noch keine Module gebucht
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Entdecke unsere Module und starte mit deinem ersten Tool.
-              </p>
-              <Link
-                href="/#module"
-                className="inline-block bg-emerald-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-emerald-700 transition"
-              >
-                Module entdecken
-              </Link>
-            </div>
-          )}
-
-          {/* Discover more modules button */}
-          {subscriptions.length > 0 && (
-            <div className="mt-8 text-center">
-              <Link
-                href="/#module"
-                className="inline-block bg-emerald-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-emerald-700 transition"
-              >
-                Neues Modul entdecken
-              </Link>
-            </div>
-          )}
+          </div>
         </div>
       </main>
       <Footer />

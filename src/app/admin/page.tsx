@@ -1,4 +1,4 @@
-// Admin Dashboard — KPIs: User count, subscription count, revenue
+// Admin Dashboard — KPIs: User count, Checkos im Umlauf, Käufe, Umsatz
 // Plus recent audit log entries
 import { prisma } from "@/lib/prisma";
 
@@ -22,31 +22,33 @@ interface AuditEntry {
 
 async function getKPIs(): Promise<KPI[]> {
   try {
-    const [userCount, activeSubCount, totalRevenue, moduleCount] = await Promise.all([
-      prisma.user.count(),
-      prisma.subscription.count({ where: { status: "active" } }),
-      prisma.subscription.count({ where: { status: "active" } }).then(async (count) => {
-        if (count === 0) return 0;
-        const subs = await prisma.subscription.findMany({
-          where: { status: "active" },
-          include: { module: { select: { priceMonthly: true } } },
-        });
-        return subs.reduce((sum, sub) => sum + sub.module.priceMonthly, 0);
-      }),
-      prisma.module.count({ where: { isActive: true } }),
-    ]);
+    const [userCount, totalCheckosInCirculation, totalPurchases, moduleCount] =
+      await Promise.all([
+        prisma.user.count(),
+        prisma.user.aggregate({ _sum: { checkosBalance: true } }).then((r) => r._sum.checkosBalance ?? 0),
+        prisma.checkoPurchase.aggregate({ _sum: { priceCHF: true } }).then((r) => r._sum.priceCHF ?? 0),
+        prisma.module.count({ where: { isActive: true } }),
+      ]);
 
     return [
       { label: "Benutzer", value: userCount.toString(), icon: "👥" },
-      { label: "Aktive Abos", value: activeSubCount.toString(), icon: "💳" },
-      { label: "Monatl. Umsatz", value: `CHF ${(totalRevenue / 100).toFixed(2)}`, icon: "💰" },
+      {
+        label: "Checkos im Umlauf",
+        value: totalCheckosInCirculation.toString(),
+        icon: "🦎",
+      },
+      {
+        label: "Umsatz (Checkos)",
+        value: `CHF ${(totalPurchases / 100).toFixed(2)}`,
+        icon: "💰",
+      },
       { label: "Aktive Module", value: moduleCount.toString(), icon: "📦" },
     ];
   } catch {
     return [
       { label: "Benutzer", value: "–", icon: "👥" },
-      { label: "Aktive Abos", value: "–", icon: "💳" },
-      { label: "Monatl. Umsatz", value: "–", icon: "💰" },
+      { label: "Checkos im Umlauf", value: "–", icon: "🦎" },
+      { label: "Umsatz (Checkos)", value: "–", icon: "💰" },
       { label: "Aktive Module", value: "–", icon: "📦" },
     ];
   }
@@ -94,7 +96,10 @@ export default async function AdminDashboard() {
         {recentLogs.length > 0 ? (
           <div className="space-y-3">
             {recentLogs.map((log) => (
-              <div key={log.id} className="flex items-start gap-3 text-sm border-b border-gray-100 pb-3 last:border-0">
+              <div
+                key={log.id}
+                className="flex items-start gap-3 text-sm border-b border-gray-100 pb-3 last:border-0"
+              >
                 <span className="text-gray-400 shrink-0 w-36">
                   {new Date(log.createdAt).toLocaleString("de-CH")}
                 </span>

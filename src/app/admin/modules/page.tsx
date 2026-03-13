@@ -11,7 +11,6 @@ interface Module {
   priceMonthly: number;
   isActive: boolean;
   sortOrder: number;
-  _count: { subscriptions: number };
 }
 
 export default function AdminModulesPage() {
@@ -97,8 +96,7 @@ export default function AdminModulesPage() {
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Modul</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Slug</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Preis/Mt</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Abos</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Referenzpreis</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Aktionen</th>
               </tr>
@@ -144,7 +142,6 @@ export default function AdminModulesPage() {
                       </button>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{mod._count.subscriptions}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -172,7 +169,7 @@ export default function AdminModulesPage() {
               ))}
               {modules.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                     Keine Module vorhanden.
                   </td>
                 </tr>

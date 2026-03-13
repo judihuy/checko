@@ -7,7 +7,7 @@ interface ModuleCardProps {
   slug: string;
   name: string;
   description: string;
-  priceMonthly: number; // in Rappen
+  priceMonthly?: number; // Legacy — nicht mehr angezeigt
   icon?: string | null;
   isActive: boolean;
   showPrice?: boolean;
@@ -18,14 +18,12 @@ export function ModuleCard({
   slug,
   name,
   description,
-  priceMonthly,
   icon,
   isActive,
   showPrice = true,
   linkTo,
 }: ModuleCardProps) {
   const href = linkTo || `/module/${slug}`;
-  const priceFormatted = (priceMonthly / 100).toFixed(2);
 
   return (
     <Link href={href} className="group block">
@@ -47,13 +45,12 @@ export function ModuleCard({
           {description}
         </p>
 
-        {/* Price */}
+        {/* Status / Checkos Info */}
         {showPrice && (
           <div className="mt-auto">
             {isActive ? (
-              <span className="text-emerald-700 font-semibold">
-                CHF {priceFormatted}
-                <span className="text-gray-500 font-normal text-sm"> / Monat</span>
+              <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-sm">
+                🦎 Ab 2 Checkos pro Nutzung
               </span>
             ) : (
               <span className="text-gray-400 text-sm italic">Demnächst verfügbar</span>

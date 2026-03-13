@@ -1,5 +1,5 @@
 // Admin API: User management
-// GET — list all users
+// GET — list all users (mit Checkos-Balance)
 // PATCH — change user role
 
 import { NextResponse } from "next/server";
@@ -29,8 +29,8 @@ export async function GET() {
         name: true,
         email: true,
         role: true,
+        checkosBalance: true,
         createdAt: true,
-        _count: { select: { subscriptions: true } },
       },
       orderBy: { createdAt: "desc" },
     });

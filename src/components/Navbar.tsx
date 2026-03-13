@@ -25,7 +25,7 @@ export function Navbar() {
               Module
             </Link>
             <Link href="/#preise" className="text-gray-600 hover:text-emerald-700 transition">
-              Preise
+              Checkos
             </Link>
             {session ? (
               <>
@@ -42,6 +42,12 @@ export function Navbar() {
                   className="text-gray-600 hover:text-emerald-700 transition"
                 >
                   Dashboard
+                </Link>
+                <Link
+                  href="/dashboard/checkos"
+                  className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-medium transition"
+                >
+                  🦎 Checkos
                 </Link>
                 <button
                   onClick={() => signOut({ callbackUrl: "/" })}
@@ -99,7 +105,7 @@ export function Navbar() {
               className="block px-3 py-2 text-gray-600 hover:bg-gray-50 rounded"
               onClick={() => setMobileOpen(false)}
             >
-              Preise
+              Checkos
             </Link>
             {session ? (
               <>
@@ -118,6 +124,13 @@ export function Navbar() {
                   onClick={() => setMobileOpen(false)}
                 >
                   Dashboard
+                </Link>
+                <Link
+                  href="/dashboard/checkos"
+                  className="block px-3 py-2 text-emerald-600 hover:bg-emerald-50 rounded font-medium"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  🦎 Checkos aufladen
                 </Link>
                 <button
                   onClick={() => {

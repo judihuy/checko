@@ -1,5 +1,5 @@
 // Admin API: Module management
-// GET — list all modules with subscription counts
+// GET — list all modules
 // PATCH — toggle active status, change price
 
 import { NextResponse } from "next/server";
@@ -22,9 +22,6 @@ export async function GET() {
 
   try {
     const modules = await prisma.module.findMany({
-      include: {
-        _count: { select: { subscriptions: true } },
-      },
       orderBy: { sortOrder: "asc" },
     });
 

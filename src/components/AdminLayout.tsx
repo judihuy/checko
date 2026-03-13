@@ -9,7 +9,7 @@ const adminLinks = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
   { href: "/admin/users", label: "Benutzer", icon: "👥" },
   { href: "/admin/modules", label: "Module", icon: "📦" },
-  { href: "/admin/subscriptions", label: "Abonnements", icon: "💳" },
+  { href: "/admin/transactions", label: "Transaktionen", icon: "🦎" },
   { href: "/admin/content", label: "Inhalte", icon: "📝" },
   { href: "/admin/audit-log", label: "Audit-Log", icon: "📋" },
   { href: "/admin/settings", label: "Einstellungen", icon: "⚙️" },

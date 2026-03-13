@@ -1,6 +1,6 @@
 // Checko — Prisma Schema
 // Database: MySQL
-// All relations for User, Module, Subscription, AuditLog, ContentBlock, PromoCode
+// Checkos-System (Coin-basiert, KEIN Abo-Modell)
 // Plus NextAuth tables: Account, Session, VerificationToken
 
 generator client {
@@ -56,24 +56,26 @@ model VerificationToken {
 // ==================== CORE MODELS ====================
 
 model User {
-  id                    String         @id @default(cuid())
-  email                 String         @unique
+  id                    String               @id @default(cuid())
+  email                 String               @unique
   emailVerified         DateTime?
-  isEmailVerified       Boolean        @default(false)
-  verificationToken     String?        @unique
+  isEmailVerified       Boolean              @default(false)
+  verificationToken     String?              @unique
   name                  String?
   image                 String?
   password              String?
-  role                  String         @default("user")
-  resetToken            String?        @unique
+  role                  String               @default("user")
+  resetToken            String?              @unique
   resetTokenExpiresAt   DateTime?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  checkosBalance        Int                  @default(0)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
-  accounts      Account[]
-  sessions      Session[]
-  subscriptions Subscription[]
-  searches      PreisradarSearch[]
+  accounts              Account[]
+  sessions              Session[]
+  checkoTransactions    CheckoTransaction[]
+  checkoPurchases       CheckoPurchase[]
+  searches              PreisradarSearch[]
 }
 
 model Module {
@@ -87,27 +89,40 @@ model Module {
   sortOrder     Int            @default(0)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-
-  subscriptions Subscription[]
 }
 
-model Subscription {
-  id               String    @id @default(cuid())
-  userId           String
-  moduleId         String
-  stripeSubId      String?   @unique
-  status           String    @default("active")
-  currentPeriodEnd DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+// ==================== CHECKOS (Coin-System) ====================
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+model CheckoTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Int      // positiv = Gutschrift, negativ = Verbrauch
+  type        String   // "purchase" | "usage" | "gift" | "referral" | "welcome" | "wheel" | "daily_wheel"
+  description String?
+  moduleSlug  String?  // welches Modul wurde genutzt
+  qualityTier String?  // "standard" | "premium" | "pro"
+  createdAt   DateTime @default(now())
 
-  @@unique([userId, moduleId])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
-  @@index([moduleId])
 }
+
+model CheckoPurchase {
+  id              String   @id @default(cuid())
+  userId          String
+  amount          Int      // Anzahl Checkos
+  priceCHF        Int      // Preis in Rappen
+  stripePaymentId String?  @unique
+  status          String   @default("completed")
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ==================== ADMIN & CONTENT ====================
 
 model AuditLog {
   id        String   @id @default(cuid())

@@ -1,11 +1,10 @@
-// Stripe Checkout — Create checkout session for module subscription
-// Applies volume discount based on total active subscriptions
+// Stripe Checkout — Einmalzahlung für Checko-Pakete (KEIN Abo!)
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { getStripe, calculateDiscountedPrice } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
+import { getPackageById } from "@/lib/checkos";
 
 export async function POST(request: Request) {
   try {
@@ -14,75 +13,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
     }
 
-    const { moduleId } = await request.json();
+    const { packageId } = await request.json();
 
-    if (!moduleId) {
-      return NextResponse.json({ error: "moduleId erforderlich" }, { status: 400 });
+    if (!packageId || typeof packageId !== "string") {
+      return NextResponse.json({ error: "packageId erforderlich" }, { status: 400 });
     }
 
-    // Get the module
-    const module = await prisma.module.findUnique({ where: { id: moduleId } });
-    if (!module || !module.isActive) {
-      return NextResponse.json({ error: "Modul nicht gefunden oder nicht aktiv" }, { status: 404 });
+    // Paket validieren
+    const pkg = getPackageById(packageId);
+    if (!pkg) {
+      return NextResponse.json({ error: "Ungültiges Paket" }, { status: 400 });
     }
 
-    // Check if user already has this subscription
-    const existingSub = await prisma.subscription.findUnique({
-      where: {
-        userId_moduleId: {
-          userId: session.user.id,
-          moduleId: moduleId,
-        },
-      },
-    });
-    if (existingSub && existingSub.status === "active") {
-      return NextResponse.json({ error: "Du hast dieses Modul bereits abonniert" }, { status: 409 });
-    }
-
-    // Count current active subscriptions for volume discount
-    const activeSubCount = await prisma.subscription.count({
-      where: { userId: session.user.id, status: "active" },
-    });
-
-    // Calculate discounted price (count includes the new module)
-    const newTotalModules = activeSubCount + 1;
-    const discountedPrice = calculateDiscountedPrice(module.priceMonthly, newTotalModules);
-
-    // Create Stripe checkout session
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+    // Einmalzahlung — KEIN Abo!
     const checkoutSession = await getStripe().checkout.sessions.create({
-      mode: "subscription",
+      mode: "payment",
       payment_method_types: ["card"],
       customer_email: session.user.email || undefined,
       metadata: {
         userId: session.user.id,
-        moduleId: module.id,
-        moduleSlug: module.slug,
+        packageId: pkg.id,
+        checkosAmount: pkg.amount.toString(),
       },
       line_items: [
         {
           price_data: {
             currency: "chf",
             product_data: {
-              name: module.name,
-              description: module.description.substring(0, 200),
+              name: `${pkg.amount} Checkos`,
+              description: `${pkg.amount} Checkos für dein Checko-Konto`,
             },
-            unit_amount: discountedPrice,
-            recurring: {
-              interval: "month",
-            },
+            unit_amount: pkg.priceCHF,
           },
           quantity: 1,
         },
       ],
       success_url: `${appUrl}/dashboard?checkout=success`,
-      cancel_url: `${appUrl}/dashboard?checkout=canceled`,
+      cancel_url: `${appUrl}/dashboard/checkos?checkout=canceled`,
     });
 
     return NextResponse.json({ url: checkoutSession.url });
   } catch (error) {
     console.error("Stripe checkout error:", error);
-    return NextResponse.json({ error: "Fehler beim Erstellen der Checkout-Session" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Fehler beim Erstellen der Checkout-Session" },
+      { status: 500 }
+    );
   }
 }

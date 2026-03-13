@@ -1,0 +1,137 @@
+// Checko — Prisma Schema
+// Database: MySQL
+// All relations for User, Module, Subscription, AuditLog, ContentBlock, PromoCode
+// Plus NextAuth tables: Account, Session, VerificationToken
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== AUTH (NextAuth) ====================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==================== CORE MODELS ====================
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  password      String?        // Hashed password for credentials auth
+  role          String         @default("user") // "user" or "admin"
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  subscriptions Subscription[]
+}
+
+model Module {
+  id            String         @id @default(cuid())
+  slug          String         @unique
+  name          String
+  description   String         @db.Text
+  priceMonthly  Int            // Price in Rappen (CHF cents)
+  icon          String?        // Optional icon/emoji for the module
+  isActive      Boolean        @default(false)
+  sortOrder     Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id               String    @id @default(cuid())
+  userId           String
+  moduleId         String
+  stripeSubId      String?   @unique
+  status           String    @default("active") // active, canceled, past_due, incomplete
+  currentPeriodEnd DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+  @@index([userId])
+  @@index([moduleId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String
+  target    String?
+  details   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([createdAt])
+}
+
+model ContentBlock {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  title     String?
+  content   String   @db.LongText
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model PromoCode {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  discountPercent Int
+  maxUses         Int?
+  usedCount       Int       @default(0)
+  validUntil      DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+}

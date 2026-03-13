@@ -69,6 +69,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   subscriptions Subscription[]
+  searches      PreisradarSearch[]
 }
 
 model Module {
@@ -134,4 +135,40 @@ model PromoCode {
   validUntil      DateTime?
   isActive        Boolean   @default(true)
   createdAt       DateTime  @default(now())
+}
+
+// ==================== PREISRADAR ====================
+
+model PreisradarSearch {
+  id        String             @id @default(cuid())
+  userId    String
+  query     String
+  maxPrice  Int?
+  minPrice  Int?
+  platforms String
+  isActive  Boolean            @default(true)
+  alerts    PreisradarAlert[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      User               @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model PreisradarAlert {
+  id         String           @id @default(cuid())
+  searchId   String
+  title      String
+  price      Int
+  platform   String
+  url        String
+  imageUrl   String?
+  priceScore String?
+  aiAnalysis String?          @db.Text
+  isScam     Boolean          @default(false)
+  isSeen     Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+  search     PreisradarSearch @relation(fields: [searchId], references: [id])
+
+  @@index([searchId])
 }

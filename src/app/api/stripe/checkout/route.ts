@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { stripe, calculateDiscountedPrice } from "@/lib/stripe";
+import { getStripe, calculateDiscountedPrice } from "@/lib/stripe";
 
 export async function POST(request: Request) {
   try {
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     // Create Stripe checkout session
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    const checkoutSession = await stripe.checkout.sessions.create({
+    const checkoutSession = await getStripe().checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],
       customer_email: session.user.email || undefined,

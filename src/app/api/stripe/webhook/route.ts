@@ -1,10 +1,12 @@
 // Stripe Webhook Handler — Checkos gutschreiben bei erfolgreicher Zahlung
 // Handles: checkout.session.completed (Einmalzahlung)
+// Neu: Affiliate-Provision für Werber (10%)
 
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getStripe } from "@/lib/stripe";
 import { purchaseCheckos } from "@/lib/checkos";
+import { processAffiliateEarnings } from "@/lib/referral";
 import Stripe from "stripe";
 
 export async function POST(request: Request) {
@@ -61,6 +63,20 @@ export async function POST(request: Request) {
           console.log(
             `Checkos purchased: user=${userId}, package=${packageId}, newBalance=${result.newBalance}`
           );
+
+          // Affiliate-Provision verarbeiten (10% an Werber)
+          const purchasedAmount = result.newBalance; // Approximation — besser das Paket nachschauen
+          // Aus dem packageId die Menge extrahieren (z.B. "checkos-50" → 50)
+          const match = packageId.match(/checkos-(\d+)/);
+          if (match) {
+            const checkosAmount = parseInt(match[1], 10);
+            const affiliateResult = await processAffiliateEarnings(userId, checkosAmount);
+            if (affiliateResult.affiliateAmount) {
+              console.log(
+                `Affiliate commission: ${affiliateResult.affiliateAmount} Checkos for referrer of user=${userId}`
+              );
+            }
+          }
         } else {
           console.error(
             `Failed to credit checkos: user=${userId}, package=${packageId}, error=${result.error}`

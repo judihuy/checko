@@ -1,5 +1,6 @@
 // Registration API endpoint
 // Creates a new user with hashed password + email verification
+// Optional: referralCode für Empfehlungssystem
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -7,6 +8,8 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { z } from "zod";
 import { sendVerificationEmail } from "@/lib/email";
+import { processReferral } from "@/lib/referral";
+import { generateReferralCode } from "@/lib/referral";
 
 // --- In-Memory Rate-Limiting ---
 // Max 5 Registrierungen pro IP innerhalb von 15 Minuten
@@ -51,6 +54,7 @@ const registerSchema = z.object({
     .min(8, "Passwort muss mindestens 8 Zeichen lang sein.")
     .regex(/[A-Z]/, "Passwort muss mindestens einen Grossbuchstaben enthalten.")
     .regex(/[0-9]/, "Passwort muss mindestens eine Zahl enthalten."),
+  referralCode: z.string().max(20).optional(),
 });
 
 export async function POST(request: Request) {
@@ -77,7 +81,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, email, password } = validation.data;
+    const { name, email, password, referralCode } = validation.data;
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check if user already exists
@@ -99,6 +103,9 @@ export async function POST(request: Request) {
     // Generate verification token
     const verificationToken = crypto.randomBytes(32).toString("hex");
 
+    // Generate referral code for the new user
+    const newUserReferralCode = await generateReferralCode();
+
     // Dev-Modus: Falls kein SMTP konfiguriert, User direkt verifizieren
     const smtpConfigured = !!process.env.SMTP_HOST;
 
@@ -110,8 +117,17 @@ export async function POST(request: Request) {
         password: hashedPassword,
         verificationToken: smtpConfigured ? verificationToken : null,
         isEmailVerified: smtpConfigured ? false : true,
+        referralCode: newUserReferralCode,
       },
     });
+
+    // Referral-Code verarbeiten (wenn angegeben)
+    if (referralCode && referralCode.trim()) {
+      const referralResult = await processReferral(user.id, referralCode.trim().toUpperCase());
+      if (!referralResult.success) {
+        console.log(`Referral code "${referralCode}" für User ${user.id}: ${referralResult.error}`);
+      }
+    }
 
     if (smtpConfigured) {
       // Send verification email

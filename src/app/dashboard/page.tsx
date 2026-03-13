@@ -1,4 +1,4 @@
-// User Dashboard — Checkos-Kontostand, Module, Transaktionen
+// User Dashboard — Checkos-Kontostand, Module, Transaktionen, Daily Wheel, Referral
 // Force dynamic rendering (needs session + DB)
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,7 @@ import { getBalance, getTransactions } from "@/lib/checkos";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { DailyWheelWidgetWrapper } from "@/components/DailyWheelWidgetWrapper";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -67,6 +68,8 @@ export default async function DashboardPage() {
         return "Glücksrad";
       case "daily_wheel":
         return "Tägliches Rad";
+      case "affiliate":
+        return "Provision";
       default:
         return type;
     }
@@ -103,13 +106,26 @@ export default async function DashboardPage() {
                   <span className="text-xl text-emerald-100">Checkos</span>
                 </div>
               </div>
-              <Link
-                href="/dashboard/checkos"
-                className="bg-white text-emerald-700 px-6 py-3 rounded-lg font-semibold hover:bg-emerald-50 transition shadow-md"
-              >
-                🪙 Checkos aufladen
-              </Link>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Link
+                  href="/dashboard/checkos"
+                  className="bg-white text-emerald-700 px-6 py-3 rounded-lg font-semibold hover:bg-emerald-50 transition shadow-md text-center"
+                >
+                  🪙 Checkos aufladen
+                </Link>
+                <Link
+                  href="/dashboard/referral"
+                  className="bg-emerald-400/30 text-white border border-white/30 px-6 py-3 rounded-lg font-semibold hover:bg-emerald-400/50 transition text-center"
+                >
+                  🤝 Freunde einladen
+                </Link>
+              </div>
             </div>
+          </div>
+
+          {/* Daily Wheel Widget */}
+          <div className="mb-8">
+            <DailyWheelWidgetWrapper />
           </div>
 
           {/* Module & Transactions Grid */}

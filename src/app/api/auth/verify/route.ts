@@ -1,5 +1,6 @@
 // Email Verification API
 // Verifies user's email address via token
+// Nach Verifizierung → Redirect zu /willkommen (Glücksrad)
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -36,9 +37,9 @@ export async function GET(request: Request) {
       },
     });
 
-    // Redirect to login with success message
+    // Redirect zu Willkommens-Seite mit Glücksrad
     return NextResponse.redirect(
-      new URL("/login?verified=true", request.url)
+      new URL("/willkommen?verified=true", request.url)
     );
   } catch (error) {
     console.error("Email verification error:", error);

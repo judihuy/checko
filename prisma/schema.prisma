@@ -68,6 +68,9 @@ model User {
   resetToken            String?              @unique
   resetTokenExpiresAt   DateTime?
   checkosBalance        Int                  @default(0)
+  referralCode          String?              @unique
+  referredBy            String?
+  registrationNumber    Int?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
@@ -76,6 +79,9 @@ model User {
   checkoTransactions    CheckoTransaction[]
   checkoPurchases       CheckoPurchase[]
   searches              PreisradarSearch[]
+  referralsMade         Referral[]           @relation("ReferralsMade")
+  referralsReceived     Referral[]           @relation("ReferralsReceived")
+  wheelSpins            WheelSpin[]
 }
 
 model Module {
@@ -97,7 +103,7 @@ model CheckoTransaction {
   id          String   @id @default(cuid())
   userId      String
   amount      Int      // positiv = Gutschrift, negativ = Verbrauch
-  type        String   // "purchase" | "usage" | "gift" | "referral" | "welcome" | "wheel" | "daily_wheel"
+  type        String   // "purchase" | "usage" | "gift" | "referral" | "welcome" | "wheel" | "daily_wheel" | "affiliate"
   description String?
   moduleSlug  String?  // welches Modul wurde genutzt
   qualityTier String?  // "standard" | "premium" | "pro"
@@ -120,6 +126,39 @@ model CheckoPurchase {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ==================== REFERRAL (Empfehlungssystem) ====================
+
+model Referral {
+  id             String   @id @default(cuid())
+  referrerId     String
+  referredId     String
+  checkosEarned  Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  referrer User @relation("ReferralsMade", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred User @relation("ReferralsReceived", fields: [referredId], references: [id], onDelete: Cascade)
+
+  @@unique([referredId])
+  @@index([referrerId])
+}
+
+// ==================== GLÜCKSRAD (Wheel Spins) ====================
+
+model WheelSpin {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "registration" | "daily"
+  amount    Int
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([ipAddress])
+  @@index([type])
 }
 
 // ==================== ADMIN & CONTENT ====================
@@ -176,7 +215,6 @@ model PreisradarSearch {
 
 model PreisradarAlert {
   id         String           @id @default(cuid())
-  searchId   String
   title      String
   price      Int
   platform   String
@@ -186,6 +224,7 @@ model PreisradarAlert {
   aiAnalysis String?          @db.Text
   isScam     Boolean          @default(false)
   isSeen     Boolean          @default(false)
+  searchId   String
   createdAt  DateTime         @default(now())
   search     PreisradarSearch @relation(fields: [searchId], references: [id])
 

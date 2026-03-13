@@ -2,7 +2,6 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
@@ -24,7 +23,7 @@ export default function RegisterPage() {
 
     // Client-side validation
     if (password !== confirmPassword) {
-      setError("Passwoerter stimmen nicht ueberein.");
+      setError("Passwörter stimmen nicht überein.");
       return;
     }
 
@@ -49,20 +48,8 @@ export default function RegisterPage() {
         return;
       }
 
-      // Auto-login after registration
-      const loginResult = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-
-      if (loginResult?.error) {
-        // Registration succeeded but auto-login failed → redirect to login
-        router.push("/login");
-      } else {
-        router.push("/dashboard");
-        router.refresh();
-      }
+      // Redirect to verification page
+      router.push("/verifizierung-gesendet");
     } catch {
       setError("Ein unerwarteter Fehler ist aufgetreten.");
     } finally {
@@ -140,7 +127,7 @@ export default function RegisterPage() {
 
               <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                  Passwort bestaetigen
+                  Passwort bestätigen
                 </label>
                 <input
                   id="confirmPassword"

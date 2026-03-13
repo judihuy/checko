@@ -13,7 +13,7 @@ export function PricingSection() {
           </h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
             Jedes Modul hat seinen eigenen monatlichen Preis. Je mehr Module du nutzt, desto
-            groesser dein Rabatt.
+            grösser dein Rabatt.
           </p>
         </div>
 
@@ -62,7 +62,7 @@ export function PricingSection() {
 
         <div className="text-center mt-10">
           <p className="text-gray-500 text-sm">
-            Alle Preise in CHF inkl. MwSt. Monatlich kuendbar. Keine versteckten Kosten.
+            Alle Preise in CHF inkl. MwSt. Monatlich kündbar. Keine versteckten Kosten.
           </p>
         </div>
       </div>

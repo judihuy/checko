@@ -1,14 +1,16 @@
 // Registration API endpoint
-// Creates a new user with hashed password
+// Creates a new user with hashed password + email verification
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import { z } from "zod";
+import { sendVerificationEmail } from "@/lib/email";
 
 // --- In-Memory Rate-Limiting ---
 // Max 5 Registrierungen pro IP innerhalb von 15 Minuten
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 Minuten
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX = 5;
 
 const rateLimitMap = new Map<string, number[]>();
@@ -16,8 +18,6 @@ const rateLimitMap = new Map<string, number[]>();
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
   const timestamps = rateLimitMap.get(ip) ?? [];
-
-  // Nur Timestamps innerhalb des Fensters behalten
   const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
   rateLimitMap.set(ip, recent);
 
@@ -30,7 +30,7 @@ function isRateLimited(ip: string): boolean {
   return false;
 }
 
-// Alte Eintraege regelmaessig aufraeumen (alle 10 Minuten)
+// Alte Einträge regelmässig aufräumen (alle 10 Minuten)
 setInterval(() => {
   const now = Date.now();
   for (const [ip, timestamps] of rateLimitMap.entries()) {
@@ -45,7 +45,7 @@ setInterval(() => {
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name muss mindestens 2 Zeichen lang sein."),
-  email: z.string().email("Ungueltige E-Mail-Adresse."),
+  email: z.string().email("Ungültige E-Mail-Adresse."),
   password: z
     .string()
     .min(8, "Passwort muss mindestens 8 Zeichen lang sein.")
@@ -54,7 +54,7 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // Rate-Limiting pruefen
+  // Rate-Limiting prüfen
   const forwarded = request.headers.get("x-forwarded-for");
   const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
 
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       { status: 429 }
     );
   }
+
   try {
     const body = await request.json();
     const validation = registerSchema.safeParse(body);
@@ -85,14 +86,21 @@ export async function POST(request: Request) {
     });
 
     if (existingUser) {
+      // Anti-Enumeration: Same response as success
       return NextResponse.json(
-        { error: "Diese E-Mail-Adresse ist bereits registriert." },
-        { status: 409 }
+        { message: "Registrierung erfolgreich! Bitte prüfe dein E-Mail-Postfach." },
+        { status: 201 }
       );
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Generate verification token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+
+    // Dev-Modus: Falls kein SMTP konfiguriert, User direkt verifizieren
+    const smtpConfigured = !!process.env.SMTP_HOST;
 
     // Create user
     const user = await prisma.user.create({
@@ -100,12 +108,27 @@ export async function POST(request: Request) {
         name,
         email: normalizedEmail,
         password: hashedPassword,
+        verificationToken: smtpConfigured ? verificationToken : null,
+        isEmailVerified: smtpConfigured ? false : true,
       },
     });
 
+    if (smtpConfigured) {
+      // Send verification email
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const verifyUrl = `${appUrl}/api/auth/verify?token=${verificationToken}`;
+
+      await sendVerificationEmail(user.email, user.name || "Benutzer", verifyUrl);
+    } else {
+      // Dev-Modus: Token in Console loggen
+      console.log("=== DEV-MODUS: E-Mail-Verifizierung übersprungen ===");
+      console.log(`User ${user.email} wurde automatisch verifiziert.`);
+      console.log(`Verification Token (nicht benötigt): ${verificationToken}`);
+    }
+
     return NextResponse.json(
       {
-        message: "Registrierung erfolgreich!",
+        message: "Registrierung erfolgreich! Bitte prüfe dein E-Mail-Postfach.",
         user: { id: user.id, name: user.name, email: user.email },
       },
       { status: 201 }

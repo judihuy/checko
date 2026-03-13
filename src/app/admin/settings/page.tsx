@@ -9,7 +9,7 @@ export default function AdminSettingsPage() {
           Einstellungen kommen bald
         </h2>
         <p className="text-gray-500 text-sm">
-          Hier werden zukuenftig Branding, API-Keys, Wartungsmodus und Backup-Optionen
+          Hier werden zukünftig Branding, API-Keys, Wartungsmodus und Backup-Optionen
           konfiguriert.
         </p>
       </div>

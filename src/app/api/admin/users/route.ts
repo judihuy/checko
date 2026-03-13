@@ -52,7 +52,7 @@ export async function PATCH(request: Request) {
     const { userId, role } = await request.json();
 
     if (!userId || !["user", "admin"].includes(role)) {
-      return NextResponse.json({ error: "Ungueltige Parameter" }, { status: 400 });
+      return NextResponse.json({ error: "Ungültige Parameter" }, { status: 400 });
     }
 
     const user = await prisma.user.update({
@@ -64,7 +64,7 @@ export async function PATCH(request: Request) {
       session.user.id,
       "USER_ROLE_CHANGED",
       userId,
-      `Role changed to ${role} for ${user.email}`
+      `Rolle geändert zu ${role} für ${user.email}`
     );
 
     return NextResponse.json({ user: { id: user.id, role: user.role } });

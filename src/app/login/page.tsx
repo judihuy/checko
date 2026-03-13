@@ -32,7 +32,7 @@ function LoginForm() {
       });
 
       if (result?.error) {
-        setError("Ungueltige E-Mail oder Passwort.");
+        setError("Ungültige E-Mail oder Passwort.");
       } else {
         router.push(callbackUrl);
         router.refresh();
@@ -92,12 +92,20 @@ function LoginForm() {
         {loading ? "Wird angemeldet..." : "Anmelden"}
       </button>
 
-      <p className="text-center text-sm text-gray-600 mt-4">
-        Noch kein Konto?{" "}
-        <Link href="/register" className="text-emerald-600 hover:text-emerald-700 font-medium">
-          Jetzt registrieren
+      <div className="flex items-center justify-between mt-4">
+        <Link
+          href="/passwort-vergessen"
+          className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+        >
+          Passwort vergessen?
         </Link>
-      </p>
+        <p className="text-sm text-gray-600">
+          Noch kein Konto?{" "}
+          <Link href="/register" className="text-emerald-600 hover:text-emerald-700 font-medium">
+            Jetzt registrieren
+          </Link>
+        </p>
+      </div>
     </form>
   );
 }
@@ -112,7 +120,7 @@ export default function LoginPage() {
             <span className="text-4xl">🦎</span>
             <h1 className="text-2xl font-bold text-gray-900 mt-4">Anmelden</h1>
             <p className="text-gray-600 mt-2">
-              Willkommen zurueck bei Checko
+              Willkommen zurück bei Checko
             </p>
           </div>
           <Suspense fallback={<div className="text-center text-gray-500">Laden...</div>}>

@@ -36,7 +36,7 @@ export default function AdminUsersPage() {
 
   const toggleRole = async (userId: string, currentRole: string) => {
     const newRole = currentRole === "admin" ? "user" : "admin";
-    if (!confirm(`Rolle auf "${newRole}" aendern?`)) return;
+    if (!confirm(`Rolle auf "${newRole}" ändern?`)) return;
 
     try {
       const res = await fetch("/api/admin/users", {
@@ -47,7 +47,7 @@ export default function AdminUsersPage() {
       if (!res.ok) throw new Error("Fehler beim Aktualisieren");
       fetchUsers();
     } catch {
-      alert("Fehler beim Aendern der Rolle.");
+      alert("Fehler beim Ändern der Rolle.");
     }
   };
 

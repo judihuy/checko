@@ -56,15 +56,19 @@ model VerificationToken {
 // ==================== CORE MODELS ====================
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  emailVerified DateTime?
-  name          String?
-  image         String?
-  password      String?        // Hashed password for credentials auth
-  role          String         @default("user") // "user" or "admin"
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                    String         @id @default(cuid())
+  email                 String         @unique
+  emailVerified         DateTime?
+  isEmailVerified       Boolean        @default(false)
+  verificationToken     String?        @unique
+  name                  String?
+  image                 String?
+  password              String?
+  role                  String         @default("user")
+  resetToken            String?        @unique
+  resetTokenExpiresAt   DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   accounts      Account[]
   sessions      Session[]
@@ -77,8 +81,8 @@ model Module {
   slug          String         @unique
   name          String
   description   String         @db.Text
-  priceMonthly  Int            // Price in Rappen (CHF cents)
-  icon          String?        // Optional icon/emoji for the module
+  priceMonthly  Int
+  icon          String?
   isActive      Boolean        @default(false)
   sortOrder     Int            @default(0)
   createdAt     DateTime       @default(now())
@@ -92,7 +96,7 @@ model Subscription {
   userId           String
   moduleId         String
   stripeSubId      String?   @unique
-  status           String    @default("active") // active, canceled, past_due, incomplete
+  status           String    @default("active")
   currentPeriodEnd DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt

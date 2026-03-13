@@ -11,6 +11,7 @@ const adminLinks = [
   { href: "/admin/modules", label: "Module", icon: "📦" },
   { href: "/admin/subscriptions", label: "Abonnements", icon: "💳" },
   { href: "/admin/content", label: "Inhalte", icon: "📝" },
+  { href: "/admin/audit-log", label: "Audit-Log", icon: "📋" },
   { href: "/admin/settings", label: "Einstellungen", icon: "⚙️" },
 ];
 

@@ -55,7 +55,7 @@ export default function AdminModulesPage() {
   const savePrice = async (moduleId: string) => {
     const price = Math.round(parseFloat(editPrice) * 100);
     if (isNaN(price) || price < 0) {
-      alert("Ungueltiger Preis.");
+      alert("Ungültiger Preis.");
       return;
     }
     try {

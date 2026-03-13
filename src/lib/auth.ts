@@ -1,5 +1,6 @@
 // NextAuth.js Configuration
 // Credentials provider (email + password) + optional Google OAuth
+// Includes email verification check
 
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -36,12 +37,17 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user || !user.password) {
-          throw new Error("Ungueltige Anmeldedaten.");
+          throw new Error("Ungültige Anmeldedaten.");
+        }
+
+        // Check email verification
+        if (!user.isEmailVerified) {
+          throw new Error("E-Mail-Adresse noch nicht bestätigt. Bitte prüfe dein Postfach.");
         }
 
         const isValid = await bcrypt.compare(credentials.password, user.password);
         if (!isValid) {
-          throw new Error("Ungueltige Anmeldedaten.");
+          throw new Error("Ungültige Anmeldedaten.");
         }
 
         return {

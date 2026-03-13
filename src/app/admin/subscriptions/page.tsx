@@ -49,7 +49,7 @@ export default function AdminSubscriptionsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Abo-Uebersicht</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Abo-Übersicht</h1>
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2">
           <span className="text-sm text-emerald-700 font-medium">
             Monatl. Umsatz: CHF {(totalRevenue / 100).toFixed(2)}
@@ -73,7 +73,7 @@ export default function AdminSubscriptionsPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Preis</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Erstellt</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Naechste Abr.</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Nächste Abr.</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -102,7 +102,7 @@ export default function AdminSubscriptionsPage() {
                       {sub.status === "active"
                         ? "Aktiv"
                         : sub.status === "canceled"
-                        ? "Gekuendigt"
+                        ? "Gekündigt"
                         : sub.status}
                     </span>
                   </td>

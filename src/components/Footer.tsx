@@ -13,7 +13,7 @@ export function Footer() {
               <span>Checko</span>
             </div>
             <p className="text-sm">
-              Dein Toolkit fuer alles. Smarte Module fuer den Alltag.
+              Dein Toolkit für alles. Smarte Module für den Alltag.
             </p>
           </div>
 

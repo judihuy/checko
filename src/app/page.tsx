@@ -29,7 +29,7 @@ const DEMO_MODULES: ModuleData[] = [
     slug: "preisradar",
     name: "Checko Preisradar",
     description:
-      "Ueberwache Marktplaetze automatisch und finde die besten Schnaeppchen. Sofort-Benachrichtigung bei Treffern.",
+      "Überwache Marktplätze automatisch und finde die besten Schnäppchen. Sofort-Benachrichtigung bei Treffern.",
     priceMonthly: 500,
     icon: "📡",
     isActive: true,
@@ -39,7 +39,7 @@ const DEMO_MODULES: ModuleData[] = [
     slug: "scam-shield",
     name: "Checko Scam Shield",
     description:
-      "Schuetze dich vor Betrug auf Online-Marktplaetzen. Automatische Erkennung verdaechtiger Inserate.",
+      "Schütze dich vor Betrug auf Online-Marktplätzen. Automatische Erkennung verdächtiger Inserate.",
     priceMonthly: 790,
     icon: "🛡️",
     isActive: false,
@@ -49,7 +49,7 @@ const DEMO_MODULES: ModuleData[] = [
     slug: "legal",
     name: "Checko Legal",
     description:
-      "Kuendigungen, Mahnungen und Rechtsbriefe automatisch erstellen. Rechtssicher und in Sekunden fertig.",
+      "Kündigungen, Mahnungen und Rechtsbriefe automatisch erstellen. Rechtssicher und in Sekunden fertig.",
     priceMonthly: 990,
     icon: "⚖️",
     isActive: false,
@@ -59,7 +59,7 @@ const DEMO_MODULES: ModuleData[] = [
     slug: "abo-killer",
     name: "Checko Abo-Killer",
     description:
-      "Finde versteckte Abos in deinen Kontoauszuegen und kuendige sie mit einem Klick.",
+      "Finde versteckte Abos in deinen Kontoauszügen und kündige sie mit einem Klick.",
     priceMonthly: 490,
     icon: "✂️",
     isActive: false,
@@ -69,7 +69,7 @@ const DEMO_MODULES: ModuleData[] = [
     slug: "immo",
     name: "Checko Immo",
     description:
-      "Wohnungs- und Haus-Ueberwachung. Sofort benachrichtigt bei neuen Inseraten, die zu deinen Kriterien passen.",
+      "Wohnungs- und Haus-Überwachung. Sofort benachrichtigt bei neuen Inseraten, die zu deinen Kriterien passen.",
     priceMonthly: 790,
     icon: "🏠",
     isActive: false,
@@ -79,7 +79,7 @@ const DEMO_MODULES: ModuleData[] = [
     slug: "kleingedrucktes",
     name: "Checko Kleingedrucktes",
     description:
-      "AGB und Vertraege analysieren lassen. Versteckte Klauseln und Risiken sofort erkennen.",
+      "AGB und Verträge analysieren lassen. Versteckte Klauseln und Risiken sofort erkennen.",
     priceMonthly: 590,
     icon: "🔍",
     isActive: false,
@@ -113,10 +113,10 @@ export default async function HomePage() {
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
             Checko — Dein Toolkit
             <br />
-            <span className="text-emerald-600">fuer alles.</span>
+            <span className="text-emerald-600">für alles.</span>
           </h1>
           <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto mb-10">
-            Smarte Module, die dir im Alltag Zeit und Geld sparen. Waehle nur die
+            Smarte Module, die dir im Alltag Zeit und Geld sparen. Wähle nur die
             Tools, die du wirklich brauchst.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -142,7 +142,7 @@ export default async function HomePage() {
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Unsere Module</h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Jedes Modul loeest ein konkretes Problem. Buche nur, was du brauchst — und
+              Jedes Modul löst ein konkretes Problem. Buche nur, was du brauchst — und
               spare mit jedem weiteren Modul.
             </p>
           </div>
@@ -170,7 +170,7 @@ export default async function HomePage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Bereit loszulegen?</h2>
           <p className="text-emerald-100 text-lg mb-8">
-            Erstelle dein kostenloses Konto und entdecke, was Checko fuer dich tun kann.
+            Erstelle dein kostenloses Konto und entdecke, was Checko für dich tun kann.
           </p>
           <Link
             href="/register"

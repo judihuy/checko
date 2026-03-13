@@ -1,4 +1,5 @@
 // Admin Dashboard — KPIs: User count, subscription count, revenue
+// Plus recent audit log entries
 import { prisma } from "@/lib/prisma";
 
 // Force dynamic rendering (needs DB access)
@@ -8,7 +9,15 @@ interface KPI {
   label: string;
   value: string;
   icon: string;
-  change?: string;
+}
+
+interface AuditEntry {
+  id: string;
+  adminId: string;
+  action: string;
+  target: string | null;
+  details: string | null;
+  createdAt: Date;
 }
 
 async function getKPIs(): Promise<KPI[]> {
@@ -28,26 +37,10 @@ async function getKPIs(): Promise<KPI[]> {
     ]);
 
     return [
-      {
-        label: "Benutzer",
-        value: userCount.toString(),
-        icon: "👥",
-      },
-      {
-        label: "Aktive Abos",
-        value: activeSubCount.toString(),
-        icon: "💳",
-      },
-      {
-        label: "Monatl. Umsatz",
-        value: `CHF ${(totalRevenue / 100).toFixed(2)}`,
-        icon: "💰",
-      },
-      {
-        label: "Aktive Module",
-        value: moduleCount.toString(),
-        icon: "📦",
-      },
+      { label: "Benutzer", value: userCount.toString(), icon: "👥" },
+      { label: "Aktive Abos", value: activeSubCount.toString(), icon: "💳" },
+      { label: "Monatl. Umsatz", value: `CHF ${(totalRevenue / 100).toFixed(2)}`, icon: "💰" },
+      { label: "Aktive Module", value: moduleCount.toString(), icon: "📦" },
     ];
   } catch {
     return [
@@ -59,8 +52,19 @@ async function getKPIs(): Promise<KPI[]> {
   }
 }
 
+async function getRecentAuditLogs(): Promise<AuditEntry[]> {
+  try {
+    return await prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+  } catch {
+    return [];
+  }
+}
+
 export default async function AdminDashboard() {
-  const kpis = await getKPIs();
+  const [kpis, recentLogs] = await Promise.all([getKPIs(), getRecentAuditLogs()]);
 
   return (
     <div>
@@ -82,14 +86,30 @@ export default async function AdminDashboard() {
         ))}
       </div>
 
-      {/* Recent Activity placeholder */}
+      {/* Recent Activity */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Letzte Aktivitaeten
+          Letzte Aktivitäten
         </h2>
-        <p className="text-gray-500 text-sm">
-          Audit-Log Eintraege werden hier angezeigt, sobald die Datenbank verbunden ist.
-        </p>
+        {recentLogs.length > 0 ? (
+          <div className="space-y-3">
+            {recentLogs.map((log) => (
+              <div key={log.id} className="flex items-start gap-3 text-sm border-b border-gray-100 pb-3 last:border-0">
+                <span className="text-gray-400 shrink-0 w-36">
+                  {new Date(log.createdAt).toLocaleString("de-CH")}
+                </span>
+                <span className="font-medium text-gray-700">{log.action}</span>
+                {log.target && (
+                  <span className="text-gray-500">→ {log.target}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-sm">
+            Noch keine Aktivitäten vorhanden.
+          </p>
+        )}
       </div>
     </div>
   );

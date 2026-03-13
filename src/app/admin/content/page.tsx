@@ -62,7 +62,7 @@ export default function AdminContentPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Inhalt wirklich loeschen?")) return;
+    if (!confirm("Inhalt wirklich löschen?")) return;
     try {
       const res = await fetch("/api/admin/content", {
         method: "DELETE",
@@ -72,7 +72,7 @@ export default function AdminContentPage() {
       if (!res.ok) throw new Error("Fehler");
       fetchBlocks();
     } catch {
-      alert("Fehler beim Loeschen.");
+      alert("Fehler beim Löschen.");
     }
   };
 
@@ -211,7 +211,7 @@ export default function AdminContentPage() {
                   onClick={() => handleDelete(block.id)}
                   className="text-red-600 hover:text-red-700 text-sm font-medium"
                 >
-                  Loeschen
+                  Löschen
                 </button>
               </div>
             </div>

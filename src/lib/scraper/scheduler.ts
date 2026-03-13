@@ -1,0 +1,267 @@
+// Preisradar Scheduler
+// Führt Suchjobs aus: Scrape → Filter → KI-Bewertung → DB → E-Mail
+
+import { prisma } from "@/lib/prisma";
+import { getScrapersByPlatformList } from "@/lib/scraper";
+import type { ScraperResult } from "@/lib/scraper";
+import { analyzePrice } from "@/lib/ai/price-analyzer";
+import { deductCheckos } from "@/lib/checkos";
+import { sendPreisradarAlertEmail } from "@/lib/email-preisradar";
+
+// Kosten pro Dauer
+const DURATION_COSTS: Record<string, number> = {
+  "1d": 1,   // 1 Tag = 1 Checko
+  "1w": 5,   // 1 Woche = 5 Checkos
+  "1m": 15,  // 1 Monat = 15 Checkos
+};
+
+// Dauer → Millisekunden
+const DURATION_MS: Record<string, number> = {
+  "1d": 24 * 60 * 60 * 1000,
+  "1w": 7 * 24 * 60 * 60 * 1000,
+  "1m": 30 * 24 * 60 * 60 * 1000,
+};
+
+/**
+ * Einzelnen Suchjob ausführen
+ */
+export async function runSearchJob(searchId: string): Promise<{
+  success: boolean;
+  newAlerts: number;
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  let newAlerts = 0;
+
+  try {
+    // Suche laden
+    const search = await prisma.preisradarSearch.findUnique({
+      where: { id: searchId },
+      include: { user: { select: { id: true, email: true, name: true, checkosBalance: true } } },
+    });
+
+    if (!search || !search.isActive) {
+      return { success: false, newAlerts: 0, errors: ["Suche nicht gefunden oder inaktiv"] };
+    }
+
+    // Ablauf prüfen
+    if (search.expiresAt && new Date() > search.expiresAt) {
+      await prisma.preisradarSearch.update({
+        where: { id: searchId },
+        data: { isActive: false },
+      });
+      return { success: false, newAlerts: 0, errors: ["Suche abgelaufen"] };
+    }
+
+    // Scraper für gewählte Plattformen holen
+    const scrapers = getScrapersByPlatformList(search.platforms);
+
+    if (scrapers.length === 0) {
+      errors.push("Keine Scraper für die gewählten Plattformen verfügbar");
+      return { success: false, newAlerts: 0, errors };
+    }
+
+    // Alle Plattformen scrapen
+    const allResults: ScraperResult[] = [];
+
+    for (const scraper of scrapers) {
+      try {
+        const results = await scraper.scrape(search.query, {
+          minPrice: search.minPrice || undefined,
+          maxPrice: search.maxPrice || undefined,
+          limit: 20, // Max 20 Ergebnisse pro Plattform
+        });
+        allResults.push(...results);
+      } catch (error) {
+        const msg = `Scraper ${scraper.displayName} fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`;
+        errors.push(msg);
+        console.error(msg);
+      }
+    }
+
+    // Duplikate filtern (gleicher Titel + Preis + Plattform)
+    const existingAlerts = await prisma.preisradarAlert.findMany({
+      where: { searchId },
+      select: { url: true },
+    });
+    const existingUrls = new Set(existingAlerts.map((a) => a.url));
+
+    const newResults = allResults.filter((r) => !existingUrls.has(r.url));
+
+    // KI-Bewertung für neue Treffer
+    const alertsToCreate: Array<{
+      title: string;
+      price: number;
+      platform: string;
+      url: string;
+      imageUrl: string | null;
+      priceScore: string | null;
+      aiAnalysis: string | null;
+      isScam: boolean;
+    }> = [];
+
+    for (const result of newResults) {
+      try {
+        const analysis = await analyzePrice(
+          result.title,
+          result.price,
+          result.platform
+        );
+
+        alertsToCreate.push({
+          title: result.title,
+          price: result.price,
+          platform: result.platform,
+          url: result.url,
+          imageUrl: result.imageUrl,
+          priceScore: String(analysis.priceScore),
+          aiAnalysis: JSON.stringify({
+            bewertung: analysis.bewertung,
+            warnung: analysis.warnung,
+            score: analysis.priceScore,
+          }),
+          isScam: analysis.isScam,
+        });
+      } catch (error) {
+        // KI-Fehler: Trotzdem speichern, ohne Bewertung
+        alertsToCreate.push({
+          title: result.title,
+          price: result.price,
+          platform: result.platform,
+          url: result.url,
+          imageUrl: result.imageUrl,
+          priceScore: null,
+          aiAnalysis: null,
+          isScam: false,
+        });
+        errors.push(`KI-Analyse fehlgeschlagen für "${result.title}"`);
+      }
+    }
+
+    // In DB speichern
+    if (alertsToCreate.length > 0) {
+      await prisma.preisradarAlert.createMany({
+        data: alertsToCreate.map((alert) => ({
+          ...alert,
+          searchId,
+        })),
+      });
+      newAlerts = alertsToCreate.length;
+    }
+
+    // lastScrapedAt aktualisieren
+    await prisma.preisradarSearch.update({
+      where: { id: searchId },
+      data: { lastScrapedAt: new Date() },
+    });
+
+    // E-Mail senden wenn neue Treffer
+    if (newAlerts > 0 && search.user.email) {
+      try {
+        await sendPreisradarAlertEmail(
+          search.user.email,
+          search.user.name || "Benutzer",
+          search.query,
+          newAlerts
+        );
+      } catch (emailError) {
+        errors.push(`E-Mail senden fehlgeschlagen: ${emailError instanceof Error ? emailError.message : String(emailError)}`);
+      }
+    }
+
+    return { success: true, newAlerts, errors };
+  } catch (error) {
+    console.error("runSearchJob error:", error);
+    return {
+      success: false,
+      newAlerts: 0,
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
+/**
+ * Alle aktiven Suchen verarbeiten
+ */
+export async function runAllActiveSearches(): Promise<{
+  totalSearches: number;
+  totalNewAlerts: number;
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  let totalNewAlerts = 0;
+
+  try {
+    // Alle aktiven, nicht abgelaufenen Suchen finden
+    const activeSearches = await prisma.preisradarSearch.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    for (const search of activeSearches) {
+      const result = await runSearchJob(search.id);
+      totalNewAlerts += result.newAlerts;
+      errors.push(...result.errors);
+
+      // Kurze Pause zwischen Suchen
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    return {
+      totalSearches: activeSearches.length,
+      totalNewAlerts,
+      errors,
+    };
+  } catch (error) {
+    return {
+      totalSearches: 0,
+      totalNewAlerts: 0,
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
+/**
+ * Checkos für eine neue Suche abziehen
+ */
+export async function chargeForSearch(
+  userId: string,
+  duration: string
+): Promise<{ success: boolean; cost: number; error?: string }> {
+  const cost = DURATION_COSTS[duration] || 1;
+
+  const result = await deductCheckos(
+    userId,
+    cost,
+    "preisradar",
+    undefined,
+    `Preisradar-Suche (${duration === "1d" ? "1 Tag" : duration === "1w" ? "1 Woche" : "1 Monat"})`
+  );
+
+  if (!result.success) {
+    return { success: false, cost, error: result.error };
+  }
+
+  return { success: true, cost };
+}
+
+/**
+ * Ablaufdatum berechnen
+ */
+export function calculateExpiresAt(duration: string): Date {
+  const ms = DURATION_MS[duration] || DURATION_MS["1d"];
+  return new Date(Date.now() + ms);
+}
+
+/**
+ * Kosten für eine Dauer abfragen
+ */
+export function getDurationCost(duration: string): number {
+  return DURATION_COSTS[duration] || 1;
+}

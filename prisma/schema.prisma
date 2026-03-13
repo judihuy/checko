@@ -198,19 +198,26 @@ model PromoCode {
 // ==================== PREISRADAR ====================
 
 model PreisradarSearch {
-  id        String             @id @default(cuid())
-  userId    String
-  query     String
-  maxPrice  Int?
-  minPrice  Int?
-  platforms String
-  isActive  Boolean            @default(true)
-  alerts    PreisradarAlert[]
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  user      User               @relation(fields: [userId], references: [id])
+  id              String             @id @default(cuid())
+  userId          String
+  query           String
+  maxPrice        Int?
+  minPrice        Int?
+  platforms       String             // Komma-getrennt: "tutti,ricardo,ebay-ka"
+  isActive        Boolean            @default(true)
+  duration        String             @default("1d") // "1d" | "1w" | "1m"
+  qualityTier     String             @default("standard") // "standard" | "premium" | "pro"
+  expiresAt       DateTime?
+  checkosCharged  Int                @default(0)
+  lastScrapedAt   DateTime?
+  alerts          PreisradarAlert[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  user            User               @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([isActive])
+  @@index([expiresAt])
 }
 
 model PreisradarAlert {
@@ -218,15 +225,16 @@ model PreisradarAlert {
   title      String
   price      Int
   platform   String
-  url        String
-  imageUrl   String?
+  url        String           @db.Text
+  imageUrl   String?          @db.Text
   priceScore String?
   aiAnalysis String?          @db.Text
   isScam     Boolean          @default(false)
   isSeen     Boolean          @default(false)
   searchId   String
   createdAt  DateTime         @default(now())
-  search     PreisradarSearch @relation(fields: [searchId], references: [id])
+  search     PreisradarSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
 
   @@index([searchId])
+  @@index([createdAt])
 }

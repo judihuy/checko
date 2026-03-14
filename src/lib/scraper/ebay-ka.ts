@@ -12,17 +12,20 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
     const results: ScraperResult[] = [];
 
     try {
-      const encodedQuery = encodeURIComponent(query);
+      // URL-Encoding: Leerzeichen → Bindestrich für Kleinanzeigen URL-Format
+      const urlQuery = query.trim().replace(/\s+/g, "-");
 
-      // Preisfilter in URL einbauen falls gesetzt
-      let priceParam = "";
+      // Kleinanzeigen URL-Format: /s-preis:{min}:{max}/{query}/k0
+      let searchUrl: string;
       if (options?.minPrice || options?.maxPrice) {
-        const minCHF = options.minPrice ? Math.round(options.minPrice / 100) : "";
-        const maxCHF = options.maxPrice ? Math.round(options.maxPrice / 100) : "";
-        priceParam = `&preis:${minCHF}:${maxCHF}`;
+        const minEUR = options.minPrice ? Math.round(options.minPrice / 100) : "";
+        const maxEUR = options.maxPrice ? Math.round(options.maxPrice / 100) : "";
+        searchUrl = `${this.baseUrl}/s-preis:${minEUR}:${maxEUR}/${urlQuery}/k0`;
+      } else {
+        searchUrl = `${this.baseUrl}/s-${urlQuery}/k0`;
       }
 
-      const searchUrl = `${this.baseUrl}/s-suchanfrage/${encodedQuery}${priceParam}`;
+      console.log(`[eBay KA] Search URL: ${searchUrl}`);
 
       // Puppeteer-First, Fallback auf fetchWithHeaders
       let html: string;
@@ -38,94 +41,202 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
         html = await response.text();
       }
 
-      // Kleinanzeigen.de HTML-Parsing
-      const adRegex = /<article[^>]*class="[^"]*aditem[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
-      let adMatch;
+      console.log(`[eBay KA] HTML length: ${html.length}`);
 
-      while ((adMatch = adRegex.exec(html)) !== null) {
-        const adHtml = adMatch[1];
-
-        // Titel extrahieren
-        const titleMatch = adHtml.match(/class="[^"]*ellipsis[^"]*"[^>]*>([^<]+)/i)
-          || adHtml.match(/class="[^"]*aditem-main--middle--title[^"]*"[^>]*>([^<]+)/i)
-          || adHtml.match(/<h2[^>]*>([^<]+)/i);
-
-        // Preis extrahieren
-        const priceMatch = adHtml.match(/class="[^"]*aditem-main--middle--price[^"]*"[^>]*>\s*([\d.,]+)\s*€/i)
-          || adHtml.match(/([\d.,]+)\s*€/i);
-
-        // URL extrahieren
-        const urlMatch = adHtml.match(/href="(\/s-anzeige\/[^"]+)"/i)
-          || adHtml.match(/data-href="([^"]+)"/i);
-
-        // Bild extrahieren
-        const imageMatch = adHtml.match(/data-imgsrc="([^"]+)"/i)
-          || adHtml.match(/src="(https:\/\/[^"]*img\.kleinanzeigen[^"]+)"/i);
-
-        if (titleMatch && priceMatch) {
-          const title = titleMatch[1].trim();
-          const priceStr = priceMatch[1].replace(/\./g, "").replace(",", ".");
-          const priceEUR = parseFloat(priceStr);
-          // EUR → CHF Rappen (Näherung: 1 EUR ≈ 0.96 CHF)
-          const price = Math.round(priceEUR * 0.96 * 100);
-          const url = urlMatch
-            ? `${this.baseUrl}${urlMatch[1]}`
-            : searchUrl;
-          const imageUrl = imageMatch ? imageMatch[1] : null;
-
-          if (options?.minPrice && price < options.minPrice) continue;
-          if (options?.maxPrice && price > options.maxPrice) continue;
-
-          results.push({
-            title,
-            price,
-            url,
-            imageUrl,
-            platform: this.platform,
-            scrapedAt: new Date(),
-          });
-
-          if (options?.limit && results.length >= options.limit) break;
-        }
+      // Methode 1: JSON-LD aus den Artikeln parsen (jeder Artikel hat eigenes JSON-LD)
+      const jsonLdResults = this.parseJsonLd(html, searchUrl, options);
+      if (jsonLdResults.length > 0) {
+        console.log(`[eBay KA] JSON-LD parsed: ${jsonLdResults.length} results`);
+        return jsonLdResults;
       }
 
-      // Fallback: Einfacheres Pattern
-      if (results.length === 0) {
-        const simpleTitleRegex = /aditem-main--middle--title[^>]*>\s*([^<]+)/gi;
-        const simplePriceRegex = /aditem-main--middle--price[^>]*>\s*([\d.,]+)\s*€/gi;
-
-        const titles: string[] = [];
-        const prices: number[] = [];
-
-        let match;
-        while ((match = simpleTitleRegex.exec(html)) !== null) {
-          titles.push(match[1].trim());
-        }
-        while ((match = simplePriceRegex.exec(html)) !== null) {
-          const priceStr = match[1].replace(/\./g, "").replace(",", ".");
-          prices.push(Math.round(parseFloat(priceStr) * 0.96 * 100));
-        }
-
-        const count = Math.min(titles.length, prices.length);
-        for (let i = 0; i < count; i++) {
-          const price = prices[i];
-          if (options?.minPrice && price < options.minPrice) continue;
-          if (options?.maxPrice && price > options.maxPrice) continue;
-
-          results.push({
-            title: titles[i],
-            price,
-            url: searchUrl,
-            imageUrl: null,
-            platform: this.platform,
-            scrapedAt: new Date(),
-          });
-
-          if (options?.limit && results.length >= options.limit) break;
-        }
+      // Methode 2: HTML-Parsing der article.aditem Elemente
+      const articleResults = this.parseArticles(html, options);
+      if (articleResults.length > 0) {
+        console.log(`[eBay KA] Article parsing: ${articleResults.length} results`);
+        return articleResults;
       }
+
+      // Methode 3: Fallback-Regex
+      const fallbackResults = this.parseFallback(html, searchUrl, options);
+      console.log(`[eBay KA] Fallback parsing: ${fallbackResults.length} results`);
+      return fallbackResults;
     } catch (error) {
       console.error("eBay Kleinanzeigen Scraper error:", error);
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse JSON-LD Blöcke in den Artikeln
+   * Jeder Artikel hat ein <script type="application/ld+json"> mit ImageObject
+   */
+  private parseJsonLd(html: string, searchUrl: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    // Finde alle article-Blöcke mit data-href und JSON-LD
+    const articleRegex = /<article[^>]*data-adid="(\d+)"[^>]*data-href="([^"]*)"[^>]*>([\s\S]*?)<\/article>/gi;
+    let articleMatch;
+
+    while ((articleMatch = articleRegex.exec(html)) !== null) {
+      const dataHref = articleMatch[2];
+      const articleHtml = articleMatch[3];
+
+      // JSON-LD extrahieren
+      const jsonLdMatch = articleHtml.match(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/);
+      if (!jsonLdMatch) continue;
+
+      try {
+        const jsonLd = JSON.parse(jsonLdMatch[1]);
+        if (jsonLd["@type"] !== "ImageObject") continue;
+
+        const title = jsonLd.title || "";
+        if (!title) continue;
+
+        // Preis aus dem article HTML extrahieren
+        const priceMatch = articleHtml.match(
+          /class="aditem-main--middle--price-shipping--price"[^>]*>\s*([\d.,]+)\s*€/i
+        );
+        if (!priceMatch) continue;
+
+        const priceStr = priceMatch[1].replace(/\./g, "").replace(",", ".");
+        const priceEUR = parseFloat(priceStr);
+        if (isNaN(priceEUR)) continue;
+
+        // EUR → CHF Rappen (1 EUR ≈ 0.96 CHF)
+        const price = Math.round(priceEUR * 0.96 * 100);
+
+        // Preisfilter
+        if (options?.minPrice && price < options.minPrice) continue;
+        if (options?.maxPrice && price > options.maxPrice) continue;
+
+        const url = dataHref
+          ? `${this.baseUrl}${dataHref}`
+          : searchUrl;
+
+        const imageUrl = jsonLd.contentUrl || null;
+
+        results.push({
+          title,
+          price,
+          url,
+          imageUrl,
+          platform: this.platform,
+          scrapedAt: new Date(),
+        });
+
+        if (options?.limit && results.length >= options.limit) break;
+      } catch {
+        // JSON parse error — skip this article
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse article.aditem Elemente direkt aus dem HTML
+   */
+  private parseArticles(html: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    const articleRegex = /<article[^>]*class="aditem"[^>]*data-href="([^"]*)"[^>]*>([\s\S]*?)<\/article>/gi;
+    let match;
+
+    while ((match = articleRegex.exec(html)) !== null) {
+      const dataHref = match[1];
+      const articleHtml = match[2];
+
+      // Titel: <a class="ellipsis" href="...">TITEL</a>
+      const titleMatch = articleHtml.match(/<a\s+class="ellipsis"[^>]*>([^<]+)<\/a>/i);
+      if (!titleMatch) continue;
+      const title = titleMatch[1].trim();
+
+      // Preis: <p class="aditem-main--middle--price-shipping--price">1.799 € VB</p>
+      const priceMatch = articleHtml.match(
+        /class="aditem-main--middle--price-shipping--price"[^>]*>\s*([\d.,]+)\s*€/i
+      );
+      if (!priceMatch) continue;
+
+      const priceStr = priceMatch[1].replace(/\./g, "").replace(",", ".");
+      const priceEUR = parseFloat(priceStr);
+      if (isNaN(priceEUR)) continue;
+
+      // EUR → CHF Rappen
+      const price = Math.round(priceEUR * 0.96 * 100);
+
+      if (options?.minPrice && price < options.minPrice) continue;
+      if (options?.maxPrice && price > options.maxPrice) continue;
+
+      const url = dataHref
+        ? `${this.baseUrl}${dataHref}`
+        : `${this.baseUrl}/s-anzeige/${title.toLowerCase().replace(/\s+/g, "-")}`;
+
+      // Bild: <img src="https://img.kleinanzeigen.de/...">
+      const imgMatch = articleHtml.match(/src="(https:\/\/img\.kleinanzeigen\.de[^"]+)"/i);
+      const imageUrl = imgMatch ? imgMatch[1] : null;
+
+      results.push({
+        title,
+        price,
+        url,
+        imageUrl,
+        platform: this.platform,
+        scrapedAt: new Date(),
+      });
+
+      if (options?.limit && results.length >= options.limit) break;
+    }
+
+    return results;
+  }
+
+  /**
+   * Fallback: Einfaches Regex-Parsing
+   */
+  private parseFallback(html: string, searchUrl: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    // Alle Titel aus ellipsis-Links
+    const titleRegex = /<a\s+class="ellipsis"[^>]*>([^<]+)<\/a>/gi;
+    // Alle Preise
+    const priceRegex = /class="aditem-main--middle--price-shipping--price"[^>]*>\s*([\d.,]+)\s*€/gi;
+    // Alle Anzeigen-Links
+    const hrefRegex = /data-href="(\/s-anzeige\/[^"]+)"/gi;
+
+    const titles: string[] = [];
+    const prices: number[] = [];
+    const urls: string[] = [];
+
+    let m;
+    while ((m = titleRegex.exec(html)) !== null) {
+      titles.push(m[1].trim());
+    }
+    while ((m = priceRegex.exec(html)) !== null) {
+      const priceStr = m[1].replace(/\./g, "").replace(",", ".");
+      prices.push(Math.round(parseFloat(priceStr) * 0.96 * 100));
+    }
+    while ((m = hrefRegex.exec(html)) !== null) {
+      urls.push(m[1]);
+    }
+
+    const count = Math.min(titles.length, prices.length);
+    for (let i = 0; i < count; i++) {
+      const price = prices[i];
+      if (options?.minPrice && price < options.minPrice) continue;
+      if (options?.maxPrice && price > options.maxPrice) continue;
+
+      results.push({
+        title: titles[i],
+        price,
+        url: urls[i] ? `${this.baseUrl}${urls[i]}` : searchUrl,
+        imageUrl: null,
+        platform: this.platform,
+        scrapedAt: new Date(),
+      });
+
+      if (options?.limit && results.length >= options.limit) break;
     }
 
     return results;

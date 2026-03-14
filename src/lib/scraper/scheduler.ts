@@ -8,11 +8,18 @@ import { analyzePrice } from "@/lib/ai/price-analyzer";
 import { deductCheckos } from "@/lib/checkos";
 import { sendPreisradarAlertEmail } from "@/lib/email-preisradar";
 
-// Kosten pro Dauer
-const DURATION_COSTS: Record<string, number> = {
-  "1d": 1,   // 1 Tag = 1 Checko
-  "1w": 5,   // 1 Woche = 5 Checkos
-  "1m": 15,  // 1 Monat = 15 Checkos
+// Basiskosten pro Dauer (Standard-Stufe)
+const DURATION_BASE_COSTS: Record<string, number> = {
+  "1d": 1,   // 1 Tag = 1 Checko (Standard)
+  "1w": 5,   // 1 Woche = 5 Checkos (Standard)
+  "1m": 15,  // 1 Monat = 15 Checkos (Standard)
+};
+
+// Qualitäts-Multiplikatoren
+const QUALITY_MULTIPLIERS: Record<string, number> = {
+  standard: 1,  // 1x Basispreis
+  premium: 2,   // 2x Basispreis
+  pro: 4,       // 4x Basispreis
 };
 
 // Dauer → Millisekunden
@@ -228,20 +235,34 @@ export async function runAllActiveSearches(): Promise<{
 }
 
 /**
+ * Gesamtkosten für eine Suche berechnen (Dauer × Qualität)
+ */
+export function getSearchCost(duration: string, qualityTier: string = "standard"): number {
+  const baseCost = DURATION_BASE_COSTS[duration] || 1;
+  const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
+  return baseCost * multiplier;
+}
+
+/**
  * Checkos für eine neue Suche abziehen
+ * Berücksichtigt sowohl Dauer ALS AUCH Qualitätsstufe
  */
 export async function chargeForSearch(
   userId: string,
-  duration: string
+  duration: string,
+  qualityTier: string = "standard"
 ): Promise<{ success: boolean; cost: number; error?: string }> {
-  const cost = DURATION_COSTS[duration] || 1;
+  const cost = getSearchCost(duration, qualityTier);
+
+  const durationLabel = duration === "1d" ? "1 Tag" : duration === "1w" ? "1 Woche" : "1 Monat";
+  const tierLabel = qualityTier === "premium" ? "Premium" : qualityTier === "pro" ? "Pro" : "Standard";
 
   const result = await deductCheckos(
     userId,
     cost,
     "preisradar",
-    undefined,
-    `Preisradar-Suche (${duration === "1d" ? "1 Tag" : duration === "1w" ? "1 Woche" : "1 Monat"})`
+    qualityTier,
+    `Preisradar-Suche (${durationLabel}, ${tierLabel})`
   );
 
   if (!result.success) {
@@ -260,8 +281,15 @@ export function calculateExpiresAt(duration: string): Date {
 }
 
 /**
- * Kosten für eine Dauer abfragen
+ * Basiskosten für eine Dauer abfragen (ohne Qualitäts-Multiplikator)
  */
 export function getDurationCost(duration: string): number {
-  return DURATION_COSTS[duration] || 1;
+  return DURATION_BASE_COSTS[duration] || 1;
+}
+
+/**
+ * Qualitäts-Multiplikator abfragen
+ */
+export function getQualityMultiplier(qualityTier: string): number {
+  return QUALITY_MULTIPLIERS[qualityTier] || 1;
 }

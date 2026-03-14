@@ -7,7 +7,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { chargeForSearch, calculateExpiresAt, getDurationCost } from "@/lib/scraper/scheduler";
+import { chargeForSearch, calculateExpiresAt, getSearchCost } from "@/lib/scraper/scheduler";
 
 // Zod-Schema für neue Suche
 const createSearchSchema = z.object({
@@ -47,13 +47,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Checkos abziehen
-    const chargeResult = await chargeForSearch(session.user.id, duration);
+    // Kosten berechnen (Dauer × Qualität)
+    const totalCost = getSearchCost(duration, qualityTier);
+
+    // Checkos abziehen — mit qualityTier!
+    const chargeResult = await chargeForSearch(session.user.id, duration, qualityTier);
     if (!chargeResult.success) {
       return NextResponse.json(
         {
           error: chargeResult.error || "Nicht genügend Checkos",
-          cost: getDurationCost(duration),
+          cost: totalCost,
         },
         { status: 402 }
       );
@@ -82,6 +85,7 @@ export async function POST(request: NextRequest) {
         query: search.query,
         platforms: search.platforms,
         duration: search.duration,
+        qualityTier: search.qualityTier,
         expiresAt: search.expiresAt,
         checkosCharged: search.checkosCharged,
       },

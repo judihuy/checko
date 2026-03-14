@@ -7,6 +7,7 @@ import type { ScraperResult } from "@/lib/scraper";
 import { analyzePrice } from "@/lib/ai/price-analyzer";
 import { deductCheckos } from "@/lib/checkos";
 import { sendPreisradarAlertEmail } from "@/lib/email-preisradar";
+import { createNotification } from "@/lib/notifications";
 
 // Basiskosten pro Dauer (Standard-Stufe)
 const DURATION_BASE_COSTS: Record<string, number> = {
@@ -161,6 +162,29 @@ export async function runSearchJob(searchId: string): Promise<{
       where: { id: searchId },
       data: { lastScrapedAt: new Date() },
     });
+
+    // In-App Benachrichtigungen erstellen für neue Treffer
+    if (newAlerts > 0) {
+      for (const alert of alertsToCreate) {
+        try {
+          const priceFormatted = (alert.price / 100).toLocaleString("de-CH", {
+            style: "currency",
+            currency: "CHF",
+          });
+          const scoreText = alert.priceScore ? ` — Preis-Score: ${alert.priceScore}` : "";
+
+          await createNotification(
+            search.user.id,
+            "preisradar_alert",
+            `Neuer Treffer: ${alert.title}`,
+            `${priceFormatted} auf ${alert.platform}${scoreText}`,
+            alert.url
+          );
+        } catch (notifError) {
+          errors.push(`Benachrichtigung erstellen fehlgeschlagen: ${notifError instanceof Error ? notifError.message : String(notifError)}`);
+        }
+      }
+    }
 
     // E-Mail senden wenn neue Treffer
     if (newAlerts > 0 && search.user.email) {

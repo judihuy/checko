@@ -84,6 +84,8 @@ model User {
   referralsMade         Referral[]           @relation("ReferralsMade")
   referralsReceived     Referral[]           @relation("ReferralsReceived")
   wheelSpins            WheelSpin[]
+  notifications         Notification[]
+  notificationPreferences NotificationPreference[]
 }
 
 model Module {
@@ -210,6 +212,36 @@ model PromoCode {
   validUntil      DateTime?
   isActive        Boolean   @default(true)
   createdAt       DateTime  @default(now())
+}
+
+// ==================== BENACHRICHTIGUNGEN ====================
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "preisradar_alert", "welcome", "system", "referral"
+  title     String
+  message   String   @db.Text
+  link      String?  // Optional: Link zum Treffer/Seite
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model NotificationPreference {
+  id      String  @id @default(cuid())
+  userId  String
+  channel String  // "email", "inapp", "telegram", "push", "whatsapp", "sms"
+  enabled Boolean @default(true)
+  config  String? @db.Text // JSON config (z.B. Telegram Chat ID)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channel])
 }
 
 // ==================== PREISRADAR ====================

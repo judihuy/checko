@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
+import { NotificationBell } from "./NotificationBell";
 
 export function Navbar() {
   const { data: session } = useSession();
@@ -49,6 +50,7 @@ export function Navbar() {
                 >
                   🦎 Checkos
                 </Link>
+                <NotificationBell />
                 <button
                   onClick={() => signOut({ callbackUrl: "/" })}
                   className="text-gray-500 hover:text-gray-700 transition text-sm"
@@ -131,6 +133,13 @@ export function Navbar() {
                   onClick={() => setMobileOpen(false)}
                 >
                   🦎 Checkos aufladen
+                </Link>
+                <Link
+                  href="/dashboard/benachrichtigungen"
+                  className="block px-3 py-2 text-gray-600 hover:bg-gray-50 rounded"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  🔔 Benachrichtigungen
                 </Link>
                 <button
                   onClick={() => {

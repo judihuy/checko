@@ -53,9 +53,9 @@ const DURATIONS = [
 ];
 
 const QUALITY_TIERS = [
-  { id: "standard", name: "Standard", desc: "Schnell und zuverlässig", multiplier: 1 },
-  { id: "premium", name: "Premium", desc: "Bessere Qualität", multiplier: 2 },
-  { id: "pro", name: "Pro", desc: "Maximale Tiefe", multiplier: 4 },
+  { id: "standard", name: "Standard", desc: "Schnell und zuverlässig", checkos: 2 },
+  { id: "premium", name: "Premium", desc: "Bessere Qualität", checkos: 4 },
+  { id: "pro", name: "Pro", desc: "Maximale Qualität", checkos: 7 },
 ];
 
 export default function PreisradarPage() {
@@ -88,11 +88,13 @@ export default function PreisradarPage() {
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
 
-  // Live-Kostenberechnung: Dauer × Qualitäts-Multiplikator
+  // Live-Kostenberechnung: Dauer-Kosten skaliert nach Qualitätsstufe
   const currentCost = useMemo(() => {
-    const baseCost = DURATION_BASE_COSTS[duration] || 1;
-    const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
-    return baseCost * multiplier;
+    const baseCost = DURATION_BASE_COSTS[duration] || 2;
+    const qualityCost = QUALITY_CHECKO_COSTS[qualityTier] || 2;
+    // Verhältnis zur Standard-Stufe: premium = 2x, pro = 3.5x
+    const ratio = qualityCost / QUALITY_CHECKO_COSTS["standard"];
+    return Math.round(baseCost * ratio);
   }, [duration, qualityTier]);
 
   const loadSearches = useCallback(async () => {
@@ -549,7 +551,7 @@ export default function PreisradarPage() {
                         <div className="font-medium text-sm">{tier.name}</div>
                         <div className="text-xs text-gray-500 mt-0.5">{tier.desc}</div>
                         <div className="text-xs font-semibold mt-1">
-                          {tier.multiplier === 1 ? "1×" : `${tier.multiplier}×`} Preis
+                          {tier.checkos} Checko{tier.checkos > 1 ? "s" : ""}
                         </div>
                       </button>
                     ))}
@@ -563,9 +565,10 @@ export default function PreisradarPage() {
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {DURATIONS.map((d) => {
-                      const baseCost = DURATION_BASE_COSTS[d.id] || 1;
-                      const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
-                      const cost = baseCost * multiplier;
+                      const baseCost = DURATION_BASE_COSTS[d.id] || 2;
+                      const qualityCost = QUALITY_CHECKO_COSTS[qualityTier] || 2;
+                      const ratio = qualityCost / QUALITY_CHECKO_COSTS["standard"];
+                      const cost = Math.round(baseCost * ratio);
                       return (
                         <button
                           key={d.id}
@@ -604,7 +607,7 @@ export default function PreisradarPage() {
                   </div>
                   {qualityTier !== "standard" && (
                     <div className="text-xs text-emerald-600 mt-2 pt-2 border-t border-emerald-200">
-                      💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 1} Checko{(DURATION_BASE_COSTS[duration] || 1) > 1 ? "s" : ""} kosten
+                      💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 2} Checko{(DURATION_BASE_COSTS[duration] || 2) > 1 ? "s" : ""} kosten
                     </div>
                   )}
                 </div>

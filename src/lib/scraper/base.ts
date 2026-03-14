@@ -1,6 +1,8 @@
 // Basis-Scraper Interface und Abstract Class
 // Alle Plattform-Scraper erben von BaseScraper
 
+import { ProxyAgent, fetch as undiciFetch } from "undici";
+
 export interface ScraperResult {
   title: string;
   price: number;       // Preis in Rappen (Cent)
@@ -14,6 +16,57 @@ export interface ScraperOptions {
   maxPrice?: number;   // in Rappen
   minPrice?: number;   // in Rappen
   limit?: number;      // max Ergebnisse
+}
+
+// Proxy-Pool: 10 deutsche Webshare-Proxies
+const PROXY_POOL: string[] = [
+  "http://kfxavtnr-de-1:4f55trvs9n0y@p.webshare.io:80",
+  "http://kfxavtnr-de-2:4f55trvs9n0y@p.webshare.io:80",
+  "http://kfxavtnr-de-3:4f55trvs9n0y@p.webshare.io:80",
+  "http://kfxavtnr-de-4:4f55trvs9n0y@p.webshare.io:80",
+  "http://kfxavtnr-de-5:4f55trvs9n0y@p.webshare.io:80",
+  "http://kfxavtnr-de-6:4f55trvs9n0y@p.webshare.io:80",
+  "http://kfxavtnr-de-7:4f55trvs9n0y@p.webshare.io:80",
+  "http://kfxavtnr-de-8:4f55trvs9n0y@p.webshare.io:80",
+  "http://kfxavtnr-de-9:4f55trvs9n0y@p.webshare.io:80",
+  "http://kfxavtnr-de-10:4f55trvs9n0y@p.webshare.io:80",
+];
+
+/**
+ * Maskiert Passwort in Proxy-URL für sichere Log-Ausgabe
+ * http://user:secret@host:port → http://user:***@host:port
+ */
+function maskProxyUrl(proxyUrl: string): string {
+  try {
+    const url = new URL(proxyUrl);
+    if (url.password) {
+      url.password = "***";
+    }
+    return url.toString();
+  } catch {
+    return proxyUrl.replace(/:[^:@]+@/, ":***@");
+  }
+}
+
+/**
+ * Wählt zufälligen Proxy aus dem Pool
+ */
+function getRandomProxy(): string | null {
+  // ENV-Variable überschreibt Pool (Komma-getrennt oder einzeln)
+  const envProxy = process.env.SCRAPER_PROXY_POOL || process.env.SCRAPER_PROXY;
+  if (envProxy) {
+    const envProxies = envProxy.split(",").map((p) => p.trim()).filter(Boolean);
+    if (envProxies.length > 0) {
+      return envProxies[Math.floor(Math.random() * envProxies.length)];
+    }
+  }
+
+  // Fallback: Hardcoded Pool
+  if (PROXY_POOL.length > 0) {
+    return PROXY_POOL[Math.floor(Math.random() * PROXY_POOL.length)];
+  }
+
+  return null;
 }
 
 export abstract class BaseScraper {
@@ -52,10 +105,6 @@ export abstract class BaseScraper {
     BaseScraper.lastRequestTime.set(this.platform, Date.now());
   }
 
-  protected getProxyAgent(): string | undefined {
-    return process.env.SCRAPER_PROXY || undefined;
-  }
-
   protected async fetchWithHeaders(url: string): Promise<Response> {
     await this.enforceRateLimit();
 
@@ -68,14 +117,29 @@ export abstract class BaseScraper {
       "Cache-Control": "no-cache",
     };
 
-    const fetchOptions: RequestInit = { headers };
+    // Proxy aus Pool wählen
+    const proxyUrl = getRandomProxy();
 
-    // Proxy-Support (HTTP_PROXY oder SCRAPER_PROXY)
-    // Node.js native fetch unterstützt keinen Proxy direkt,
-    // aber wir setzen die Headers. Für echten Proxy-Support
-    // bräuchte man undici oder node-fetch mit proxy-agent.
+    if (proxyUrl) {
+      console.log(`[Scraper/${this.platform}] Fetching via proxy: ${maskProxyUrl(proxyUrl)}`);
+      try {
+        const dispatcher = new ProxyAgent(proxyUrl);
+        const response = await undiciFetch(url, {
+          headers,
+          dispatcher,
+        });
+        // undici Response in Web-Standard Response konvertieren
+        return response as unknown as Response;
+      } catch (proxyError) {
+        console.warn(`[Scraper/${this.platform}] Proxy failed, falling back to direct fetch:`, proxyError);
+        // Fallback: direkter Fetch ohne Proxy
+        return fetch(url, { headers });
+      }
+    }
 
-    return fetch(url, fetchOptions);
+    // Kein Proxy konfiguriert → normales fetch
+    console.log(`[Scraper/${this.platform}] Fetching directly (no proxy configured)`);
+    return fetch(url, { headers });
   }
 
   /**

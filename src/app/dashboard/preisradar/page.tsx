@@ -1,4 +1,4 @@
-// Preisradar Dashboard — Meine Suchen + Neue Suche erstellen
+// Preisradar Dashboard — Meine Suchen + Neue Suche erstellen + Suche bearbeiten
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -68,7 +68,19 @@ export default function PreisradarPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Formular-State
+  // Edit-State
+  const [editingSearch, setEditingSearch] = useState<Search | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Edit-Formular-State
+  const [editQuery, setEditQuery] = useState("");
+  const [editMinPrice, setEditMinPrice] = useState("");
+  const [editMaxPrice, setEditMaxPrice] = useState("");
+  const [editPlatforms, setEditPlatforms] = useState<string[]>([]);
+
+  // Formular-State (Neue Suche)
   const [query, setQuery] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
@@ -105,6 +117,61 @@ export default function PreisradarPage() {
       loadSearches();
     }
   }, [status, router, loadSearches]);
+
+  // Edit-Modal öffnen mit vorausgefüllten Werten
+  const openEditModal = (search: Search) => {
+    setEditingSearch(search);
+    setEditQuery(search.query);
+    setEditMinPrice(search.minPrice ? String(search.minPrice / 100) : "");
+    setEditMaxPrice(search.maxPrice ? String(search.maxPrice / 100) : "");
+    setEditPlatforms([...search.platforms]);
+    setEditError(null);
+    setShowEditModal(true);
+  };
+
+  const handleEditSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSearch) return;
+    setEditing(true);
+    setEditError(null);
+
+    try {
+      const res = await fetch(`/api/modules/preisradar/searches/${editingSearch.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: editQuery,
+          minPrice: editMinPrice ? parseInt(editMinPrice, 10) * 100 : null,
+          maxPrice: editMaxPrice ? parseInt(editMaxPrice, 10) * 100 : null,
+          platforms: editPlatforms,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setEditError(data.error || "Fehler beim Speichern");
+        return;
+      }
+
+      // Modal schließen + Seite aktualisieren
+      setShowEditModal(false);
+      setEditingSearch(null);
+      await loadSearches();
+    } catch {
+      setEditError("Netzwerkfehler");
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const toggleEditPlatform = (platformId: string) => {
+    setEditPlatforms((prev) =>
+      prev.includes(platformId)
+        ? prev.filter((p) => p !== platformId)
+        : [...prev, platformId]
+    );
+  };
 
   const handleCreateSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -318,16 +385,24 @@ export default function PreisradarPage() {
                   {/* Aktionen */}
                   <div className="flex gap-2 pt-3 border-t border-gray-100">
                     {search.status !== "abgelaufen" && (
-                      <button
-                        onClick={() => handleToggleSearch(search.id, search.status === "aktiv")}
-                        className={`flex-1 text-xs py-2 rounded-lg font-medium transition ${
-                          search.status === "aktiv"
-                            ? "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
-                            : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                        }`}
-                      >
-                        {search.status === "aktiv" ? "⏸ Pausieren" : "▶ Aktivieren"}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => openEditModal(search)}
+                          className="flex-1 text-xs py-2 rounded-lg font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
+                        >
+                          ✏️ Bearbeiten
+                        </button>
+                        <button
+                          onClick={() => handleToggleSearch(search.id, search.status === "aktiv")}
+                          className={`flex-1 text-xs py-2 rounded-lg font-medium transition ${
+                            search.status === "aktiv"
+                              ? "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+                              : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          }`}
+                        >
+                          {search.status === "aktiv" ? "⏸ Pausieren" : "▶ Aktivieren"}
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => handleDeleteSearch(search.id)}
@@ -549,6 +624,148 @@ export default function PreisradarPage() {
                     className="flex-1 py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {creating ? "Wird erstellt..." : `Suche starten (${currentCost} 🦎)`}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Suche bearbeiten */}
+      {showEditModal && editingSearch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Suche bearbeiten</h2>
+                <button
+                  onClick={() => { setShowEditModal(false); setEditingSearch(null); setEditError(null); }}
+                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              {editError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-red-700 text-sm">
+                  {editError}
+                </div>
+              )}
+
+              <form onSubmit={handleEditSearch} className="space-y-5">
+                {/* Suchbegriff */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Suchbegriff *
+                  </label>
+                  <input
+                    type="text"
+                    value={editQuery}
+                    onChange={(e) => setEditQuery(e.target.value)}
+                    placeholder="z.B. iPhone 15 Pro, BMW 320d, Sofa..."
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    required
+                    minLength={2}
+                    maxLength={200}
+                  />
+                </div>
+
+                {/* Preislimit */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Min. Preis (CHF)
+                    </label>
+                    <input
+                      type="number"
+                      value={editMinPrice}
+                      onChange={(e) => setEditMinPrice(e.target.value)}
+                      placeholder="0"
+                      min="0"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Max. Preis (CHF)
+                    </label>
+                    <input
+                      type="number"
+                      value={editMaxPrice}
+                      onChange={(e) => setEditMaxPrice(e.target.value)}
+                      placeholder="∞"
+                      min="0"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Plattformen */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Plattformen *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PLATFORMS.map((p) => (
+                      <label
+                        key={p.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${
+                          editPlatforms.includes(p.id)
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editPlatforms.includes(p.id)}
+                          onChange={() => toggleEditPlatform(p.id)}
+                          className="sr-only"
+                        />
+                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                          editPlatforms.includes(p.id)
+                            ? "border-emerald-500 bg-emerald-500"
+                            : "border-gray-300"
+                        }`}>
+                          {editPlatforms.includes(p.id) && (
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </span>
+                        <span className="text-sm">{p.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Info: Dauer/Qualität nicht änderbar */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <p className="text-xs text-gray-500">
+                    ℹ️ Dauer und KI-Qualitätsstufe können nach der Erstellung nicht mehr geändert werden, da die Checkos bereits berechnet wurden.
+                  </p>
+                  <div className="flex gap-3 mt-2 text-sm text-gray-700">
+                    <span>⏱ {DURATIONS.find((d) => d.id === editingSearch.duration)?.name || editingSearch.duration}</span>
+                    <span>·</span>
+                    <span>{QUALITY_TIERS.find((t) => t.id === editingSearch.qualityTier)?.name || "Standard"}</span>
+                  </div>
+                </div>
+
+                {/* Submit */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowEditModal(false); setEditingSearch(null); setEditError(null); }}
+                    className="flex-1 py-3 px-4 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editing || editPlatforms.length === 0 || !editQuery.trim()}
+                    className="flex-1 py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {editing ? "Wird gespeichert..." : "Änderungen speichern"}
                   </button>
                 </div>
               </form>

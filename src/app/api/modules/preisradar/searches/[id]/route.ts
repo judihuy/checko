@@ -1,5 +1,5 @@
 // Preisradar Suche — Einzelaktionen
-// PUT: Suche pausieren/aktivieren
+// PUT: Suche bearbeiten (Status, Suchbegriff, Preise, Plattformen)
 // DELETE: Suche löschen
 
 import { NextRequest, NextResponse } from "next/server";
@@ -8,12 +8,21 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
-// Zod-Schema für Update
+const VALID_PLATFORMS = ["tutti", "ricardo", "ebay-ka", "autoscout", "comparis"];
+
+// Zod-Schema für Update — erlaubt Pause/Aktivierung UND Bearbeitung
 const updateSearchSchema = z.object({
   isActive: z.boolean().optional(),
+  query: z.string().min(2).max(200).optional(),
+  maxPrice: z.number().int().min(0).nullable().optional(),
+  minPrice: z.number().int().min(0).nullable().optional(),
+  platforms: z
+    .array(z.enum(["tutti", "ricardo", "ebay-ka", "autoscout", "comparis"]))
+    .min(1, "Mindestens eine Plattform auswählen")
+    .optional(),
 });
 
-// PUT: Suche pausieren/aktivieren
+// PUT: Suche bearbeiten
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,10 +35,10 @@ export async function PUT(
   const { id } = await params;
 
   try {
-    // Prüfen ob Suche dem User gehört
-    const search = await prisma.preisradarSearch.findUnique({
+    // Prüfen ob Suche dem User gehört (findFirst statt findUnique wegen Engine-Bug)
+    const search = await prisma.preisradarSearch.findFirst({
       where: { id },
-      select: { userId: true, expiresAt: true },
+      select: { userId: true, expiresAt: true, isActive: true },
     });
 
     if (!search) {
@@ -38,14 +47,6 @@ export async function PUT(
 
     if (search.userId !== session.user.id) {
       return NextResponse.json({ error: "Zugriff verweigert" }, { status: 403 });
-    }
-
-    // Abgelaufene Suchen können nicht reaktiviert werden
-    if (search.expiresAt && new Date() > search.expiresAt) {
-      return NextResponse.json(
-        { error: "Suche ist abgelaufen und kann nicht mehr aktiviert werden" },
-        { status: 400 }
-      );
     }
 
     const body = await request.json();
@@ -58,17 +59,47 @@ export async function PUT(
       );
     }
 
+    // Abgelaufene Suchen können nicht reaktiviert werden
+    if (parsed.data.isActive === true && search.expiresAt && new Date() > search.expiresAt) {
+      return NextResponse.json(
+        { error: "Suche ist abgelaufen und kann nicht mehr aktiviert werden" },
+        { status: 400 }
+      );
+    }
+
+    // Update-Objekt zusammenbauen
+    const updateData: Record<string, unknown> = {};
+
+    if (parsed.data.isActive !== undefined) {
+      updateData.isActive = parsed.data.isActive;
+    }
+    if (parsed.data.query !== undefined) {
+      updateData.query = parsed.data.query;
+    }
+    if (parsed.data.maxPrice !== undefined) {
+      updateData.maxPrice = parsed.data.maxPrice;
+    }
+    if (parsed.data.minPrice !== undefined) {
+      updateData.minPrice = parsed.data.minPrice;
+    }
+    if (parsed.data.platforms !== undefined) {
+      // DB speichert Plattformen komma-getrennt
+      updateData.platforms = parsed.data.platforms.join(",");
+    }
+
     const updated = await prisma.preisradarSearch.update({
       where: { id },
-      data: {
-        isActive: parsed.data.isActive,
-      },
+      data: updateData,
     });
 
     return NextResponse.json({
       success: true,
       search: {
         id: updated.id,
+        query: updated.query,
+        maxPrice: updated.maxPrice,
+        minPrice: updated.minPrice,
+        platforms: updated.platforms.split(","),
         isActive: updated.isActive,
       },
     });
@@ -94,8 +125,8 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    // Prüfen ob Suche dem User gehört
-    const search = await prisma.preisradarSearch.findUnique({
+    // Prüfen ob Suche dem User gehört (findFirst statt findUnique wegen Engine-Bug)
+    const search = await prisma.preisradarSearch.findFirst({
       where: { id },
       select: { userId: true },
     });

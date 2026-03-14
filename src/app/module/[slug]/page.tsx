@@ -1,6 +1,7 @@
 // Modul-Detailseite — /module/[slug]
 // Zeigt Modul-Info, Preise, und Waitlist für coming_soon Module
 
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
@@ -13,6 +14,32 @@ export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+}
+
+// Dynamische Meta-Tags pro Modul
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const mod = await prisma.module.findUnique({ where: { slug } }).catch(() => null);
+
+  if (!mod) {
+    return { title: "Modul nicht gefunden — Checko" };
+  }
+
+  const title = `${mod.name} — ${mod.description.substring(0, 60)} | checko.ch`;
+  const description = mod.description;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `https://checko.ch/module/${mod.slug}`,
+      siteName: "Checko",
+      type: "website",
+      locale: "de_CH",
+    },
+  };
 }
 
 const STATUS_INFO: Record<string, { label: string; color: string; bgColor: string }> = {

@@ -85,16 +85,31 @@ model User {
 }
 
 model Module {
-  id            String         @id @default(cuid())
-  slug          String         @unique
+  id            String            @id @default(cuid())
+  slug          String            @unique
   name          String
-  description   String         @db.Text
+  description   String            @db.Text
   priceMonthly  Int
   icon          String?
-  isActive      Boolean        @default(false)
-  sortOrder     Int            @default(0)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  isActive      Boolean           @default(false)
+  status        String            @default("coming_soon") // active, coming_soon, beta, maintenance
+  sortOrder     Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  waitlist      ModuleWaitlist[]
+}
+
+model ModuleWaitlist {
+  id        String   @id @default(cuid())
+  moduleId  String
+  email     String
+  createdAt DateTime @default(now())
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([moduleId, email])
+  @@index([moduleId])
 }
 
 // ==================== CHECKOS (Coin-System) ====================

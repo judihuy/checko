@@ -1,12 +1,23 @@
-// Middleware: Protect admin routes
+// Middleware: Protect admin and dashboard routes
 // Only users with role="admin" can access /admin/*
+// WICHTIG: NIEMALS `new URL(..., request.url)` für Redirects!
+// In Docker/Proxy Umgebungen enthält request.url interne URLs.
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
+function getBaseUrl(): string {
+  return (
+    process.env.NEXTAUTH_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000"
+  );
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const baseUrl = getBaseUrl();
 
   // Protect admin routes
   if (pathname.startsWith("/admin")) {
@@ -17,14 +28,14 @@ export async function middleware(request: NextRequest) {
 
     // Not logged in → redirect to login
     if (!token) {
-      const loginUrl = new URL("/login", request.url);
+      const loginUrl = new URL("/login", baseUrl);
       loginUrl.searchParams.set("callbackUrl", pathname);
       return NextResponse.redirect(loginUrl);
     }
 
     // Not admin → redirect to dashboard
     if (token.role !== "admin") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return NextResponse.redirect(new URL("/dashboard", baseUrl));
     }
   }
 
@@ -36,7 +47,7 @@ export async function middleware(request: NextRequest) {
     });
 
     if (!token) {
-      const loginUrl = new URL("/login", request.url);
+      const loginUrl = new URL("/login", baseUrl);
       loginUrl.searchParams.set("callbackUrl", pathname);
       return NextResponse.redirect(loginUrl);
     }

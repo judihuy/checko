@@ -1,13 +1,14 @@
 // Landing Page — Checko
 // Hero + Module Grid (alle 20 Module aus DB) + Pricing + CTA + Footer
+// Login-aware CTAs: Eingeloggt → "Zum Dashboard" statt "Jetzt kostenlos starten"
 
-import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { OrganizationJsonLd, FaqJsonLd } from "@/components/JsonLd";
 import { Footer } from "@/components/Footer";
 import { GeckoLogo } from "@/components/GeckoLogo";
 import { ModuleCard } from "@/components/ModuleCard";
 import { PricingSection } from "@/components/PricingSection";
+import { HeroCTA, BottomCTA } from "@/components/HeroCTA";
 import { prisma } from "@/lib/prisma";
 
 // Force dynamic rendering (needs DB access)
@@ -144,20 +145,7 @@ export default async function HomePage() {
             Smarte Module, die dir im Alltag Zeit und Geld sparen. Wähle nur die
             Tools, die du wirklich brauchst.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/register"
-              className="bg-emerald-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-emerald-700 transition shadow-lg shadow-emerald-200"
-            >
-              Jetzt kostenlos starten
-            </Link>
-            <Link
-              href="/#module"
-              className="bg-white text-gray-700 px-8 py-3 rounded-lg text-lg font-medium hover:bg-gray-50 transition border border-gray-200"
-            >
-              Module entdecken
-            </Link>
-          </div>
+          <HeroCTA />
         </div>
       </section>
 
@@ -229,12 +217,7 @@ export default async function HomePage() {
           <p className="text-emerald-100 text-lg mb-8">
             Erstelle dein kostenloses Konto und entdecke, was Checko für dich tun kann.
           </p>
-          <Link
-            href="/register"
-            className="inline-block bg-white text-emerald-700 px-8 py-3 rounded-lg text-lg font-medium hover:bg-gray-50 transition shadow-lg"
-          >
-            Jetzt kostenlos starten
-          </Link>
+          <BottomCTA />
         </div>
       </section>
 

@@ -320,6 +320,12 @@ export default function PreisradarPage() {
             </div>
             <div className="flex gap-3">
               <Link
+                href="/dashboard/preisradar/saved"
+                className="bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
+              >
+                🔖 Gespeichert
+              </Link>
+              <Link
                 href="/dashboard/preisradar/alerts"
                 className="bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
               >

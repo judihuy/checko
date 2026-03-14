@@ -1,4 +1,5 @@
 // Benachrichtigungen-Seite — /dashboard/benachrichtigungen
+// Mit Löschen-Funktion (einzeln + alle gelesenen)
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -21,6 +22,8 @@ export default function BenachrichtigungenPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -72,8 +75,53 @@ export default function BenachrichtigungenPage() {
     }
   };
 
+  // Einzelne Benachrichtigung löschen
+  const handleDelete = async (id: string) => {
+    setDeletingIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        // Optimistic Update
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        setTotal((prev) => prev - 1);
+      }
+    } catch {
+      // Fehlerbehandlung
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  // Alle gelesenen löschen
+  const handleDeleteAllRead = async () => {
+    const readCount = notifications.filter((n) => n.isRead).length;
+    if (readCount === 0) return;
+
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/notifications/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ readOnly: true }),
+      });
+      if (res.ok) {
+        // Seite neu laden um korrekte Pagination zu bekommen
+        await fetchNotifications();
+      }
+    } catch {
+      // Fehlerbehandlung
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const hasUnread = notifications.some((n) => !n.isRead);
+  const hasRead = notifications.some((n) => n.isRead);
 
   // Zeitstempel formatieren
   const formatTime = (dateStr: string) => {
@@ -123,7 +171,16 @@ export default function BenachrichtigungenPage() {
             {total} Benachrichtigung{total !== 1 ? "en" : ""}
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 flex-wrap justify-end">
+          {hasRead && (
+            <button
+              onClick={handleDeleteAllRead}
+              disabled={bulkDeleting}
+              className="px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition font-medium disabled:opacity-50"
+            >
+              {bulkDeleting ? "Löscht..." : "🗑 Gelesene löschen"}
+            </button>
+          )}
           {hasUnread && (
             <button
               onClick={handleMarkAllAsRead}
@@ -160,7 +217,7 @@ export default function BenachrichtigungenPage() {
                 !n.isRead
                   ? "border-emerald-300 bg-emerald-50/30"
                   : "border-gray-200"
-              }`}
+              } ${deletingIds.has(n.id) ? "opacity-50" : ""}`}
             >
               <div className="px-5 py-4 flex gap-3">
                 {/* Icon */}
@@ -183,9 +240,22 @@ export default function BenachrichtigungenPage() {
                       </p>
                       <p className="text-sm text-gray-500 mt-1">{n.message}</p>
                     </div>
-                    {!n.isRead && (
-                      <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full flex-shrink-0 mt-1" />
-                    )}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {!n.isRead && (
+                        <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" />
+                      )}
+                      {/* Löschen-Button */}
+                      <button
+                        onClick={() => handleDelete(n.id)}
+                        disabled={deletingIds.has(n.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                        title="Löschen"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3 mt-2">

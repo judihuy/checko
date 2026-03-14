@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { spinDailyWheel, getDailyWheelStatus } from "@/lib/wheel";
+import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
@@ -31,6 +32,13 @@ export async function POST() {
       return NextResponse.json({ error: "Nicht eingeloggt." }, { status: 401 });
     }
 
+    // Balance VOR dem Spin auslesen
+    const userBefore = await prisma.user.findFirst({
+      where: { id: session.user.id },
+      select: { checkosBalance: true },
+    });
+    const previousBalance = userBefore?.checkosBalance ?? 0;
+
     const result = await spinDailyWheel(session.user.id);
 
     if (!result.success) {
@@ -42,6 +50,8 @@ export async function POST() {
 
     return NextResponse.json({
       amount: result.amount,
+      previousBalance,
+      newBalance: previousBalance + (result.amount ?? 0),
       message: `Du hast ${result.amount} Checkos gewonnen!`,
     });
   } catch (error) {

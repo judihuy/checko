@@ -8,6 +8,25 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import Link from "next/link";
 
+// Bookmark-Icon Komponente
+function BookmarkIcon({ filled, className }: { filled: boolean; className?: string }) {
+  return (
+    <svg
+      className={className || "w-5 h-5"}
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      strokeWidth={filled ? 0 : 2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+      />
+    </svg>
+  );
+}
+
 interface DetailAnalysis {
   preisbewertung: string;
   besonderheiten: string;
@@ -89,6 +108,63 @@ export default function PreisradarAlertsPage() {
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [analyzeErrors, setAnalyzeErrors] = useState<Record<string, string>>({});
+  const [savedAlertIds, setSavedAlertIds] = useState<Set<string>>(new Set());
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+
+  // Gespeicherte Alerts laden
+  const loadSavedAlerts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/modules/preisradar/saved");
+      if (res.ok) {
+        const data = await res.json();
+        const ids = new Set<string>(data.saved.map((s: { alertId: string }) => s.alertId));
+        setSavedAlertIds(ids);
+      }
+    } catch {
+      // Fehlerbehandlung
+    }
+  }, []);
+
+  // Alert speichern/entfernen togglen
+  const handleToggleSave = async (alertId: string) => {
+    setSavingIds((prev) => new Set(prev).add(alertId));
+    try {
+      if (savedAlertIds.has(alertId)) {
+        // Gespeichertes finden und löschen
+        const savedRes = await fetch("/api/modules/preisradar/saved");
+        if (savedRes.ok) {
+          const savedData = await savedRes.json();
+          const saved = savedData.saved.find((s: { alertId: string }) => s.alertId === alertId);
+          if (saved) {
+            await fetch(`/api/modules/preisradar/saved/${saved.id}`, { method: "DELETE" });
+          }
+        }
+        setSavedAlertIds((prev) => {
+          const next = new Set(prev);
+          next.delete(alertId);
+          return next;
+        });
+      } else {
+        // Alert speichern
+        const res = await fetch("/api/modules/preisradar/saved", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ alertId }),
+        });
+        if (res.ok || res.status === 409) {
+          setSavedAlertIds((prev) => new Set(prev).add(alertId));
+        }
+      }
+    } catch {
+      // Fehlerbehandlung
+    } finally {
+      setSavingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(alertId);
+        return next;
+      });
+    }
+  };
 
   const loadAlerts = useCallback(async () => {
     setLoading(true);
@@ -117,8 +193,9 @@ export default function PreisradarAlertsPage() {
     }
     if (status === "authenticated") {
       loadAlerts();
+      loadSavedAlerts();
     }
-  }, [status, router, loadAlerts]);
+  }, [status, router, loadAlerts, loadSavedAlerts]);
 
   const handleMarkAsSeen = async (alertId: string) => {
     try {
@@ -249,7 +326,7 @@ export default function PreisradarAlertsPage() {
               )}
             </div>
 
-            {/* Filter */}
+            {/* Filter + Gespeichert-Link */}
             <div className="flex gap-2">
               <button
                 onClick={() => { setFilter("all"); setPage(1); }}
@@ -271,6 +348,16 @@ export default function PreisradarAlertsPage() {
               >
                 Ungelesen
               </button>
+              <Link
+                href="/dashboard/preisradar/saved"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition flex items-center gap-1"
+              >
+                🔖 Gespeichert {savedAlertIds.size > 0 && (
+                  <span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full text-xs font-bold">
+                    {savedAlertIds.size}
+                  </span>
+                )}
+              </Link>
             </div>
           </div>
 
@@ -461,6 +548,20 @@ export default function PreisradarAlertsPage() {
 
                       {/* Aktionen */}
                       <div className="flex gap-2 pt-3 border-t border-gray-100">
+                        {/* Bookmark-Button */}
+                        <button
+                          onClick={() => handleToggleSave(alert.id)}
+                          disabled={savingIds.has(alert.id)}
+                          className={`text-xs py-2 px-2.5 rounded-lg font-medium transition ${
+                            savedAlertIds.has(alert.id)
+                              ? "bg-yellow-50 text-yellow-600 hover:bg-yellow-100"
+                              : "bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          } disabled:opacity-50`}
+                          title={savedAlertIds.has(alert.id) ? "Gespeichert — klicken zum Entfernen" : "Speichern"}
+                        >
+                          <BookmarkIcon filled={savedAlertIds.has(alert.id)} className="w-4 h-4" />
+                        </button>
+
                         <a
                           href={alert.url}
                           target="_blank"

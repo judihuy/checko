@@ -1,9 +1,11 @@
 // Registration page — Name + Email + Password + optionaler Referral-Code
+// Redirect zu /dashboard wenn bereits eingeloggt
 "use client";
 
 import { Suspense } from "react";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -11,6 +13,7 @@ import { Footer } from "@/components/Footer";
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session, status } = useSession();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -20,6 +23,13 @@ function RegisterForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [hasReferral, setHasReferral] = useState(false);
+
+  // Redirect wenn bereits eingeloggt
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/dashboard");
+    }
+  }, [status, router]);
 
   // Referral-Code aus URL lesen
   useEffect(() => {
@@ -74,6 +84,15 @@ function RegisterForm() {
       setLoading(false);
     }
   };
+
+  // Während Session geladen wird oder User eingeloggt ist → Spinner
+  if (status === "loading" || status === "authenticated") {
+    return (
+      <div className="flex-1 flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">

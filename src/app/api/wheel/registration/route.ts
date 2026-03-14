@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { spinRegistrationWheel } from "@/lib/wheel";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +12,13 @@ export async function POST(request: Request) {
     if (!session) {
       return NextResponse.json({ error: "Nicht eingeloggt." }, { status: 401 });
     }
+
+    // Balance VOR dem Spin auslesen
+    const userBefore = await prisma.user.findFirst({
+      where: { id: session.user.id },
+      select: { checkosBalance: true },
+    });
+    const previousBalance = userBefore?.checkosBalance ?? 0;
 
     // IP-Adresse extrahieren
     const forwarded = request.headers.get("x-forwarded-for");
@@ -27,6 +35,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       amount: result.amount,
+      previousBalance,
+      newBalance: previousBalance + (result.amount ?? 0),
       userNumber: result.userNumber,
       message: `Du hast ${result.amount} Checkos gewonnen!`,
     });

@@ -86,6 +86,7 @@ model User {
   wheelSpins              WheelSpin[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
+  savedAlerts             SavedAlert[]
 }
 
 model Module {
@@ -284,7 +285,26 @@ model PreisradarAlert {
   searchId   String
   createdAt  DateTime         @default(now())
   search     PreisradarSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  savedBy    SavedAlert[]
 
   @@index([searchId])
   @@index([createdAt])
+}
+
+// ==================== FAVORITEN / GESPEICHERTE ALERTS ====================
+
+model SavedAlert {
+  id         String   @id @default(cuid())
+  userId     String
+  alertId    String
+  isFavorite Boolean  @default(false) // false = gespeichert, true = Favorit
+  note       String?  @db.Text        // optionale Notiz vom User
+  createdAt  DateTime @default(now())
+
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alert PreisradarAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, alertId])
+  @@index([userId])
+  @@index([alertId])
 }

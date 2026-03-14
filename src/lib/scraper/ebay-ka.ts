@@ -60,9 +60,23 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
       // Methode 3: Fallback-Regex
       const fallbackResults = this.parseFallback(html, searchUrl, options);
       console.log(`[eBay KA] Fallback parsing: ${fallbackResults.length} results`);
+
+      if (fallbackResults.length === 0) {
+        console.warn(`[eBay KA] ⚠️ Keine Ergebnisse aus allen 3 Parse-Methoden. HTML-Snippet (erste 500 Zeichen): ${html.substring(0, 500)}`);
+      }
+
       return fallbackResults;
     } catch (error) {
-      console.error("eBay Kleinanzeigen Scraper error:", error);
+      const reason = error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+      console.error(`[eBay KA] ❌ Scraper-Fehler: ${reason}`);
+      if (error instanceof Error && error.message.includes("timeout")) {
+        console.error("[eBay KA] → Timeout: Seite hat zu lange geladen. Puppeteer-Timeout erhöhen oder Proxy prüfen.");
+      }
+      if (error instanceof Error && error.message.includes("net::ERR_")) {
+        console.error("[eBay KA] → Netzwerk-Fehler: Proxy möglicherweise down oder blockiert.");
+      }
     }
 
     return results;

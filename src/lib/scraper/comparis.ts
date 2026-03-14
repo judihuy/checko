@@ -48,7 +48,13 @@ export class ComparisScraper extends BaseScraper {
         html.includes("Please enable JS and disable any ad blocker") ||
         (html.length < 2000 && html.includes("dd={"))
       ) {
-        console.warn("[Comparis] Bot protection (DataDome) detected — scraping blocked");
+        console.warn("[Comparis] ⚠️ Bot-Schutz (DataDome/Captcha) erkannt — Scraping blockiert. Proxy wechseln oder Residential Proxy nutzen.");
+        return results;
+      }
+
+      // Prüfe auf leere/minimale Seite
+      if (html.length < 1000) {
+        console.warn(`[Comparis] ⚠️ Sehr kurze Antwort (${html.length} Bytes) — wahrscheinlich Bot-Schutz oder Redirect`);
         return results;
       }
 
@@ -76,9 +82,23 @@ export class ComparisScraper extends BaseScraper {
       // Methode 4: Generischer Fallback
       const fallbackResults = this.parseFallback(html, searchUrl, options);
       console.log(`[Comparis] Fallback: ${fallbackResults.length} results`);
+
+      if (fallbackResults.length === 0) {
+        console.warn(`[Comparis] ⚠️ Keine Ergebnisse aus allen 4 Parse-Methoden. HTML-Snippet (erste 500 Zeichen): ${html.substring(0, 500)}`);
+      }
+
       return fallbackResults;
     } catch (error) {
-      console.error("Comparis.ch Scraper error:", error);
+      const reason = error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+      console.error(`[Comparis] ❌ Scraper-Fehler: ${reason}`);
+      if (error instanceof Error && error.message.includes("timeout")) {
+        console.error("[Comparis] → Timeout: Seite hat zu lange geladen. Puppeteer-Timeout erhöhen oder Proxy prüfen.");
+      }
+      if (error instanceof Error && error.message.includes("net::ERR_")) {
+        console.error("[Comparis] → Netzwerk-Fehler: Proxy möglicherweise down oder blockiert.");
+      }
     }
 
     return results;

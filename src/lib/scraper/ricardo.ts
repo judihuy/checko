@@ -35,7 +35,13 @@ export class RicardoScraper extends BaseScraper {
 
       // Prüfe ob blockiert
       if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
-        console.warn("[Ricardo] Cloudflare challenge detected — scraping blocked");
+        console.warn("[Ricardo] ⚠️ Cloudflare-Challenge erkannt — Scraping blockiert. Proxy wechseln oder Browser-Fingerprint anpassen.");
+        return results;
+      }
+
+      // Prüfe auf leere/minimale Seite
+      if (html.length < 1000) {
+        console.warn(`[Ricardo] ⚠️ Sehr kurze Antwort (${html.length} Bytes) — wahrscheinlich Bot-Schutz oder Redirect`);
         return results;
       }
 
@@ -56,9 +62,23 @@ export class RicardoScraper extends BaseScraper {
       // Methode 3: Fallback-Regex
       const fallbackResults = this.parseFallback(html, searchUrl, options);
       console.log(`[Ricardo] Fallback: ${fallbackResults.length} results`);
+
+      if (fallbackResults.length === 0) {
+        console.warn(`[Ricardo] ⚠️ Keine Ergebnisse aus allen 3 Parse-Methoden. HTML-Snippet (erste 500 Zeichen): ${html.substring(0, 500)}`);
+      }
+
       return fallbackResults;
     } catch (error) {
-      console.error("Ricardo.ch Scraper error:", error);
+      const reason = error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+      console.error(`[Ricardo] ❌ Scraper-Fehler: ${reason}`);
+      if (error instanceof Error && error.message.includes("timeout")) {
+        console.error("[Ricardo] → Timeout: Seite hat zu lange geladen. Puppeteer-Timeout erhöhen oder Proxy prüfen.");
+      }
+      if (error instanceof Error && error.message.includes("net::ERR_")) {
+        console.error("[Ricardo] → Netzwerk-Fehler: Proxy möglicherweise down oder blockiert.");
+      }
     }
 
     return results;

@@ -1,5 +1,5 @@
 // Benachrichtigungen-Seite — /dashboard/benachrichtigungen
-// Mit Löschen-Funktion (einzeln + alle gelesenen)
+// Mit Checkboxen, Bulk-Aktionen, Löschen (einzeln + bulk + gelesene)
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -24,6 +24,8 @@ export default function BenachrichtigungenPage() {
   const [loading, setLoading] = useState(true);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkActing, setBulkActing] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -47,7 +49,79 @@ export default function BenachrichtigungenPage() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // Als gelesen markieren
+  // Checkboxen zurücksetzen wenn Seite wechselt oder neu geladen wird
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [notifications]);
+
+  // Checkbox togglen
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Alle auswählen / abwählen
+  const toggleSelectAll = () => {
+    if (selectedIds.size === notifications.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(notifications.map((n) => n.id)));
+    }
+  };
+
+  const allSelected = notifications.length > 0 && selectedIds.size === notifications.length;
+  const someSelected = selectedIds.size > 0;
+
+  // Bulk: Ausgewählte löschen
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkActing(true);
+    try {
+      const res = await fetch("/api/notifications/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (res.ok) {
+        setSelectedIds(new Set());
+        await fetchNotifications();
+      }
+    } catch {
+      // Fehlerbehandlung
+    } finally {
+      setBulkActing(false);
+    }
+  };
+
+  // Bulk: Ausgewählte als gelesen markieren
+  const handleBulkMarkRead = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkActing(true);
+    try {
+      const res = await fetch("/api/notifications/bulk/read", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (res.ok) {
+        setSelectedIds(new Set());
+        await fetchNotifications();
+      }
+    } catch {
+      // Fehlerbehandlung
+    } finally {
+      setBulkActing(false);
+    }
+  };
+
+  // Als gelesen markieren (einzeln)
   const handleMarkAsRead = async (id: string) => {
     try {
       const res = await fetch(`/api/notifications/${id}/read`, { method: "PUT" });
@@ -81,7 +155,6 @@ export default function BenachrichtigungenPage() {
     try {
       const res = await fetch(`/api/notifications/${id}`, { method: "DELETE" });
       if (res.ok) {
-        // Optimistic Update
         setNotifications((prev) => prev.filter((n) => n.id !== id));
         setTotal((prev) => prev - 1);
       }
@@ -109,7 +182,6 @@ export default function BenachrichtigungenPage() {
         body: JSON.stringify({ readOnly: true }),
       });
       if (res.ok) {
-        // Seite neu laden um korrekte Pagination zu bekommen
         await fetchNotifications();
       }
     } catch {
@@ -122,6 +194,12 @@ export default function BenachrichtigungenPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const hasUnread = notifications.some((n) => !n.isRead);
   const hasRead = notifications.some((n) => n.isRead);
+
+  // Prüfe ob unter den ausgewählten ungelesene sind
+  const selectedHasUnread = Array.from(selectedIds).some((id) => {
+    const n = notifications.find((notif) => notif.id === id);
+    return n && !n.isRead;
+  });
 
   // Zeitstempel formatieren
   const formatTime = (dateStr: string) => {
@@ -198,6 +276,32 @@ export default function BenachrichtigungenPage() {
         </div>
       </div>
 
+      {/* Bulk-Aktionsleiste */}
+      {someSelected && (
+        <div className="mb-4 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+          <span className="text-sm text-gray-600 font-medium">
+            {selectedIds.size} ausgewählt
+          </span>
+          <div className="flex-1" />
+          {selectedHasUnread && (
+            <button
+              onClick={handleBulkMarkRead}
+              disabled={bulkActing}
+              className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition disabled:opacity-50"
+            >
+              {bulkActing ? "..." : "✓ Als gelesen markieren"}
+            </button>
+          )}
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkActing}
+            className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition disabled:opacity-50"
+          >
+            {bulkActing ? "Löscht..." : "🗑 Löschen"}
+          </button>
+        </div>
+      )}
+
       {/* Liste */}
       {loading ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-400">
@@ -210,6 +314,21 @@ export default function BenachrichtigungenPage() {
         </div>
       ) : (
         <div className="space-y-2">
+          {/* Alle auswählen */}
+          <div className="flex items-center gap-3 px-5 py-2">
+            <label className="flex items-center gap-2 cursor-pointer select-none group">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <span className="text-sm text-gray-500 group-hover:text-gray-700 transition">
+                Alle auswählen
+              </span>
+            </label>
+          </div>
+
           {notifications.map((n) => (
             <div
               key={n.id}
@@ -217,9 +336,21 @@ export default function BenachrichtigungenPage() {
                 !n.isRead
                   ? "border-emerald-300 bg-emerald-50/30"
                   : "border-gray-200"
-              } ${deletingIds.has(n.id) ? "opacity-50" : ""}`}
+              } ${deletingIds.has(n.id) ? "opacity-50" : ""} ${
+                selectedIds.has(n.id) ? "ring-2 ring-emerald-200" : ""
+              }`}
             >
-              <div className="px-5 py-4 flex gap-3">
+              <div className="px-5 py-4 flex gap-3 items-start">
+                {/* Checkbox */}
+                <div className="flex-shrink-0 pt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(n.id)}
+                    onChange={() => toggleSelect(n.id)}
+                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                </div>
+
                 {/* Icon */}
                 <span className="text-xl flex-shrink-0 mt-0.5">
                   {getIcon(n.type)}

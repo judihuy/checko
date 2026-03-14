@@ -73,15 +73,29 @@ export async function runSearchJob(searchId: string): Promise<{
     const allResults: ScraperResult[] = [];
 
     for (const scraper of scrapers) {
+      const scraperStart = Date.now();
+      console.log(`[Scheduler] Scraping ${scraper.displayName} für Suche "${search.query}"...`);
       try {
         const results = await scraper.scrape(search.query, {
           minPrice: search.minPrice || undefined,
           maxPrice: search.maxPrice || undefined,
           limit: 20, // Max 20 Ergebnisse pro Plattform
         });
+        const durationMs = Date.now() - scraperStart;
+        if (results.length === 0) {
+          const msg = `[Scheduler] ${scraper.displayName}: 0 Treffer nach ${durationMs}ms — möglicherweise blockiert oder Parse-Fehler`;
+          console.warn(msg);
+          errors.push(msg);
+        } else {
+          console.log(`[Scheduler] ${scraper.displayName}: ${results.length} Treffer in ${durationMs}ms`);
+        }
         allResults.push(...results);
       } catch (error) {
-        const msg = `Scraper ${scraper.displayName} fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`;
+        const durationMs = Date.now() - scraperStart;
+        const errorDetail = error instanceof Error
+          ? `${error.message}${error.stack ? `\n${error.stack.split("\n").slice(0, 3).join("\n")}` : ""}`
+          : String(error);
+        const msg = `[Scheduler] ${scraper.displayName} FEHLER nach ${durationMs}ms: ${errorDetail}`;
         errors.push(msg);
         console.error(msg);
       }
@@ -236,14 +250,20 @@ export async function runAllActiveSearches(): Promise<{
       select: { id: true },
     });
 
+    console.log(`[Scheduler] Starte ${activeSearches.length} aktive Suchen...`);
+
     for (const search of activeSearches) {
       const result = await runSearchJob(search.id);
       totalNewAlerts += result.newAlerts;
       errors.push(...result.errors);
 
+      console.log(`[Scheduler] Suche ${search.id}: ${result.newAlerts} neue Alerts, ${result.errors.length} Fehler, Erfolg: ${result.success}`);
+
       // Kurze Pause zwischen Suchen
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
+
+    console.log(`[Scheduler] Fertig: ${activeSearches.length} Suchen, ${totalNewAlerts} neue Alerts, ${errors.length} Fehler`);
 
     return {
       totalSearches: activeSearches.length,

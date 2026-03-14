@@ -202,10 +202,14 @@ export abstract class BaseScraper {
         });
 
         // Seite laden
-        await page.goto(url, {
+        const response = await page.goto(url, {
           waitUntil: "networkidle0",
           timeout: 30000,
         });
+
+        if (response && !response.ok()) {
+          console.warn(`[Scraper/${this.platform}] Browser fetch HTTP ${response.status()} ${response.statusText()}`);
+        }
 
         const html = await page.content();
 

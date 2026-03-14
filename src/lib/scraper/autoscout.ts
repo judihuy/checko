@@ -44,13 +44,19 @@ export class AutoScoutScraper extends BaseScraper {
 
       // Prüfe ob Cloudflare blockiert hat
       if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
-        console.warn("[AutoScout] Cloudflare challenge detected — scraping blocked");
+        console.warn("[AutoScout] ⚠️ Cloudflare-Challenge erkannt — Scraping blockiert. Proxy wechseln oder Browser-Fingerprint anpassen.");
         return results;
       }
 
       // Prüfe ob Seite "nicht gefunden" zeigt
       if (html.includes("Die Seite konnte nicht gefunden werden")) {
-        console.warn("[AutoScout] Page not found — URL may be incorrect");
+        console.warn("[AutoScout] ⚠️ Seite nicht gefunden — URL-Format möglicherweise geändert");
+        return results;
+      }
+
+      // Prüfe auf leere/minimale Seite
+      if (html.length < 1000) {
+        console.warn(`[AutoScout] ⚠️ Sehr kurze Antwort (${html.length} Bytes) — wahrscheinlich Bot-Schutz oder Redirect`);
         return results;
       }
 
@@ -85,9 +91,23 @@ export class AutoScoutScraper extends BaseScraper {
       // Methode 5: Generischer Fallback
       const fallbackResults = this.parseFallback(html, searchUrl, options);
       console.log(`[AutoScout] Fallback: ${fallbackResults.length} results`);
+
+      if (fallbackResults.length === 0) {
+        console.warn(`[AutoScout] ⚠️ Keine Ergebnisse aus allen 5 Parse-Methoden. HTML-Snippet (erste 500 Zeichen): ${html.substring(0, 500)}`);
+      }
+
       return fallbackResults;
     } catch (error) {
-      console.error("AutoScout24.ch Scraper error:", error);
+      const reason = error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+      console.error(`[AutoScout] ❌ Scraper-Fehler: ${reason}`);
+      if (error instanceof Error && error.message.includes("timeout")) {
+        console.error("[AutoScout] → Timeout: Seite hat zu lange geladen. Puppeteer-Timeout erhöhen oder Proxy prüfen.");
+      }
+      if (error instanceof Error && error.message.includes("net::ERR_")) {
+        console.error("[AutoScout] → Netzwerk-Fehler: Proxy möglicherweise down oder blockiert.");
+      }
     }
 
     return results;

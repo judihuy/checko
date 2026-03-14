@@ -272,12 +272,12 @@ model PreisradarSearch {
 
 model PreisradarAlert {
   id         String           @id @default(cuid())
-  title      String
+  title      String           @db.Text
   price      Int
-  platform   String
+  platform   String           @db.Text
   url        String           @db.Text
   imageUrl   String?          @db.Text
-  priceScore String?
+  priceScore String?          @db.Text
   aiAnalysis String?          @db.Text
   isScam         Boolean          @default(false)
   isSeen         Boolean          @default(false)

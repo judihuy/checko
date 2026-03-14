@@ -7,6 +7,7 @@ export interface PriceAnalysis {
   bewertung: "sehr günstig" | "günstig" | "fair" | "teuer" | "überteuert" | "unbekannt";
   warnung: string | null;
   isScam: boolean;
+  details: string | null;   // Kurze Erklärung zur Bewertung
 }
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -19,7 +20,8 @@ export async function analyzePrice(
   title: string,
   price: number,          // in Rappen
   platform: string,
-  category?: string
+  category?: string,
+  description?: string
 ): Promise<PriceAnalysis> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
@@ -30,27 +32,30 @@ export async function analyzePrice(
 
   const priceCHF = (price / 100).toFixed(2);
 
-  const prompt = `Du bist ein Schweizer Preisexperte. Analysiere dieses Inserat und bewerte den Preis.
+  const prompt = `Du bist ein Schweizer Secondhand-Markt-Experte. Bewerte dieses Inserat.
+
+WICHTIG:
+- Berücksichtige das ALTER des Produkts anhand des Titels (z.B. "E53" = 2000-2006, "iPhone 12" = 2020)
+- Bei Autos: Ältere Modelle (10+ Jahre) können SEHR günstig sein — das ist KEIN Scam
+- Bei Elektronik: Ältere Generationen sind deutlich günstiger
+- "Scam" NUR wenn der Preis UNMÖGLICH tief ist (z.B. neues iPhone für 50 CHF)
+- "überteuert" und "isScam=true" dürfen NIEMALS gleichzeitig vorkommen!
+- Wenn etwas teuer ist, ist es per Definition kein Scam
 
 Inserat:
 - Titel: ${title}
 - Preis: CHF ${priceCHF}
 - Plattform: ${platform}
-${category ? `- Kategorie: ${category}` : ""}
+- Kategorie: ${category || "Allgemein"}${description ? `\n- Beschreibung: ${description}` : ""}
 
-Antworte NUR mit einem JSON-Objekt (kein anderer Text):
+Antworte NUR mit JSON:
 {
-  "priceScore": <1-10, wobei 10=sehr günstig, 1=überteuert>,
+  "priceScore": <1-10, 10=sehr günstig, 1=überteuert>,
   "bewertung": "<sehr günstig|günstig|fair|teuer|überteuert>",
-  "warnung": "<string oder null, z.B. Scam-Verdacht, unrealistischer Preis etc.>",
-  "isScam": <true/false, true wenn Preis unrealistisch tief oder typische Scam-Muster>
-}
-
-Achte besonders auf:
-- Ist der Preis realistisch für den Artikel?
-- Schweizer Marktniveau (CHF)
-- Scam-Muster: Extrem tiefer Preis, generische Titel, verdächtige Formulierungen
-- Marktübliche Preise für ähnliche Artikel`;
+  "warnung": "<string oder null — NUR bei echten Problemen>",
+  "isScam": <true/false — NUR bei unmöglich tiefen Preisen oder bekannten Scam-Mustern>,
+  "details": "<kurze Erklärung warum dieser Preis so bewertet wird, max 2 Sätze>"
+}`;
 
   try {
     const response = await fetch(ANTHROPIC_API_URL, {
@@ -62,7 +67,7 @@ Achte besonders auf:
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 300,
+        max_tokens: 400,
         messages: [
           {
             role: "user",
@@ -97,18 +102,27 @@ Achte besonders auf:
 
     const parsed = JSON.parse(jsonMatch[0]);
 
-    // Validierung
+    // Validierung: priceScore zwischen 1-10 clampen
     const priceScore = Math.max(1, Math.min(10, Math.round(parsed.priceScore || 5)));
+
     const validBewertungen = ["sehr günstig", "günstig", "fair", "teuer", "überteuert"];
     const bewertung = validBewertungen.includes(parsed.bewertung)
       ? (parsed.bewertung as PriceAnalysis["bewertung"])
       : scoreToBewertung(priceScore);
 
+    let isScam = Boolean(parsed.isScam);
+
+    // KRITISCH: Wenn bewertung "teuer" oder "überteuert" → isScam IMMER false
+    if (bewertung === "teuer" || bewertung === "überteuert") {
+      isScam = false;
+    }
+
     return {
       priceScore,
       bewertung,
       warnung: parsed.warnung || null,
-      isScam: Boolean(parsed.isScam),
+      isScam,
+      details: parsed.details || null,
     };
   } catch (error) {
     console.error("KI-Preisanalyse fehlgeschlagen:", error);
@@ -126,12 +140,13 @@ export async function analyzePriceBatch(
     price: number;
     platform: string;
     category?: string;
+    description?: string;
   }>
 ): Promise<PriceAnalysis[]> {
   const results: PriceAnalysis[] = [];
 
   for (const item of items) {
-    const analysis = await analyzePrice(item.title, item.price, item.platform, item.category);
+    const analysis = await analyzePrice(item.title, item.price, item.platform, item.category, item.description);
     results.push(analysis);
 
     // Kleine Pause zwischen Anfragen (Rate-Limiting)
@@ -150,6 +165,7 @@ function getFallbackAnalysis(): PriceAnalysis {
     bewertung: "unbekannt",
     warnung: null,
     isScam: false,
+    details: null,
   };
 }
 

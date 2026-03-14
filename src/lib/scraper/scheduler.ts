@@ -127,6 +127,7 @@ export async function runSearchJob(searchId: string): Promise<{
             bewertung: analysis.bewertung,
             warnung: analysis.warnung,
             score: analysis.priceScore,
+            details: analysis.details,
           }),
           isScam: analysis.isScam,
         });

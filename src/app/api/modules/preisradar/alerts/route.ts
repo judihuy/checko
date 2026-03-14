@@ -60,12 +60,22 @@ export async function GET(request: NextRequest) {
     // Alerts formatieren
     const formattedAlerts = alerts.map((alert) => {
       // AI-Analyse parsen
-      let aiData: { bewertung?: string; warnung?: string; score?: number } | null = null;
+      let aiData: { bewertung?: string; warnung?: string; score?: number; details?: string } | null = null;
       if (alert.aiAnalysis) {
         try {
           aiData = JSON.parse(alert.aiAnalysis);
         } catch {
           aiData = null;
+        }
+      }
+
+      // Detail-Analyse parsen (falls vorhanden)
+      let detailAnalysis = null;
+      if (alert.detailAnalysis) {
+        try {
+          detailAnalysis = JSON.parse(alert.detailAnalysis);
+        } catch {
+          detailAnalysis = null;
         }
       }
 
@@ -79,11 +89,13 @@ export async function GET(request: NextRequest) {
         priceScore: alert.priceScore ? parseInt(alert.priceScore, 10) : null,
         bewertung: aiData?.bewertung || null,
         warnung: aiData?.warnung || null,
+        details: aiData?.details || null,
         isScam: alert.isScam,
         isSeen: alert.isSeen,
         searchQuery: alert.search.query,
         searchId: alert.searchId,
         createdAt: alert.createdAt,
+        detailAnalysis,
       };
     });
 

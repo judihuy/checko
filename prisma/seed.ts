@@ -24,7 +24,7 @@ const modules: ModuleSeed[] = [
     status: "active",
     isActive: true,
     description:
-      "Überwache Marktplätze wie Tutti.ch, Ricardo und eBay Kleinanzeigen automatisch. Erhalte Sofort-Benachrichtigungen bei neuen Treffern und finde die besten Schnäppchen.",
+      "Definiere eine Suche — z.B. 'iPhone 14 Pro unter 500 CHF'. Checko überwacht automatisch Ricardo, Tutti, eBay Kleinanzeigen und weitere Marktplätze. Sofort-Alert wenn ein Match auftaucht, mit KI-Preisbewertung und Betrugs-Warnung.",
     sortOrder: 1,
   },
   {
@@ -34,7 +34,7 @@ const modules: ModuleSeed[] = [
     status: "coming_soon",
     isActive: false,
     description:
-      "Schütze dich vor Betrug auf Online-Marktplätzen. Checko analysiert Inserate automatisch und warnt dich bei verdächtigen Angeboten, bevor du Geld verlierst.",
+      "Echtzeit-Betrugsschutz: Browser-Extension warnt bei Fake-Shops, Link-Check erkennt Phishing, Screenshot-Check analysiert verdächtige WhatsApp-Nachrichten. Warnt BEVOR du Geld verlierst.",
     sortOrder: 2,
   },
   {
@@ -44,7 +44,7 @@ const modules: ModuleSeed[] = [
     status: "coming_soon",
     isActive: false,
     description:
-      "Erstelle Kündigungen, Mahnungen und Rechtsbriefe in Sekunden. Rechtssicher formuliert und sofort einsatzbereit — ohne teure Anwälte.",
+      "KI-Rechtssystem für Alltagsprobleme: Kündigungen schreiben, Mahnungen formulieren, Widersprüche gegen Bussgelder, Verträge prüfen. Auf Schweizer und deutsches Recht spezialisiert.",
     sortOrder: 3,
   },
   {
@@ -54,7 +54,7 @@ const modules: ModuleSeed[] = [
     status: "coming_soon",
     isActive: false,
     description:
-      "Finde versteckte Abonnements in deinen Kontoauszügen und kündige sie mit einem Klick. Spare jeden Monat Geld, ohne selbst suchen zu müssen.",
+      "Kontoauszüge hochladen (Bank, Kreditkarte, Twint, PayPal) — KI findet automatisch ALLE laufenden Abos und vergessene Mitgliedschaften. Kündigungs-Assistent generiert fertige Kündigungsschreiben.",
     sortOrder: 4,
   },
   {
@@ -64,7 +64,7 @@ const modules: ModuleSeed[] = [
     status: "coming_soon",
     isActive: false,
     description:
-      "Überwache den Immobilienmarkt automatisch. Erhalte sofort Benachrichtigungen bei neuen Wohnungen oder Häusern, die genau zu deinen Kriterien passen.",
+      "Sofort-Alert bei neuen Wohnungsinseraten unter Marktwert. KI generiert personalisiertes Bewerbungsschreiben, analysiert Pendeldistanz und Nachbarschafts-Score. Schneller als andere Bewerber.",
     sortOrder: 5,
   },
   {
@@ -74,7 +74,7 @@ const modules: ModuleSeed[] = [
     status: "coming_soon",
     isActive: false,
     description:
-      "Lade AGB oder Verträge hoch und Checko analysiert das Kleingedruckte für dich. Versteckte Klauseln, Risiken und unfaire Bedingungen werden sofort markiert.",
+      "AGB, Mietvertrag, Arbeitsvertrag hochladen — KI übersetzt Juristendeutsch in Klartext. Ampel-Analyse: problematische Klauseln rot, neutrale gelb, gute grün.",
     sortOrder: 6,
   },
   {
@@ -104,7 +104,7 @@ const modules: ModuleSeed[] = [
     status: "coming_soon",
     isActive: false,
     description:
-      "Vergleiche Versicherungsangebote und finde die beste Lösung für dich. Checko analysiert deine aktuelle Police und zeigt Einsparpotenzial auf.",
+      "Alle Versicherungspolicen hochladen — KI findet Doppelversicherungen, Deckungslücken und günstigere Alternativen. Krankenkassen-Optimierer berechnet die beste Franchise.",
     sortOrder: 9,
   },
   {
@@ -124,7 +124,7 @@ const modules: ModuleSeed[] = [
     status: "coming_soon",
     isActive: false,
     description:
-      "Überwache Flug- und Hotelpreise automatisch. Checko findet den besten Zeitpunkt zum Buchen und benachrichtigt dich bei Preisänderungen.",
+      "Flug verspätet? Paket nicht angekommen? Problem in 2 Sätzen beschreiben — KI generiert sofort den perfekten Reklamationsbrief, rechtlich korrekt mit Fristsetzung und Gesetzesverweis.",
     sortOrder: 11,
   },
   {
@@ -134,7 +134,7 @@ const modules: ModuleSeed[] = [
     status: "coming_soon",
     isActive: false,
     description:
-      "Finde das perfekte Auto zum besten Preis. Checko durchsucht alle Plattformen und prüft Inseratshistorie, Preisfairness und mögliche Mängel.",
+      "Marke, Modell, Baujahr, Kilometer eingeben — sofort fairer Marktwert mit Preisspanne. Plus Prognose ob der Preis steigt oder fällt. Vergleich mit aktuellen Inseraten auf AutoScout24, Tutti & Co.",
     sortOrder: 12,
   },
   {
@@ -144,7 +144,7 @@ const modules: ModuleSeed[] = [
     status: "coming_soon",
     isActive: false,
     description:
-      "Vergleiche Strom- und Gasanbieter automatisch. Checko findet günstigere Tarife und hilft dir beim unkomplizierten Wechsel.",
+      "Stromrechnung analysieren, Verbrauch mit Durchschnitt vergleichen, günstigeren Anbieter finden. Plus Solar-Rechner und Wärmepumpen-Vergleich. Spar-Potenzial sofort sichtbar.",
     sortOrder: 13,
   },
   {

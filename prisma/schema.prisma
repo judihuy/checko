@@ -222,7 +222,7 @@ model Notification {
   type      String // "preisradar_alert", "welcome", "system", "referral"
   title     String
   message   String   @db.Text
-  link      String? // Optional: Link zum Treffer/Seite
+  link      String?  @db.Text // Optional: Link zum Treffer/Seite
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -278,8 +278,9 @@ model PreisradarAlert {
   imageUrl   String?          @db.Text
   priceScore String?
   aiAnalysis String?          @db.Text
-  isScam     Boolean          @default(false)
-  isSeen     Boolean          @default(false)
+  isScam         Boolean          @default(false)
+  isSeen         Boolean          @default(false)
+  detailAnalysis String?          @db.LongText
   searchId   String
   createdAt  DateTime         @default(now())
   search     PreisradarSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)

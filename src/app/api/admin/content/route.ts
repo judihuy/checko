@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const existing = await prisma.contentBlock.findUnique({ where: { slug } });
+    const existing = await prisma.contentBlock.findFirst({ where: { slug } });
     if (existing) {
       return NextResponse.json(
         { error: "Ein Inhalt mit diesem Slug existiert bereits." },

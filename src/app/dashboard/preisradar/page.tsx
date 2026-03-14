@@ -67,6 +67,7 @@ export default function PreisradarPage() {
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Edit-State
   const [editingSearch, setEditingSearch] = useState<Search | null>(null);
@@ -201,7 +202,7 @@ export default function PreisradarPage() {
         return;
       }
 
-      // Reset + Reload
+      // Reset + Reload + Erfolgsmeldung
       setShowModal(false);
       setQuery("");
       setMinPrice("");
@@ -209,6 +210,8 @@ export default function PreisradarPage() {
       setSelectedPlatforms(["tutti", "ricardo"]);
       setDuration("1d");
       setQualityTier("standard");
+      setSuccessMessage("Suche erstellt! Du wirst benachrichtigt bei Treffern.");
+      setTimeout(() => setSuccessMessage(null), 5000);
       await loadSearches();
     } catch {
       setError("Netzwerkfehler");
@@ -330,6 +333,20 @@ export default function PreisradarPage() {
               </button>
             </div>
           </div>
+
+          {/* Erfolgsmeldung */}
+          {successMessage && (
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-3">
+              <span className="text-emerald-600 text-lg">✅</span>
+              <p className="text-sm text-emerald-700 font-medium">{successMessage}</p>
+              <button
+                onClick={() => setSuccessMessage(null)}
+                className="ml-auto text-emerald-400 hover:text-emerald-600 text-lg"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           {/* Suchen-Liste */}
           {searches.length === 0 ? (

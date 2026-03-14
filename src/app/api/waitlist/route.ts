@@ -35,10 +35,8 @@ export async function POST(request: Request) {
     }
 
     // Prüfe ob bereits registriert
-    const existing = await prisma.moduleWaitlist.findUnique({
-      where: {
-        moduleId_email: { moduleId, email },
-      },
+    const existing = await prisma.moduleWaitlist.findFirst({
+      where: { moduleId, email },
     });
 
     if (existing) {

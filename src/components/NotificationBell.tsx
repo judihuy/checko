@@ -131,7 +131,7 @@ export function NotificationBell() {
         aria-label="Benachrichtigungen"
       >
         <svg
-          className="w-5 h-5"
+          className="w-6 h-6"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -146,7 +146,7 @@ export function NotificationBell() {
 
         {/* Badge */}
         {count > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[18px]">
+          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold leading-none text-white bg-red-600 rounded-full min-w-[20px] h-[20px] ring-2 ring-white">
             {count > 99 ? "99+" : count}
           </span>
         )}

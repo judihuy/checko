@@ -67,7 +67,7 @@ export async function PUT(
 
     // E-Mail Duplikat prüfen
     if (email && email.toLowerCase().trim() !== existingUser.email) {
-      const emailExists = await prisma.user.findUnique({
+      const emailExists = await prisma.user.findFirst({
         where: { email: email.toLowerCase().trim() },
       });
       if (emailExists) {

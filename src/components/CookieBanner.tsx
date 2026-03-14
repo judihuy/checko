@@ -1,4 +1,4 @@
-// Cookie Banner (DSGVO) — shows at bottom of page if user hasn't consented yet
+// Cookie Banner (DSGVO) — dezente Bar am unteren Rand
 "use client";
 
 import { useState, useEffect } from "react";
@@ -27,28 +27,27 @@ export function CookieBanner() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[100] bg-white border-t border-gray-200 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <p className="text-sm text-gray-600 max-w-2xl">
-            Wir verwenden Cookies für die Funktionalität der Seite. Weitere Infos in unserer{" "}
-            <Link href="/datenschutz" className="text-emerald-600 hover:text-emerald-700 underline">
-              Datenschutzerklärung
+    <div className="fixed bottom-0 left-0 right-0 z-[100] bg-gray-900/90 backdrop-blur-sm border-t border-gray-700">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-xs text-gray-300">
+            Wir nutzen Cookies für die Funktionalität.{" "}
+            <Link href="/datenschutz" className="text-emerald-400 hover:text-emerald-300 underline">
+              Mehr erfahren
             </Link>
-            .
           </p>
-          <div className="flex gap-3 shrink-0">
+          <div className="flex gap-2 shrink-0">
             <button
               onClick={handleNecessary}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
+              className="px-3 py-1 text-xs font-medium text-gray-300 hover:text-white transition"
             >
               Nur notwendige
             </button>
             <button
               onClick={handleAccept}
-              className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
+              className="px-3 py-1 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded transition"
             >
-              Akzeptieren
+              OK
             </button>
           </div>
         </div>

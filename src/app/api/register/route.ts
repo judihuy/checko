@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await prisma.user.findFirst({
       where: { email: normalizedEmail },
     });
 

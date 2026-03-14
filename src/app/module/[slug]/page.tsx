@@ -19,7 +19,7 @@ interface PageProps {
 // Dynamische Meta-Tags pro Modul
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const mod = await prisma.module.findUnique({ where: { slug } }).catch(() => null);
+  const mod = await prisma.module.findFirst({ where: { slug } }).catch(() => null);
 
   if (!mod) {
     return { title: "Modul nicht gefunden — Checko" };
@@ -89,7 +89,7 @@ export default async function ModuleDetailPage({ params }: PageProps) {
 
   let moduleData;
   try {
-    moduleData = await prisma.module.findUnique({
+    moduleData = await prisma.module.findFirst({
       where: { slug },
     });
   } catch {

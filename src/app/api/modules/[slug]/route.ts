@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
-    const module = await prisma.module.findUnique({
+    const module = await prisma.module.findFirst({
       where: { slug },
       select: {
         id: true,

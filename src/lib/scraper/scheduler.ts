@@ -43,7 +43,7 @@ export async function runSearchJob(searchId: string): Promise<{
 
   try {
     // Suche laden
-    const search = await prisma.preisradarSearch.findUnique({
+    const search = await prisma.preisradarSearch.findFirst({
       where: { id: searchId },
       include: { user: { select: { id: true, email: true, name: true, checkosBalance: true } } },
     });

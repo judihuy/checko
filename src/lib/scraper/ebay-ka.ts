@@ -1,5 +1,5 @@
 // eBay Kleinanzeigen Scraper (kleinanzeigen.de)
-// Nutzt HTML-Parsing mit fetch
+// Nutzt Puppeteer (headless Browser) mit Proxy für Anti-Bot-Bypass
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
@@ -24,17 +24,21 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
 
       const searchUrl = `${this.baseUrl}/s-suchanfrage/${encodedQuery}${priceParam}`;
 
-      const response = await this.fetchWithHeaders(searchUrl);
-
-      if (!response.ok) {
-        console.error(`eBay KA: HTTP ${response.status} für "${query}"`);
-        return results;
+      // Puppeteer-First, Fallback auf fetchWithHeaders
+      let html: string;
+      try {
+        html = await this.fetchWithBrowser(searchUrl);
+      } catch (browserError) {
+        console.warn(`[eBay KA] Puppeteer failed, falling back to HTTP fetch:`, browserError);
+        const response = await this.fetchWithHeaders(searchUrl);
+        if (!response.ok) {
+          console.error(`eBay KA: HTTP ${response.status} für "${query}"`);
+          return results;
+        }
+        html = await response.text();
       }
 
-      const html = await response.text();
-
       // Kleinanzeigen.de HTML-Parsing
-      // Inserate haben typischerweise article-Tags oder ad-list-items
       const adRegex = /<article[^>]*class="[^"]*aditem[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
       let adMatch;
 

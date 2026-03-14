@@ -159,7 +159,7 @@ export function getQualityTierById(tierId: string): QualityTier | undefined {
  * Checkos-Kontostand eines Users abfragen
  */
 export async function getBalance(userId: string): Promise<number> {
-  const user = await prisma.user.findUnique({
+  const user = await prisma.user.findFirst({
     where: { id: userId },
     select: { checkosBalance: true },
   });
@@ -289,7 +289,7 @@ export async function deductCheckos(
   try {
     const result = await prisma.$transaction(async (tx) => {
       // Aktuelle Balance prüfen
-      const user = await tx.user.findUnique({
+      const user = await tx.user.findFirst({
         where: { id: userId },
         select: { checkosBalance: true },
       });

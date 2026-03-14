@@ -1,5 +1,5 @@
 // Ricardo.ch Scraper
-// Nutzt die öffentliche Suche mit fetch (kein Puppeteer)
+// Nutzt Puppeteer (headless Browser) mit Proxy für Anti-Bot-Bypass
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
@@ -13,18 +13,21 @@ export class RicardoScraper extends BaseScraper {
 
     try {
       const encodedQuery = encodeURIComponent(query);
-
-      // Ricardo.ch hat eine API-ähnliche Suche
       const searchUrl = `${this.baseUrl}/de/s/${encodedQuery}`;
 
-      const response = await this.fetchWithHeaders(searchUrl);
-
-      if (!response.ok) {
-        console.error(`Ricardo.ch: HTTP ${response.status} für "${query}"`);
-        return results;
+      // Puppeteer-First, Fallback auf fetchWithHeaders
+      let html: string;
+      try {
+        html = await this.fetchWithBrowser(searchUrl);
+      } catch (browserError) {
+        console.warn(`[Ricardo] Puppeteer failed, falling back to HTTP fetch:`, browserError);
+        const response = await this.fetchWithHeaders(searchUrl);
+        if (!response.ok) {
+          console.error(`Ricardo.ch: HTTP ${response.status} für "${query}"`);
+          return results;
+        }
+        html = await response.text();
       }
-
-      const html = await response.text();
 
       // Ricardo nutzt auch __NEXT_DATA__ oder ein ähnliches JSON-Objekt
       const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^]*?)<\/script>/);
@@ -67,7 +70,6 @@ export class RicardoScraper extends BaseScraper {
 
       // Fallback: HTML-Regex-Parsing
       if (results.length === 0) {
-        // Ricardo-spezifische HTML-Muster
         const titleRegex = /class="[^"]*listing[^"]*title[^"]*"[^>]*>([^<]+)/gi;
         const priceRegex = /class="[^"]*listing[^"]*price[^"]*"[^>]*>(?:CHF\s*)?([\d',\.]+)/gi;
         const linkRegex = /href="(\/de\/a\/\d+[^"]*)"/gi;

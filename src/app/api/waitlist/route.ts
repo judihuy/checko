@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const { moduleId, email } = parsed.data;
 
     // Prüfe ob Modul existiert
-    const moduleExists = await prisma.module.findUnique({
+    const moduleExists = await prisma.module.findFirst({
       where: { id: moduleId },
       select: { id: true, status: true },
     });

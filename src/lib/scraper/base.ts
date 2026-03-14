@@ -2,6 +2,7 @@
 // Alle Plattform-Scraper erben von BaseScraper
 
 import { ProxyAgent, fetch as undiciFetch } from "undici";
+import puppeteer from "puppeteer";
 
 export interface ScraperResult {
   title: string;
@@ -19,18 +20,26 @@ export interface ScraperOptions {
 }
 
 // Proxy-Pool: 10 deutsche Webshare-Proxies
-const PROXY_POOL: string[] = [
-  "http://kfxavtnr-de-1:4f55trvs9n0y@p.webshare.io:80",
-  "http://kfxavtnr-de-2:4f55trvs9n0y@p.webshare.io:80",
-  "http://kfxavtnr-de-3:4f55trvs9n0y@p.webshare.io:80",
-  "http://kfxavtnr-de-4:4f55trvs9n0y@p.webshare.io:80",
-  "http://kfxavtnr-de-5:4f55trvs9n0y@p.webshare.io:80",
-  "http://kfxavtnr-de-6:4f55trvs9n0y@p.webshare.io:80",
-  "http://kfxavtnr-de-7:4f55trvs9n0y@p.webshare.io:80",
-  "http://kfxavtnr-de-8:4f55trvs9n0y@p.webshare.io:80",
-  "http://kfxavtnr-de-9:4f55trvs9n0y@p.webshare.io:80",
-  "http://kfxavtnr-de-10:4f55trvs9n0y@p.webshare.io:80",
+const PROXY_POOL = [
+  { username: "kfxavtnr-de-1", password: "4f55trvs9n0y" },
+  { username: "kfxavtnr-de-2", password: "4f55trvs9n0y" },
+  { username: "kfxavtnr-de-3", password: "4f55trvs9n0y" },
+  { username: "kfxavtnr-de-4", password: "4f55trvs9n0y" },
+  { username: "kfxavtnr-de-5", password: "4f55trvs9n0y" },
+  { username: "kfxavtnr-de-6", password: "4f55trvs9n0y" },
+  { username: "kfxavtnr-de-7", password: "4f55trvs9n0y" },
+  { username: "kfxavtnr-de-8", password: "4f55trvs9n0y" },
+  { username: "kfxavtnr-de-9", password: "4f55trvs9n0y" },
+  { username: "kfxavtnr-de-10", password: "4f55trvs9n0y" },
 ];
+
+const PROXY_HOST = "p.webshare.io";
+const PROXY_PORT = 80;
+
+// Legacy proxy URLs für undici (fetchWithHeaders)
+const PROXY_URLS: string[] = PROXY_POOL.map(
+  (p) => `http://${p.username}:${p.password}@${PROXY_HOST}:${PROXY_PORT}`
+);
 
 /**
  * Maskiert Passwort in Proxy-URL für sichere Log-Ausgabe
@@ -49,10 +58,9 @@ function maskProxyUrl(proxyUrl: string): string {
 }
 
 /**
- * Wählt zufälligen Proxy aus dem Pool
+ * Wählt zufälligen Proxy aus dem Pool (URL-Format für undici)
  */
-function getRandomProxy(): string | null {
-  // ENV-Variable überschreibt Pool (Komma-getrennt oder einzeln)
+function getRandomProxyUrl(): string | null {
   const envProxy = process.env.SCRAPER_PROXY_POOL || process.env.SCRAPER_PROXY;
   if (envProxy) {
     const envProxies = envProxy.split(",").map((p) => p.trim()).filter(Boolean);
@@ -61,20 +69,48 @@ function getRandomProxy(): string | null {
     }
   }
 
-  // Fallback: Hardcoded Pool
-  if (PROXY_POOL.length > 0) {
-    return PROXY_POOL[Math.floor(Math.random() * PROXY_POOL.length)];
+  if (PROXY_URLS.length > 0) {
+    return PROXY_URLS[Math.floor(Math.random() * PROXY_URLS.length)];
   }
 
   return null;
 }
+
+/**
+ * Wählt zufällige Proxy-Credentials aus dem Pool (für Puppeteer)
+ */
+function getRandomProxyCredentials(): { username: string; password: string } {
+  const idx = Math.floor(Math.random() * PROXY_POOL.length);
+  return PROXY_POOL[idx];
+}
+
+// ===== Browser Semaphore: Max 1 Browser gleichzeitig =====
+let browserLock: Promise<void> = Promise.resolve();
+let browserLockRelease: (() => void) | null = null;
+
+function acquireBrowserLock(): Promise<() => void> {
+  return new Promise<() => void>((resolve) => {
+    const prev = browserLock;
+    let release: () => void;
+    browserLock = new Promise<void>((r) => {
+      release = r;
+    });
+    prev.then(() => {
+      resolve(release!);
+    });
+  });
+}
+
+// Letzte Browser-Request-Zeit für globales Rate-Limiting
+let lastBrowserRequestTime = 0;
+const BROWSER_MIN_DELAY_MS = 5000; // 5 Sekunden zwischen Browser-Requests
 
 export abstract class BaseScraper {
   abstract readonly platform: string;
   abstract readonly displayName: string;
   abstract readonly baseUrl: string;
 
-  // Rate-Limiting: Letzte Request-Zeit pro Plattform
+  // Rate-Limiting: Letzte Request-Zeit pro Plattform (für fetchWithHeaders)
   private static lastRequestTime: Map<string, number> = new Map();
   private static readonly MIN_DELAY_MS = 5000; // 5 Sekunden zwischen Requests
 
@@ -105,6 +141,93 @@ export abstract class BaseScraper {
     BaseScraper.lastRequestTime.set(this.platform, Date.now());
   }
 
+  /**
+   * Fetcht HTML mit echtem Headless-Browser (Puppeteer) + Proxy.
+   * Max 1 Browser gleichzeitig (Semaphore). 5s Pause zwischen Requests.
+   * Bei Fehler wird Error geworfen — Aufrufer sollte Fallback nutzen.
+   */
+  protected async fetchWithBrowser(url: string): Promise<string> {
+    const release = await acquireBrowserLock();
+
+    try {
+      // Rate-Limiting: 5 Sekunden Pause zwischen Browser-Requests
+      const now = Date.now();
+      const elapsed = now - lastBrowserRequestTime;
+      if (elapsed < BROWSER_MIN_DELAY_MS) {
+        const waitMs = BROWSER_MIN_DELAY_MS - elapsed;
+        console.log(`[Scraper/${this.platform}] Browser rate-limit: waiting ${waitMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+
+      const proxy = getRandomProxyCredentials();
+      const userAgent = this.getRandomUserAgent();
+
+      console.log(`[Scraper/${this.platform}] Launching browser with proxy user ${proxy.username}`);
+
+      // Chromium-Pfad: ENV überschreibt Puppeteer-Default
+      const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+
+      const browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--no-zygote",
+          "--single-process",
+          `--proxy-server=http://${PROXY_HOST}:${PROXY_PORT}`,
+        ],
+      });
+
+      try {
+        const page = await browser.newPage();
+
+        // Proxy-Authentifizierung
+        await page.authenticate({
+          username: proxy.username,
+          password: proxy.password,
+        });
+
+        // Viewport setzen
+        await page.setViewport({ width: 1920, height: 1080 });
+
+        // User-Agent setzen
+        await page.setUserAgent(userAgent);
+
+        // Sprache setzen
+        await page.setExtraHTTPHeaders({
+          "Accept-Language": "de-CH,de;q=0.9,en;q=0.8",
+        });
+
+        // Seite laden
+        await page.goto(url, {
+          waitUntil: "networkidle0",
+          timeout: 30000,
+        });
+
+        const html = await page.content();
+
+        lastBrowserRequestTime = Date.now();
+
+        console.log(`[Scraper/${this.platform}] Browser fetch OK, HTML length: ${html.length}`);
+
+        return html;
+      } finally {
+        // Browser IMMER schliessen — auch bei Fehler
+        await browser.close();
+      }
+    } finally {
+      // Lock IMMER freigeben
+      release();
+    }
+  }
+
+  /**
+   * Fetcht mit HTTP-Headers via undici + Proxy (kein Browser).
+   * Wird als Fallback verwendet wenn Puppeteer fehlschlägt.
+   */
   protected async fetchWithHeaders(url: string): Promise<Response> {
     await this.enforceRateLimit();
 
@@ -118,7 +241,7 @@ export abstract class BaseScraper {
     };
 
     // Proxy aus Pool wählen
-    const proxyUrl = getRandomProxy();
+    const proxyUrl = getRandomProxyUrl();
 
     if (proxyUrl) {
       console.log(`[Scraper/${this.platform}] Fetching via proxy: ${maskProxyUrl(proxyUrl)}`);

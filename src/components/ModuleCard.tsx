@@ -44,9 +44,10 @@ export function ModuleCard({
   showPrice = true,
   linkTo,
 }: ModuleCardProps) {
-  const href = linkTo || `/module/${slug}`;
   const isComingSoon = status === "coming_soon";
   const isMaintenance = status === "maintenance";
+  // Aktive/Beta Module → Dashboard, Coming Soon/Maintenance → Detailseite
+  const href = linkTo || (isComingSoon || isMaintenance ? `/module/${slug}` : `/dashboard/${slug}`);
   const badge = STATUS_BADGES[status] || STATUS_BADGES.coming_soon;
 
   return (

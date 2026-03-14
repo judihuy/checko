@@ -73,7 +73,7 @@ export default function ImpressumPage() {
               <h2 className="text-xl font-semibold text-gray-900 mb-3">Urheberrechte</h2>
               <p className="text-gray-700 leading-relaxed">
                 Die Urheber- und alle anderen Rechte an Inhalten, Bildern, Fotos oder anderen Dateien
-                auf dieser Website gehören ausschliesslich Marcel Huy / HuyDigital oder den speziell
+                auf dieser Website gehören ausschließlich Marcel Huy / HuyDigital oder den speziell
                 genannten Rechteinhabern. Für die Reproduktion jeglicher Elemente ist die schriftliche
                 Zustimmung des Urheberrechtsträgers im Voraus einzuholen.
               </p>

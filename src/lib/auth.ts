@@ -32,7 +32,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error("E-Mail und Passwort sind erforderlich.");
         }
 
-        const user = await prisma.user.findUnique({
+        const user = await prisma.user.findFirst({
           where: { email: credentials.email.toLowerCase().trim() },
         });
 

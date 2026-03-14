@@ -1,5 +1,5 @@
 // AutoScout24.ch Scraper
-// Nutzt HTML-Parsing mit fetch
+// Nutzt Puppeteer (headless Browser) mit Proxy für Anti-Bot-Bypass
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
@@ -25,14 +25,19 @@ export class AutoScoutScraper extends BaseScraper {
         searchUrl += `&priceto=${Math.round(options.maxPrice / 100)}`;
       }
 
-      const response = await this.fetchWithHeaders(searchUrl);
-
-      if (!response.ok) {
-        console.error(`AutoScout24.ch: HTTP ${response.status} für "${query}"`);
-        return results;
+      // Puppeteer-First, Fallback auf fetchWithHeaders
+      let html: string;
+      try {
+        html = await this.fetchWithBrowser(searchUrl);
+      } catch (browserError) {
+        console.warn(`[AutoScout] Puppeteer failed, falling back to HTTP fetch:`, browserError);
+        const response = await this.fetchWithHeaders(searchUrl);
+        if (!response.ok) {
+          console.error(`AutoScout24.ch: HTTP ${response.status} für "${query}"`);
+          return results;
+        }
+        html = await response.text();
       }
-
-      const html = await response.text();
 
       // AutoScout24 nutzt oft structured data oder JSON-LD
       const jsonLdMatches = html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
@@ -75,7 +80,6 @@ export class AutoScoutScraper extends BaseScraper {
 
       // Fallback: HTML-Pattern-Matching
       if (results.length === 0) {
-        // AutoScout spezifische Patterns
         const listingRegex = /class="[^"]*listing-item[^"]*"([\s\S]*?)(?=class="[^"]*listing-item|$)/gi;
         let listingMatch;
 

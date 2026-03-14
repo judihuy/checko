@@ -363,26 +363,26 @@ function CheckosKaufContent() {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <span className="text-xl font-bold text-gray-900">1×</span>
-              <span className="text-sm text-gray-500 ml-1">Basispreis</span>
+              <span className="text-xl font-bold text-gray-900">2</span>
+              <span className="text-sm text-gray-500 ml-1">Checkos</span>
               <p className="text-sm font-medium text-gray-700 mt-1">Standard</p>
               <p className="text-xs text-gray-500">Schnell und zuverlässig</p>
             </div>
             <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <span className="text-xl font-bold text-blue-700">2×</span>
-              <span className="text-sm text-blue-600 ml-1">Basispreis</span>
+              <span className="text-xl font-bold text-blue-700">4</span>
+              <span className="text-sm text-blue-600 ml-1">Checkos</span>
               <p className="text-sm font-medium text-blue-700 mt-1">Premium</p>
-              <p className="text-xs text-blue-600">Bessere Qualität und mehr Details</p>
+              <p className="text-xs text-blue-600">Bessere Qualität</p>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <span className="text-xl font-bold text-purple-700">4×</span>
-              <span className="text-sm text-purple-600 ml-1">Basispreis</span>
+              <span className="text-xl font-bold text-purple-700">7</span>
+              <span className="text-sm text-purple-600 ml-1">Checkos</span>
               <p className="text-sm font-medium text-purple-700 mt-1">Pro</p>
-              <p className="text-xs text-purple-600">Maximale Qualität und Tiefe</p>
+              <p className="text-xs text-purple-600">Maximale Qualität</p>
             </div>
           </div>
           <p className="text-center text-xs text-gray-400 mt-3">
-            Beispiel Preisradar: 1 Tag Standard = 1 Checko, 1 Tag Pro = 4 Checkos, 1 Monat Pro = 60 Checkos
+            Beispiel Preisradar: 1 Tag Standard = 2 Checkos, 1 Tag Premium = 4 Checkos, 1 Tag Pro = 7 Checkos
           </p>
         </div>
 

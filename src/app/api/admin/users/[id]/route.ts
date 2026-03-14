@@ -21,7 +21,7 @@ async function requireAdmin() {
 const updateUserSchema = z.object({
   name: z.string().min(1, "Name darf nicht leer sein").max(100).optional(),
   email: z.string().email("Ungültige E-Mail-Adresse").optional(),
-  role: z.enum(["user", "admin"]).describe("Rolle muss user oder admin sein").optional(),
+  role: z.enum(["user", "moderator", "admin"]).describe("Rolle muss user, moderator oder admin sein").optional(),
 });
 
 // PUT — User bearbeiten
@@ -38,7 +38,7 @@ export async function PUT(
     const { id: userId } = await params;
 
     // User existiert?
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await prisma.user.findFirst({
       where: { id: userId },
       select: { id: true, email: true, name: true, role: true },
     });
@@ -135,7 +135,7 @@ export async function DELETE(
     const { id: userId } = await params;
 
     // User existiert?
-    const user = await prisma.user.findUnique({
+    const user = await prisma.user.findFirst({
       where: { id: userId },
       select: { id: true, email: true, name: true },
     });

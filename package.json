@@ -19,6 +19,7 @@
     "next-sitemap": "^4.2.3",
     "nodemailer": "^7.0.13",
     "prisma": "^5.22.0",
+    "puppeteer": "^24.39.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "stripe": "^20.4.1",

@@ -23,7 +23,7 @@ export async function generateReferralCode(): Promise<string> {
     }
 
     // Prüfe ob Code schon existiert
-    const existing = await prisma.user.findUnique({
+    const existing = await prisma.user.findFirst({
       where: { referralCode: code },
     });
 
@@ -42,7 +42,7 @@ export async function generateReferralCode(): Promise<string> {
  * Generiert einen neuen, falls noch keiner existiert.
  */
 export async function ensureReferralCode(userId: string): Promise<string> {
-  const user = await prisma.user.findUnique({
+  const user = await prisma.user.findFirst({
     where: { id: userId },
     select: { referralCode: true },
   });
@@ -72,7 +72,7 @@ export async function processReferral(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Finde den Werber anhand des Codes
-    const referrer = await prisma.user.findUnique({
+    const referrer = await prisma.user.findFirst({
       where: { referralCode: referrerCode },
       select: { id: true },
     });
@@ -87,7 +87,7 @@ export async function processReferral(
     }
 
     // Prüfe ob User bereits eine Empfehlung hat
-    const existingReferral = await prisma.referral.findUnique({
+    const existingReferral = await prisma.referral.findFirst({
       where: { referredId: referredUserId },
     });
 
@@ -162,7 +162,7 @@ export async function processAffiliateEarnings(
 ): Promise<{ success: boolean; affiliateAmount?: number }> {
   try {
     // Prüfe ob der Käufer von jemandem geworben wurde
-    const user = await prisma.user.findUnique({
+    const user = await prisma.user.findFirst({
       where: { id: buyerUserId },
       select: { referredBy: true },
     });
@@ -193,7 +193,7 @@ export async function processAffiliateEarnings(
       });
 
       // Referral-Eintrag aktualisieren (verdiente Checkos erhöhen)
-      const referral = await tx.referral.findUnique({
+      const referral = await tx.referral.findFirst({
         where: { referredId: buyerUserId },
       });
 

@@ -43,6 +43,10 @@ export default function AdminUsersPage() {
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
 
+  // Resend Verification State
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resendSuccess, setResendSuccess] = useState<string | null>(null);
+
   // Delete Modal State
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -241,6 +245,28 @@ export default function AdminUsersPage() {
     }
   };
 
+  // ==================== Verifizierungslink erneut senden ====================
+  const handleResendVerification = async (userId: string) => {
+    setResendingId(userId);
+    setResendSuccess(null);
+
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/resend-verification`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fehler");
+
+      setResendSuccess(`Verifizierungslink an ${data.email || "User"} gesendet!`);
+      setTimeout(() => setResendSuccess(null), 3000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Fehler beim Senden");
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   // ==================== Sortierung Toggle ====================
   const handleSort = (field: string) => {
     if (sort === field) {
@@ -287,6 +313,7 @@ export default function AdminUsersPage() {
         >
           <option value="">Alle Rollen</option>
           <option value="admin">Admins</option>
+          <option value="moderator">Moderatoren</option>
           <option value="user">User</option>
         </select>
         <select
@@ -298,6 +325,13 @@ export default function AdminUsersPage() {
           <option value="suspended">Gesperrte</option>
         </select>
       </div>
+
+      {/* Resend Verification Erfolg */}
+      {resendSuccess && (
+        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm">
+          ✅ {resendSuccess}
+        </div>
+      )}
 
       {/* User Count */}
       <div className="mb-3 text-sm text-gray-500">
@@ -356,10 +390,12 @@ export default function AdminUsersPage() {
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         user.role === "admin"
                           ? "bg-purple-100 text-purple-700"
-                          : "bg-gray-100 text-gray-700"
+                          : user.role === "moderator"
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-gray-100 text-gray-700"
                       }`}
                     >
-                      {user.role}
+                      {user.role === "admin" ? "Admin" : user.role === "moderator" ? "Moderator" : "User"}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -386,6 +422,16 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2 flex-wrap">
+                      {!user.isEmailVerified && (
+                        <button
+                          onClick={() => handleResendVerification(user.id)}
+                          disabled={resendingId === user.id}
+                          className="text-amber-600 hover:text-amber-700 text-xs font-medium whitespace-nowrap disabled:opacity-50"
+                          title="Verifizierungslink erneut senden"
+                        >
+                          {resendingId === user.id ? "⏳ Sende…" : "📧 Verifizieren"}
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setGiftUserId(user.id);
@@ -563,6 +609,7 @@ export default function AdminUsersPage() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="user">User</option>
+                  <option value="moderator">Moderator</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

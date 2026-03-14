@@ -1,5 +1,5 @@
 // Comparis.ch Auto-Scraper
-// Nutzt HTML-Parsing mit fetch
+// Nutzt Puppeteer (headless Browser) mit Proxy für Anti-Bot-Bypass
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
@@ -24,17 +24,21 @@ export class ComparisScraper extends BaseScraper {
         searchUrl += `&priceto=${Math.round(options.maxPrice / 100)}`;
       }
 
-      const response = await this.fetchWithHeaders(searchUrl);
-
-      if (!response.ok) {
-        console.error(`Comparis.ch: HTTP ${response.status} für "${query}"`);
-        return results;
+      // Puppeteer-First, Fallback auf fetchWithHeaders
+      let html: string;
+      try {
+        html = await this.fetchWithBrowser(searchUrl);
+      } catch (browserError) {
+        console.warn(`[Comparis] Puppeteer failed, falling back to HTTP fetch:`, browserError);
+        const response = await this.fetchWithHeaders(searchUrl);
+        if (!response.ok) {
+          console.error(`Comparis.ch: HTTP ${response.status} für "${query}"`);
+          return results;
+        }
+        html = await response.text();
       }
 
-      const html = await response.text();
-
       // Comparis nutzt React mit Server-Side-Rendering
-      // Versuche __NEXT_DATA__ oder ähnliche JSON-Strukturen
       const dataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([^]*?)<\/script>/)
         || html.match(/window\.__INITIAL_STATE__\s*=\s*({[^]*?});/);
 

@@ -56,52 +56,52 @@ model VerificationToken {
 // ==================== CORE MODELS ====================
 
 model User {
-  id                    String               @id @default(cuid())
-  email                 String               @unique
-  emailVerified         DateTime?
-  isEmailVerified       Boolean              @default(false)
-  verificationToken     String?              @unique
-  name                  String?
-  image                 String?
-  password              String?
-  role                  String               @default("user")
-  resetToken            String?              @unique
-  resetTokenExpiresAt   DateTime?
-  checkosBalance        Int                  @default(0)
-  referralCode          String?              @unique
-  referredBy            String?
-  isSuspended           Boolean              @default(false)
-  suspendReason         String?
-  registrationNumber    Int?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  emailVerified       DateTime?
+  isEmailVerified     Boolean   @default(false)
+  verificationToken   String?   @unique
+  name                String?
+  image               String?
+  password            String?
+  role                String    @default("user")
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+  checkosBalance      Int       @default(0)
+  referralCode        String?   @unique
+  referredBy          String?
+  isSuspended         Boolean   @default(false)
+  suspendReason       String?
+  registrationNumber  Int?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  accounts              Account[]
-  sessions              Session[]
-  checkoTransactions    CheckoTransaction[]
-  checkoPurchases       CheckoPurchase[]
-  searches              PreisradarSearch[]
-  referralsMade         Referral[]           @relation("ReferralsMade")
-  referralsReceived     Referral[]           @relation("ReferralsReceived")
-  wheelSpins            WheelSpin[]
-  notifications         Notification[]
+  accounts                Account[]
+  sessions                Session[]
+  checkoTransactions      CheckoTransaction[]
+  checkoPurchases         CheckoPurchase[]
+  searches                PreisradarSearch[]
+  referralsMade           Referral[]               @relation("ReferralsMade")
+  referralsReceived       Referral[]               @relation("ReferralsReceived")
+  wheelSpins              WheelSpin[]
+  notifications           Notification[]
   notificationPreferences NotificationPreference[]
 }
 
 model Module {
-  id            String            @id @default(cuid())
-  slug          String            @unique
-  name          String
-  description   String            @db.Text
-  priceMonthly  Int
-  icon          String?
-  isActive      Boolean           @default(false)
-  status        String            @default("coming_soon") // active, coming_soon, beta, maintenance
-  sortOrder     Int               @default(0)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  description  String   @db.Text
+  priceMonthly Int
+  icon         String?
+  isActive     Boolean  @default(false)
+  status       String   @default("coming_soon") // active, coming_soon, beta, maintenance
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  waitlist      ModuleWaitlist[]
+  waitlist ModuleWaitlist[]
 }
 
 model ModuleWaitlist {
@@ -121,11 +121,11 @@ model ModuleWaitlist {
 model CheckoTransaction {
   id          String   @id @default(cuid())
   userId      String
-  amount      Int      // positiv = Gutschrift, negativ = Verbrauch
-  type        String   // "purchase" | "usage" | "gift" | "referral" | "welcome" | "wheel" | "daily_wheel" | "affiliate"
+  amount      Int // positiv = Gutschrift, negativ = Verbrauch
+  type        String // "purchase" | "usage" | "gift" | "referral" | "welcome" | "wheel" | "daily_wheel" | "affiliate"
   description String?
-  moduleSlug  String?  // welches Modul wurde genutzt
-  qualityTier String?  // "standard" | "premium" | "pro"
+  moduleSlug  String? // welches Modul wurde genutzt
+  qualityTier String? // "standard" | "premium" | "pro"
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -136,8 +136,8 @@ model CheckoTransaction {
 model CheckoPurchase {
   id              String   @id @default(cuid())
   userId          String
-  amount          Int      // Anzahl Checkos
-  priceCHF        Int      // Preis in Rappen
+  amount          Int // Anzahl Checkos
+  priceCHF        Int // Preis in Rappen
   stripePaymentId String?  @unique
   status          String   @default("completed")
   createdAt       DateTime @default(now())
@@ -150,11 +150,11 @@ model CheckoPurchase {
 // ==================== REFERRAL (Empfehlungssystem) ====================
 
 model Referral {
-  id             String   @id @default(cuid())
-  referrerId     String
-  referredId     String
-  checkosEarned  Int      @default(0)
-  createdAt      DateTime @default(now())
+  id            String   @id @default(cuid())
+  referrerId    String
+  referredId    String
+  checkosEarned Int      @default(0)
+  createdAt     DateTime @default(now())
 
   referrer User @relation("ReferralsMade", fields: [referrerId], references: [id], onDelete: Cascade)
   referred User @relation("ReferralsReceived", fields: [referredId], references: [id], onDelete: Cascade)
@@ -168,7 +168,7 @@ model Referral {
 model WheelSpin {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // "registration" | "daily"
+  type      String // "registration" | "daily"
   amount    Int
   ipAddress String?
   createdAt DateTime @default(now())
@@ -219,10 +219,10 @@ model PromoCode {
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // "preisradar_alert", "welcome", "system", "referral"
+  type      String // "preisradar_alert", "welcome", "system", "referral"
   title     String
   message   String   @db.Text
-  link      String?  // Optional: Link zum Treffer/Seite
+  link      String? // Optional: Link zum Treffer/Seite
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -235,7 +235,7 @@ model Notification {
 model NotificationPreference {
   id      String  @id @default(cuid())
   userId  String
-  channel String  // "email", "inapp", "telegram", "push", "whatsapp", "sms"
+  channel String // "email", "inapp", "telegram", "push", "whatsapp", "sms"
   enabled Boolean @default(true)
   config  String? @db.Text // JSON config (z.B. Telegram Chat ID)
 
@@ -247,22 +247,22 @@ model NotificationPreference {
 // ==================== PREISRADAR ====================
 
 model PreisradarSearch {
-  id              String             @id @default(cuid())
-  userId          String
-  query           String
-  maxPrice        Int?
-  minPrice        Int?
-  platforms       String             // Komma-getrennt: "tutti,ricardo,ebay-ka"
-  isActive        Boolean            @default(true)
-  duration        String             @default("1d") // "1d" | "1w" | "1m"
-  qualityTier     String             @default("standard") // "standard" | "premium" | "pro"
-  expiresAt       DateTime?
-  checkosCharged  Int                @default(0)
-  lastScrapedAt   DateTime?
-  alerts          PreisradarAlert[]
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String            @id @default(cuid())
+  userId         String
+  query          String
+  maxPrice       Int?
+  minPrice       Int?
+  platforms      String // Komma-getrennt: "tutti,ricardo,ebay-ka"
+  isActive       Boolean           @default(true)
+  duration       String            @default("1d") // "1d" | "1w" | "1m"
+  qualityTier    String            @default("standard") // "standard" | "premium" | "pro"
+  expiresAt      DateTime?
+  checkosCharged Int               @default(0)
+  lastScrapedAt  DateTime?
+  alerts         PreisradarAlert[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([isActive])

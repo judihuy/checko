@@ -18,7 +18,7 @@ export async function getUserNumber(): Promise<number> {
  * Registrierungsnummer für einen User setzen (falls noch nicht gesetzt)
  */
 export async function assignRegistrationNumber(userId: string): Promise<number> {
-  const user = await prisma.user.findUnique({
+  const user = await prisma.user.findFirst({
     where: { id: userId },
     select: { registrationNumber: true },
   });

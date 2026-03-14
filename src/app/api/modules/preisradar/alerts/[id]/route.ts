@@ -19,7 +19,7 @@ export async function PUT(
 
   try {
     // Alert finden und prüfen ob er dem User gehört
-    const alert = await prisma.preisradarAlert.findUnique({
+    const alert = await prisma.preisradarAlert.findFirst({
       where: { id },
       include: {
         search: {

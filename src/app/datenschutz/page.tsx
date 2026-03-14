@@ -56,7 +56,7 @@ export default function DatenschutzPage() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">4. Cookies</h2>
               <p className="text-gray-700 leading-relaxed mb-3">
-                Wir verwenden ausschliesslich notwendige Cookies:
+                Wir verwenden ausschließlich notwendige Cookies:
               </p>
               <ul className="list-disc list-inside text-gray-700 space-y-2">
                 <li><strong>Session-Cookie:</strong> Für die Authentifizierung und Sitzungsverwaltung (NextAuth.js)</li>

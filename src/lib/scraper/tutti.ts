@@ -1,5 +1,5 @@
 // Tutti.ch Scraper
-// Nutzt HTML-Parsing mit fetch (kein Puppeteer für MVP)
+// Nutzt Puppeteer (headless Browser) mit Proxy für Anti-Bot-Bypass
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
@@ -15,14 +15,19 @@ export class TuttiScraper extends BaseScraper {
       const encodedQuery = encodeURIComponent(query);
       const searchUrl = `${this.baseUrl}/de/ganze-schweiz?q=${encodedQuery}`;
 
-      const response = await this.fetchWithHeaders(searchUrl);
-
-      if (!response.ok) {
-        console.error(`Tutti.ch: HTTP ${response.status} für "${query}"`);
-        return results;
+      // Puppeteer-First, Fallback auf fetchWithHeaders
+      let html: string;
+      try {
+        html = await this.fetchWithBrowser(searchUrl);
+      } catch (browserError) {
+        console.warn(`[Tutti] Puppeteer failed, falling back to HTTP fetch:`, browserError);
+        const response = await this.fetchWithHeaders(searchUrl);
+        if (!response.ok) {
+          console.error(`Tutti.ch: HTTP ${response.status} für "${query}"`);
+          return results;
+        }
+        html = await response.text();
       }
-
-      const html = await response.text();
 
       // Tutti.ch nutzt __NEXT_DATA__ JSON im HTML (Next.js-basiert)
       const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^]*?)<\/script>/);

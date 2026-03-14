@@ -1,5 +1,5 @@
 // Middleware: Protect admin and dashboard routes
-// Only users with role="admin" can access /admin/*
+// Rollen: admin = Vollzugriff, moderator = /admin/users/* erlaubt, user = kein Admin-Zugang
 // WICHTIG: NIEMALS `new URL(..., request.url)` für Redirects!
 // In Docker/Proxy Umgebungen enthält request.url interne URLs.
 
@@ -13,6 +13,13 @@ function getBaseUrl(): string {
     process.env.NEXT_PUBLIC_APP_URL ||
     "http://localhost:3000"
   );
+}
+
+/**
+ * Prüft ob die Rolle admin oder moderator ist
+ */
+function isAdminOrModerator(role: string | undefined): boolean {
+  return role === "admin" || role === "moderator";
 }
 
 export async function middleware(request: NextRequest) {
@@ -33,9 +40,16 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Not admin → redirect to dashboard
-    if (token.role !== "admin") {
-      return NextResponse.redirect(new URL("/dashboard", baseUrl));
+    // /admin/users/* = admin ODER moderator
+    if (pathname.startsWith("/admin/users")) {
+      if (!isAdminOrModerator(token.role as string)) {
+        return NextResponse.redirect(new URL("/dashboard", baseUrl));
+      }
+    } else {
+      // Alle anderen /admin/* = nur admin
+      if (token.role !== "admin") {
+        return NextResponse.redirect(new URL("/dashboard", baseUrl));
+      }
     }
   }
 

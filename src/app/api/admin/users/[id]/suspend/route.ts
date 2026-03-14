@@ -26,7 +26,7 @@ export async function PUT(
     const { id: userId } = await params;
 
     // User existiert?
-    const user = await prisma.user.findUnique({
+    const user = await prisma.user.findFirst({
       where: { id: userId },
       select: { id: true, email: true, name: true, isSuspended: true },
     });

@@ -1,7 +1,7 @@
 // Preisradar Dashboard — Meine Suchen + Neue Suche erstellen
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
@@ -32,10 +32,30 @@ const PLATFORMS = [
   { id: "comparis", name: "Comparis Auto" },
 ];
 
+// Basiskosten pro Dauer (Standard-Stufe)
+const DURATION_BASE_COSTS: Record<string, number> = {
+  "1d": 1,
+  "1w": 5,
+  "1m": 15,
+};
+
+// Qualitäts-Multiplikatoren
+const QUALITY_MULTIPLIERS: Record<string, number> = {
+  standard: 1,
+  premium: 2,
+  pro: 4,
+};
+
 const DURATIONS = [
-  { id: "1d", name: "1 Tag", cost: 1 },
-  { id: "1w", name: "1 Woche", cost: 5 },
-  { id: "1m", name: "1 Monat", cost: 15 },
+  { id: "1d", name: "1 Tag" },
+  { id: "1w", name: "1 Woche" },
+  { id: "1m", name: "1 Monat" },
+];
+
+const QUALITY_TIERS = [
+  { id: "standard", name: "Standard", desc: "Schnell und zuverlässig", multiplier: 1 },
+  { id: "premium", name: "Premium", desc: "Bessere Qualität", multiplier: 2 },
+  { id: "pro", name: "Pro", desc: "Maximale Tiefe", multiplier: 4 },
 ];
 
 export default function PreisradarPage() {
@@ -55,6 +75,13 @@ export default function PreisradarPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
+
+  // Live-Kostenberechnung: Dauer × Qualitäts-Multiplikator
+  const currentCost = useMemo(() => {
+    const baseCost = DURATION_BASE_COSTS[duration] || 1;
+    const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
+    return baseCost * multiplier;
+  }, [duration, qualityTier]);
 
   const loadSearches = useCallback(async () => {
     try {
@@ -161,10 +188,8 @@ export default function PreisradarPage() {
     );
   };
 
-  const selectedDuration = DURATIONS.find((d) => d.id === duration);
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  const getStatusBadge = (searchStatus: string) => {
+    switch (searchStatus) {
       case "aktiv":
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">● Aktiv</span>;
       case "pausiert":
@@ -173,6 +198,17 @@ export default function PreisradarPage() {
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">⏹ Abgelaufen</span>;
       default:
         return null;
+    }
+  };
+
+  const getQualityBadge = (tier: string) => {
+    switch (tier) {
+      case "premium":
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Premium</span>;
+      case "pro":
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">Pro</span>;
+      default:
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Standard</span>;
     }
   };
 
@@ -252,13 +288,14 @@ export default function PreisradarPage() {
                     {getStatusBadge(search.status)}
                   </div>
 
-                  {/* Plattformen */}
+                  {/* Plattformen + Qualität */}
                   <div className="flex flex-wrap gap-1 mb-3">
                     {search.platforms.map((p) => (
                       <span key={p} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
                         {getPlatformName(p)}
                       </span>
                     ))}
+                    {getQualityBadge(search.qualityTier)}
                   </div>
 
                   {/* Details */}
@@ -272,6 +309,7 @@ export default function PreisradarPage() {
                     )}
                     <p>🔔 {search.alertCount} Treffer</p>
                     <p>⏱ {DURATIONS.find((d) => d.id === search.duration)?.name || search.duration}</p>
+                    <p>🦎 {search.checkosCharged} Checko{search.checkosCharged > 1 ? "s" : ""} bezahlt</p>
                     {search.expiresAt && (
                       <p>📅 Läuft ab: {new Date(search.expiresAt).toLocaleDateString("de-CH")}</p>
                     )}
@@ -412,54 +450,88 @@ export default function PreisradarPage() {
                   </div>
                 </div>
 
-                {/* Dauer */}
+                {/* Qualitätsstufe — VOR Dauer, damit User zuerst Qualität wählt */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Dauer
+                    KI-Qualitätsstufe
                   </label>
                   <div className="grid grid-cols-3 gap-2">
-                    {DURATIONS.map((d) => (
+                    {QUALITY_TIERS.map((tier) => (
                       <button
-                        key={d.id}
+                        key={tier.id}
                         type="button"
-                        onClick={() => setDuration(d.id)}
+                        onClick={() => setQualityTier(tier.id)}
                         className={`py-3 px-2 rounded-lg border text-center transition ${
-                          duration === d.id
-                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                          qualityTier === tier.id
+                            ? tier.id === "pro"
+                              ? "border-purple-500 bg-purple-50 text-purple-700"
+                              : tier.id === "premium"
+                                ? "border-blue-500 bg-blue-50 text-blue-700"
+                                : "border-emerald-500 bg-emerald-50 text-emerald-700"
                             : "border-gray-200 hover:border-gray-300"
                         }`}
                       >
-                        <div className="font-medium text-sm">{d.name}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{d.cost} Checko{d.cost > 1 ? "s" : ""}</div>
+                        <div className="font-medium text-sm">{tier.name}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{tier.desc}</div>
+                        <div className="text-xs font-semibold mt-1">
+                          {tier.multiplier === 1 ? "1×" : `${tier.multiplier}×`} Preis
+                        </div>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Qualitätsstufe */}
+                {/* Dauer — mit dynamischen Kosten je nach Qualitätsstufe */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Qualitätsstufe
+                    Dauer
                   </label>
-                  <select
-                    value={qualityTier}
-                    onChange={(e) => setQualityTier(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  >
-                    <option value="standard">Standard — Schnell und zuverlässig</option>
-                    <option value="premium">Premium — Bessere Qualität</option>
-                    <option value="pro">Pro — Maximale Tiefe</option>
-                  </select>
+                  <div className="grid grid-cols-3 gap-2">
+                    {DURATIONS.map((d) => {
+                      const baseCost = DURATION_BASE_COSTS[d.id] || 1;
+                      const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
+                      const cost = baseCost * multiplier;
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => setDuration(d.id)}
+                          className={`py-3 px-2 rounded-lg border text-center transition ${
+                            duration === d.id
+                              ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="font-medium text-sm">{d.name}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {cost} Checko{cost > 1 ? "s" : ""}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Kosten-Anzeige */}
+                {/* Live-Kostenanzeige — reagiert auf Qualität UND Dauer */}
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-emerald-700">Kosten für diese Suche:</span>
+                    <div>
+                      <span className="text-sm text-emerald-700 font-medium">Kosten für diese Suche:</span>
+                      <div className="text-xs text-emerald-600 mt-0.5">
+                        {DURATIONS.find((d) => d.id === duration)?.name || duration}
+                        {" · "}
+                        {QUALITY_TIERS.find((t) => t.id === qualityTier)?.name || "Standard"}
+                      </div>
+                    </div>
                     <span className="text-lg font-bold text-emerald-800">
-                      🦎 {selectedDuration?.cost || 1} Checko{(selectedDuration?.cost || 1) > 1 ? "s" : ""}
+                      🦎 {currentCost} Checko{currentCost > 1 ? "s" : ""}
                     </span>
                   </div>
+                  {qualityTier !== "standard" && (
+                    <div className="text-xs text-emerald-600 mt-2 pt-2 border-t border-emerald-200">
+                      💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 1} Checko{(DURATION_BASE_COSTS[duration] || 1) > 1 ? "s" : ""} kosten
+                    </div>
+                  )}
                 </div>
 
                 {/* Submit */}
@@ -476,7 +548,7 @@ export default function PreisradarPage() {
                     disabled={creating || selectedPlatforms.length === 0 || !query.trim()}
                     className="flex-1 py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {creating ? "Wird erstellt..." : "Suche starten"}
+                    {creating ? "Wird erstellt..." : `Suche starten (${currentCost} 🦎)`}
                   </button>
                 </div>
               </form>

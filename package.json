@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "next-sitemap",
     "start": "next start",
     "db:seed": "tsx prisma/seed.ts"
   },
@@ -15,6 +16,7 @@
     "bcrypt": "^6.0.0",
     "next": "16.1.6",
     "next-auth": "^4.24.13",
+    "next-sitemap": "^4.2.3",
     "nodemailer": "^7.0.13",
     "prisma": "^5.22.0",
     "react": "19.2.3",

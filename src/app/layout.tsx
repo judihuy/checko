@@ -10,11 +10,20 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Checko — Dein Toolkit für alles",
+  title: "Checko — Smarte Module für den Alltag | checko.ch",
   description:
-    "Modulare Web-Plattform mit intelligenten Tools für den Alltag. Preisradar, Scam-Schutz, Rechtsberatung und mehr.",
+    "Checko bietet smarte Module für Preisüberwachung, Vertragscheck, Betrugsschutz und mehr. Dein AI-Toolkit für den Alltag.",
   icons: {
     icon: "/favicon.ico",
+  },
+  openGraph: {
+    title: "Checko — Smarte Module für den Alltag | checko.ch",
+    description:
+      "Checko bietet smarte Module für Preisüberwachung, Vertragscheck, Betrugsschutz und mehr. Dein AI-Toolkit für den Alltag.",
+    url: "https://checko.ch",
+    siteName: "Checko",
+    type: "website",
+    locale: "de_CH",
   },
 };
 

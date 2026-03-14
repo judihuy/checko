@@ -1,10 +1,64 @@
 // Checkos — Coin-System für Checko
-// Pakete, Qualitätsstufen, Balance-Management
+// Pakete, Qualitätsstufen, Balance-Management, dynamische Preisberechnung
 // User sieht KEINE Modellnamen, nur Standard/Premium/Pro
 
 import { prisma } from "@/lib/prisma";
 
-// ==================== PAKETE ====================
+// ==================== MENGENRABATT ====================
+
+export interface DiscountTier {
+  min: number;
+  max: number;
+  discount: number;         // Rabatt in Prozent
+  pricePerChecko: number;   // CHF pro Checko
+}
+
+const DISCOUNT_TIERS: DiscountTier[] = [
+  { min: 5, max: 19, discount: 0, pricePerChecko: 1.0 },
+  { min: 20, max: 49, discount: 5, pricePerChecko: 0.95 },
+  { min: 50, max: 99, discount: 10, pricePerChecko: 0.9 },
+  { min: 100, max: Infinity, discount: 15, pricePerChecko: 0.85 },
+];
+
+/**
+ * Rabattstufe für eine bestimmte Menge berechnen
+ */
+export function getDiscountTier(amount: number): DiscountTier {
+  return DISCOUNT_TIERS.find((t) => amount >= t.min && amount <= t.max) || DISCOUNT_TIERS[0];
+}
+
+/**
+ * Dynamische Preisberechnung für eine beliebige Menge Checkos
+ */
+export function calculateCheckoPrice(amount: number): {
+  totalCHF: number;          // Gesamtpreis in CHF
+  totalRappen: number;       // Gesamtpreis in Rappen (für Stripe)
+  pricePerChecko: number;    // CHF pro Checko
+  discountPercent: number;   // Rabatt in %
+  savingsCHF: number;        // Ersparnis in CHF
+} {
+  const tier = getDiscountTier(amount);
+  const totalCHF = parseFloat((amount * tier.pricePerChecko).toFixed(2));
+  const totalRappen = Math.round(totalCHF * 100);
+  const fullPrice = amount * 1.0; // Ohne Rabatt
+  const savingsCHF = parseFloat((fullPrice - totalCHF).toFixed(2));
+  return {
+    totalCHF,
+    totalRappen,
+    pricePerChecko: tier.pricePerChecko,
+    discountPercent: tier.discount,
+    savingsCHF,
+  };
+}
+
+/**
+ * Alle Rabattstufen zurückgeben (für UI-Anzeige)
+ */
+export function getDiscountTiers(): DiscountTier[] {
+  return DISCOUNT_TIERS;
+}
+
+// ==================== PAKETE (Schnellwahl) ====================
 
 export interface CheckoPackage {
   id: string;
@@ -15,33 +69,22 @@ export interface CheckoPackage {
   popular: boolean;     // Beliebtestes Paket
 }
 
+/**
+ * Vordefinierte Pakete — Schnellwahl mit dynamischer Preisberechnung
+ */
 export function getPackages(): CheckoPackage[] {
-  return [
-    {
-      id: "checkos-20",
-      amount: 20,
-      priceCHF: 2000,       // 20.00 CHF
-      priceDisplay: "CHF 20.00",
-      savings: "",
-      popular: false,
-    },
-    {
-      id: "checkos-50",
-      amount: 50,
-      priceCHF: 4500,       // 45.00 CHF (10% Rabatt)
-      priceDisplay: "CHF 45.00",
-      savings: "Spare 10%",
-      popular: true,
-    },
-    {
-      id: "checkos-100",
-      amount: 100,
-      priceCHF: 8500,       // 85.00 CHF (15% Rabatt)
-      priceDisplay: "CHF 85.00",
-      savings: "Spare 15%",
-      popular: false,
-    },
-  ];
+  const amounts = [20, 50, 100];
+  return amounts.map((amount) => {
+    const pricing = calculateCheckoPrice(amount);
+    return {
+      id: `checkos-${amount}`,
+      amount,
+      priceCHF: pricing.totalRappen,
+      priceDisplay: `CHF ${pricing.totalCHF.toFixed(2)}`,
+      savings: pricing.discountPercent > 0 ? `Spare ${pricing.discountPercent}%` : "",
+      popular: amount === 50,
+    };
+  });
 }
 
 /**
@@ -51,12 +94,28 @@ export function getPackageById(packageId: string): CheckoPackage | undefined {
   return getPackages().find((p) => p.id === packageId);
 }
 
+/**
+ * Erstelle ein dynamisches "Paket" für einen beliebigen Betrag (für Stripe)
+ */
+export function createDynamicPackage(amount: number): CheckoPackage | null {
+  if (amount < 5 || amount > 500) return null;
+  const pricing = calculateCheckoPrice(amount);
+  return {
+    id: `checkos-custom-${amount}`,
+    amount,
+    priceCHF: pricing.totalRappen,
+    priceDisplay: `CHF ${pricing.totalCHF.toFixed(2)}`,
+    savings: pricing.discountPercent > 0 ? `Spare ${pricing.discountPercent}%` : "",
+    popular: false,
+  };
+}
+
 // ==================== QUALITÄTSSTUFEN ====================
 
 export interface QualityTier {
   id: string;
   name: string;        // Anzeigename für User
-  checkoCost: number;  // Kosten pro Nutzung
+  multiplier: number;  // Preismultiplikator (1x, 2x, 4x)
   description: string;
 }
 
@@ -65,19 +124,19 @@ export function getQualityTiers(): QualityTier[] {
     {
       id: "standard",
       name: "Standard",
-      checkoCost: 2,
+      multiplier: 1,
       description: "Schnell und zuverlässig",
     },
     {
       id: "premium",
       name: "Premium",
-      checkoCost: 4,
+      multiplier: 2,
       description: "Bessere Qualität und mehr Details",
     },
     {
       id: "pro",
       name: "Pro",
-      checkoCost: 7,
+      multiplier: 4,
       description: "Maximale Qualität und Tiefe",
     },
   ];
@@ -153,6 +212,57 @@ export async function purchaseCheckos(
     return { success: true, newBalance: result };
   } catch (error) {
     console.error("purchaseCheckos error:", error);
+    return { success: false, newBalance: 0, error: "Fehler beim Gutschreiben" };
+  }
+}
+
+/**
+ * Checkos für dynamischen Betrag gutschreiben (wenn Stripe custom amounts unterstützt)
+ */
+export async function purchaseCustomCheckos(
+  userId: string,
+  amount: number,
+  stripePaymentId?: string
+): Promise<{ success: boolean; newBalance: number; error?: string }> {
+  if (amount < 5 || amount > 500) {
+    return { success: false, newBalance: 0, error: "Ungültige Menge (5-500)" };
+  }
+
+  const pricing = calculateCheckoPrice(amount);
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.checkoPurchase.create({
+        data: {
+          userId,
+          amount,
+          priceCHF: pricing.totalRappen,
+          stripePaymentId: stripePaymentId || null,
+          status: "completed",
+        },
+      });
+
+      await tx.checkoTransaction.create({
+        data: {
+          userId,
+          amount,
+          type: "purchase",
+          description: `${amount} Checkos gekauft (CHF ${pricing.totalCHF.toFixed(2)})`,
+        },
+      });
+
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: { checkosBalance: { increment: amount } },
+        select: { checkosBalance: true },
+      });
+
+      return updatedUser.checkosBalance;
+    });
+
+    return { success: true, newBalance: result };
+  } catch (error) {
+    console.error("purchaseCustomCheckos error:", error);
     return { success: false, newBalance: 0, error: "Fehler beim Gutschreiben" };
   }
 }

@@ -104,7 +104,7 @@ async function getModules(): Promise<ModuleData[]> {
   try {
     const modules = await prisma.module.findMany({
       orderBy: [
-        { isActive: "desc" },  // Aktive Module zuerst
+        { isActive: "desc" }, // Aktive Module zuerst
         { sortOrder: "asc" },
       ],
     });
@@ -166,7 +166,7 @@ export default async function HomePage() {
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Unsere Module</h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Jedes Modul löst ein konkretes Problem. Bezahle pro Nutzung mit Checkos — 
+              Jedes Modul löst ein konkretes Problem. Bezahle pro Nutzung mit Checkos —
               keine Abos, keine versteckten Kosten.
             </p>
           </div>
@@ -196,7 +196,8 @@ export default async function HomePage() {
                   Demnächst verfügbar
                 </h3>
                 <p className="text-gray-500 text-sm">
-                  Diese Module sind in Entwicklung. Lass dich benachrichtigen, wenn sie live gehen.
+                  Diese Module sind in Entwicklung. Lass dich benachrichtigen, wenn sie
+                  live gehen.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

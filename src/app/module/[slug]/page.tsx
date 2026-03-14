@@ -1,6 +1,32 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { ProductJsonLd } from "@/components/JsonLd";
+
+// Dynamic metadata per module
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  const mod = await prisma.module.findUnique({ where: { slug: params.slug } }).catch(() => null);
+  if (!mod) {
+    return { title: "Modul nicht gefunden — Checko" };
+  }
+
+  const title = `${mod.name} — ${mod.description.substring(0, 60)} | checko.ch`;
+  const description = mod.description;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `https://checko.ch/module/${mod.slug}`,
+      siteName: "Checko",
+      type: "website",
+      locale: "de_CH",
+    },
+  };
+}
 
 export default async function ModuleDetailPage({ params }: { params: { slug: string } }) {
   const mod = await prisma.module.findUnique({ where: { slug: params.slug } }).catch(() => null);
@@ -22,6 +48,11 @@ export default async function ModuleDetailPage({ params }: { params: { slug: str
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <ProductJsonLd
+        name={mod.name}
+        description={mod.description}
+        url={`https://checko.ch/module/${mod.slug}`}
+      />
       <div className="max-w-3xl mx-auto px-4 py-16">
         <Link href="/" className="text-emerald-600 hover:underline mb-8 inline-block">← Zurück zur Übersicht</Link>
 

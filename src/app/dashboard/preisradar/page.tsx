@@ -32,18 +32,18 @@ const PLATFORMS = [
   { id: "comparis", name: "Comparis Auto" },
 ];
 
-// Basiskosten pro Dauer (Standard-Stufe)
+// Basiskosten pro Dauer (Standard-Stufe = 2 Checkos)
 const DURATION_BASE_COSTS: Record<string, number> = {
-  "1d": 1,
-  "1w": 5,
-  "1m": 15,
+  "1d": 2,
+  "1w": 8,
+  "1m": 20,
 };
 
-// Qualitäts-Multiplikatoren
-const QUALITY_MULTIPLIERS: Record<string, number> = {
-  standard: 1,
-  premium: 2,
-  pro: 4,
+// Qualitäts-Kosten in Checkos (konkret, keine Multiplikatoren)
+const QUALITY_CHECKO_COSTS: Record<string, number> = {
+  standard: 2,
+  premium: 4,
+  pro: 7,
 };
 
 const DURATIONS = [

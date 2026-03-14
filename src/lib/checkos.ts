@@ -115,7 +115,8 @@ export function createDynamicPackage(amount: number): CheckoPackage | null {
 export interface QualityTier {
   id: string;
   name: string;        // Anzeigename für User
-  multiplier: number;  // Preismultiplikator (1x, 2x, 4x)
+  multiplier: number;  // Preismultiplikator (intern für Berechnungen)
+  checkos: number;     // Konkrete Checko-Kosten pro Nutzung
   description: string;
 }
 
@@ -125,19 +126,22 @@ export function getQualityTiers(): QualityTier[] {
       id: "standard",
       name: "Standard",
       multiplier: 1,
+      checkos: 2,
       description: "Schnell und zuverlässig",
     },
     {
       id: "premium",
       name: "Premium",
       multiplier: 2,
-      description: "Bessere Qualität und mehr Details",
+      checkos: 4,
+      description: "Bessere Qualität",
     },
     {
       id: "pro",
       name: "Pro",
       multiplier: 4,
-      description: "Maximale Qualität und Tiefe",
+      checkos: 7,
+      description: "Maximale Qualität",
     },
   ];
 }

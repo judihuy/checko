@@ -40,6 +40,11 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Ungültige Anmeldedaten.");
         }
 
+        // Check if user is suspended
+        if (user.isSuspended) {
+          throw new Error("Dein Konto wurde gesperrt.");
+        }
+
         // Check email verification
         if (!user.isEmailVerified) {
           throw new Error("E-Mail-Adresse noch nicht bestätigt. Bitte prüfe dein Postfach.");

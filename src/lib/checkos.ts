@@ -231,12 +231,12 @@ export async function giftCheckos(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // CheckoTransaction erstellen (Geschenk)
+      // CheckoTransaction erstellen (Geschenk vom Admin)
       await tx.checkoTransaction.create({
         data: {
           userId,
           amount: amount,
-          type: "gift",
+          type: "admin_gift",
           description: description || `${amount} Checkos vom Admin geschenkt`,
         },
       });

@@ -18,6 +18,8 @@ export async function GET(
         priceMonthly: true,
         icon: true,
         isActive: true,
+        status: true,
+        sortOrder: true,
       },
     });
 

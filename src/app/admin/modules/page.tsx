@@ -1,4 +1,4 @@
-// Admin Modules — Activate/deactivate modules, change prices
+// Admin Modules — Modul-Verwaltung mit Status, sortOrder, Preise
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -8,17 +8,25 @@ interface Module {
   slug: string;
   name: string;
   description: string;
+  icon: string | null;
   priceMonthly: number;
   isActive: boolean;
+  status: string;
   sortOrder: number;
 }
+
+const STATUS_OPTIONS = [
+  { value: "active", label: "Aktiv", color: "bg-emerald-100 text-emerald-700" },
+  { value: "coming_soon", label: "Demnächst", color: "bg-amber-100 text-amber-700" },
+  { value: "beta", label: "Beta", color: "bg-blue-100 text-blue-700" },
+  { value: "maintenance", label: "Wartung", color: "bg-red-100 text-red-700" },
+];
 
 export default function AdminModulesPage() {
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editPrice, setEditPrice] = useState("");
+  const [saving, setSaving] = useState<string | null>(null);
 
   const fetchModules = useCallback(async () => {
     try {
@@ -37,38 +45,32 @@ export default function AdminModulesPage() {
     fetchModules();
   }, [fetchModules]);
 
-  const toggleActive = async (moduleId: string, isActive: boolean) => {
+  const updateModule = async (moduleId: string, updates: Record<string, unknown>) => {
+    setSaving(moduleId);
     try {
       const res = await fetch("/api/admin/modules", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ moduleId, isActive: !isActive }),
+        body: JSON.stringify({ moduleId, ...updates }),
       });
       if (!res.ok) throw new Error("Fehler");
-      fetchModules();
+      await fetchModules();
     } catch {
       alert("Fehler beim Aktualisieren.");
+    } finally {
+      setSaving(null);
     }
   };
 
-  const savePrice = async (moduleId: string) => {
-    const price = Math.round(parseFloat(editPrice) * 100);
-    if (isNaN(price) || price < 0) {
-      alert("Ungültiger Preis.");
-      return;
-    }
-    try {
-      const res = await fetch("/api/admin/modules", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ moduleId, priceMonthly: price }),
-      });
-      if (!res.ok) throw new Error("Fehler");
-      setEditingId(null);
-      fetchModules();
-    } catch {
-      alert("Fehler beim Speichern.");
-    }
+  const handleStatusChange = async (moduleId: string, newStatus: string) => {
+    const isActive = newStatus === "active";
+    await updateModule(moduleId, { status: newStatus, isActive });
+  };
+
+  const handleSortOrderChange = async (moduleId: string, newOrder: string) => {
+    const order = parseInt(newOrder, 10);
+    if (isNaN(order) || order < 0) return;
+    await updateModule(moduleId, { sortOrder: order });
   };
 
   if (loading) {
@@ -79,9 +81,19 @@ export default function AdminModulesPage() {
     );
   }
 
+  const activeCount = modules.filter((m) => m.status === "active").length;
+  const totalCount = modules.length;
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Modul-Verwaltung</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Modul-Verwaltung</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {activeCount} aktiv / {totalCount} gesamt
+          </p>
+        </div>
+      </div>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
@@ -94,83 +106,68 @@ export default function AdminModulesPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 w-12">#</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Modul</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Slug</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Referenzpreis</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Aktionen</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 w-40">Status</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 w-24">Sortierung</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {modules.map((mod) => (
-                <tr key={mod.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{mod.name}</td>
-                  <td className="px-4 py-3 text-gray-500 font-mono text-xs">{mod.slug}</td>
-                  <td className="px-4 py-3">
-                    {editingId === mod.id ? (
+              {modules.map((mod) => {
+                const statusOption = STATUS_OPTIONS.find((s) => s.value === mod.status);
+                const isSaving = saving === mod.id;
+
+                return (
+                  <tr
+                    key={mod.id}
+                    className={`hover:bg-gray-50 ${isSaving ? "opacity-50" : ""}`}
+                  >
+                    <td className="px-4 py-3 text-gray-400 text-xs">
+                      {mod.sortOrder}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editPrice}
-                          onChange={(e) => setEditPrice(e.target.value)}
-                          className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => savePrice(mod.id)}
-                          className="text-emerald-600 hover:text-emerald-700 text-xs font-medium"
-                        >
-                          ✓
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="text-gray-400 hover:text-gray-600 text-xs"
-                        >
-                          ✕
-                        </button>
+                        <span className="text-lg">{mod.icon || "🔧"}</span>
+                        <span className="font-medium text-gray-900">{mod.name}</span>
                       </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setEditingId(mod.id);
-                          setEditPrice((mod.priceMonthly / 100).toFixed(2));
-                        }}
-                        className="text-gray-900 hover:text-emerald-600 transition"
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                      {mod.slug}
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={mod.status}
+                        onChange={(e) => handleStatusChange(mod.id, e.target.value)}
+                        disabled={isSaving}
+                        className={`text-xs font-medium rounded-full px-3 py-1.5 border-0 cursor-pointer focus:ring-2 focus:ring-emerald-500 ${
+                          statusOption?.color || "bg-gray-100 text-gray-600"
+                        }`}
                       >
-                        CHF {(mod.priceMonthly / 100).toFixed(2)}
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        mod.isActive
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {mod.isActive ? "Aktiv" : "Inaktiv"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => toggleActive(mod.id, mod.isActive)}
-                      className={`text-sm font-medium ${
-                        mod.isActive
-                          ? "text-red-600 hover:text-red-700"
-                          : "text-emerald-600 hover:text-emerald-700"
-                      }`}
-                    >
-                      {mod.isActive ? "Deaktivieren" : "Aktivieren"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                        {STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="number"
+                        min="0"
+                        value={mod.sortOrder}
+                        onChange={(e) => handleSortOrderChange(mod.id, e.target.value)}
+                        disabled={isSaving}
+                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
               {modules.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                    Keine Module vorhanden.
+                    Keine Module vorhanden. Führe das Seed-Script aus: npm run db:seed
                   </td>
                 </tr>
               )}

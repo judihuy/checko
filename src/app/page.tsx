@@ -1,5 +1,5 @@
 // Landing Page — Checko
-// Hero + Module Grid + Pricing + CTA + Footer
+// Hero + Module Grid (alle 20 Module aus DB) + Pricing + CTA + Footer
 
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 // Force dynamic rendering (needs DB access)
 export const dynamic = "force-dynamic";
 
-// Module type for when DB is empty (fallback demo data)
+// Module type for DB and fallback
 interface ModuleData {
   id: string;
   slug: string;
@@ -21,6 +21,8 @@ interface ModuleData {
   priceMonthly: number;
   icon: string | null;
   isActive: boolean;
+  status: string;
+  sortOrder: number;
 }
 
 const DEMO_MODULES: ModuleData[] = [
@@ -30,9 +32,11 @@ const DEMO_MODULES: ModuleData[] = [
     name: "Checko Preisradar",
     description:
       "Überwache Marktplätze automatisch und finde die besten Schnäppchen. Sofort-Benachrichtigung bei Treffern.",
-    priceMonthly: 500,
+    priceMonthly: 0,
     icon: "📡",
     isActive: true,
+    status: "active",
+    sortOrder: 1,
   },
   {
     id: "demo-2",
@@ -40,9 +44,11 @@ const DEMO_MODULES: ModuleData[] = [
     name: "Checko Scam Shield",
     description:
       "Schütze dich vor Betrug auf Online-Marktplätzen. Automatische Erkennung verdächtiger Inserate.",
-    priceMonthly: 790,
+    priceMonthly: 0,
     icon: "🛡️",
     isActive: false,
+    status: "coming_soon",
+    sortOrder: 2,
   },
   {
     id: "demo-3",
@@ -50,9 +56,11 @@ const DEMO_MODULES: ModuleData[] = [
     name: "Checko Legal",
     description:
       "Kündigungen, Mahnungen und Rechtsbriefe automatisch erstellen. Rechtssicher und in Sekunden fertig.",
-    priceMonthly: 990,
+    priceMonthly: 0,
     icon: "⚖️",
     isActive: false,
+    status: "coming_soon",
+    sortOrder: 3,
   },
   {
     id: "demo-4",
@@ -60,9 +68,11 @@ const DEMO_MODULES: ModuleData[] = [
     name: "Checko Abo-Killer",
     description:
       "Finde versteckte Abos in deinen Kontoauszügen und kündige sie mit einem Klick.",
-    priceMonthly: 490,
+    priceMonthly: 0,
     icon: "✂️",
     isActive: false,
+    status: "coming_soon",
+    sortOrder: 4,
   },
   {
     id: "demo-5",
@@ -70,9 +80,11 @@ const DEMO_MODULES: ModuleData[] = [
     name: "Checko Immo",
     description:
       "Wohnungs- und Haus-Überwachung. Sofort benachrichtigt bei neuen Inseraten, die zu deinen Kriterien passen.",
-    priceMonthly: 790,
+    priceMonthly: 0,
     icon: "🏠",
     isActive: false,
+    status: "coming_soon",
+    sortOrder: 5,
   },
   {
     id: "demo-6",
@@ -80,18 +92,28 @@ const DEMO_MODULES: ModuleData[] = [
     name: "Checko Kleingedrucktes",
     description:
       "AGB und Verträge analysieren lassen. Versteckte Klauseln und Risiken sofort erkennen.",
-    priceMonthly: 590,
+    priceMonthly: 0,
     icon: "🔍",
     isActive: false,
+    status: "coming_soon",
+    sortOrder: 6,
   },
 ];
 
 async function getModules(): Promise<ModuleData[]> {
   try {
     const modules = await prisma.module.findMany({
-      orderBy: { sortOrder: "asc" },
+      orderBy: [
+        { isActive: "desc" },  // Aktive Module zuerst
+        { sortOrder: "asc" },
+      ],
     });
-    if (modules.length > 0) return modules;
+    if (modules.length > 0) {
+      return modules.map((m) => ({
+        ...m,
+        status: m.status ?? "coming_soon",
+      }));
+    }
     return DEMO_MODULES;
   } catch {
     // DB not connected yet — use demo data
@@ -101,6 +123,8 @@ async function getModules(): Promise<ModuleData[]> {
 
 export default async function HomePage() {
   const modules = await getModules();
+  const activeModules = modules.filter((m) => m.status === "active");
+  const comingSoonModules = modules.filter((m) => m.status !== "active");
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -136,29 +160,60 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Module Grid */}
+      {/* Active Modules */}
       <section id="module" className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Unsere Module</h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Jedes Modul löst ein konkretes Problem. Buche nur, was du brauchst — und
-              spare mit jedem weiteren Modul.
+              Jedes Modul löst ein konkretes Problem. Bezahle pro Nutzung mit Checkos — 
+              keine Abos, keine versteckten Kosten.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {modules.map((mod) => (
-              <ModuleCard
-                key={mod.id}
-                slug={mod.slug}
-                name={mod.name}
-                description={mod.description}
-                priceMonthly={mod.priceMonthly}
-                icon={mod.icon}
-                isActive={mod.isActive}
-              />
-            ))}
-          </div>
+
+          {/* Aktive Module */}
+          {activeModules.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+              {activeModules.map((mod) => (
+                <ModuleCard
+                  key={mod.id}
+                  slug={mod.slug}
+                  name={mod.name}
+                  description={mod.description}
+                  icon={mod.icon}
+                  isActive={mod.isActive}
+                  status={mod.status}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Coming Soon Module */}
+          {comingSoonModules.length > 0 && (
+            <>
+              <div className="text-center mb-8">
+                <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                  Demnächst verfügbar
+                </h3>
+                <p className="text-gray-500 text-sm">
+                  Diese Module sind in Entwicklung. Lass dich benachrichtigen, wenn sie live gehen.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {comingSoonModules.map((mod) => (
+                  <ModuleCard
+                    key={mod.id}
+                    slug={mod.slug}
+                    name={mod.name}
+                    description={mod.description}
+                    icon={mod.icon}
+                    isActive={mod.isActive}
+                    status={mod.status}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </section>
 

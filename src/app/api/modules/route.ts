@@ -1,11 +1,10 @@
-// Public API: GET all active modules
+// Public API: GET all modules (aktive zuerst, dann sortiert)
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
     const modules = await prisma.module.findMany({
-      where: { isActive: true },
       select: {
         id: true,
         slug: true,
@@ -14,8 +13,13 @@ export async function GET() {
         priceMonthly: true,
         icon: true,
         isActive: true,
+        status: true,
+        sortOrder: true,
       },
-      orderBy: { sortOrder: "asc" },
+      orderBy: [
+        { isActive: "desc" },
+        { sortOrder: "asc" },
+      ],
     });
 
     return NextResponse.json({ modules });

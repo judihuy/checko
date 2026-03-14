@@ -4,6 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/utils";
 
 export async function GET(request: Request) {
   try {
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
 
     if (!token) {
       return NextResponse.redirect(
-        new URL("/login?error=invalid-token", request.url)
+        new URL("/login?error=invalid-token", getBaseUrl())
       );
     }
 
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
 
     if (!user) {
       return NextResponse.redirect(
-        new URL("/login?error=invalid-token", request.url)
+        new URL("/login?error=invalid-token", getBaseUrl())
       );
     }
 
@@ -39,12 +40,12 @@ export async function GET(request: Request) {
 
     // Redirect zu Willkommens-Seite mit Glücksrad
     return NextResponse.redirect(
-      new URL("/willkommen?verified=true", request.url)
+      new URL("/willkommen?verified=true", getBaseUrl())
     );
   } catch (error) {
     console.error("Email verification error:", error);
     return NextResponse.redirect(
-      new URL("/login?error=verification-failed", request.url)
+      new URL("/login?error=verification-failed", getBaseUrl())
     );
   }
 }

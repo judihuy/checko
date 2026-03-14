@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
 
     // Pagination
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));

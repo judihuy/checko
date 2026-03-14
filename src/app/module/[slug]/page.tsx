@@ -1,116 +1,226 @@
-import type { Metadata } from "next";
-import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ProductJsonLd } from "@/components/JsonLd";
+// Modul-Detailseite — /module/[slug]
+// Zeigt Modul-Info, Preise, und Waitlist für coming_soon Module
 
-// Dynamic metadata per module
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const mod = await prisma.module.findUnique({ where: { slug: params.slug } }).catch(() => null);
-  if (!mod) {
-    return { title: "Modul nicht gefunden — Checko" };
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
+import { ProductJsonLd } from "@/components/JsonLd";
+import { prisma } from "@/lib/prisma";
+import { WaitlistForm } from "./WaitlistForm";
+
+export const dynamic = "force-dynamic";
+
+interface PageProps {
+  params: Promise<{ slug: string }>;
+}
+
+const STATUS_INFO: Record<string, { label: string; color: string; bgColor: string }> = {
+  active: { label: "Verfügbar", color: "text-emerald-700", bgColor: "bg-emerald-100" },
+  coming_soon: { label: "Demnächst", color: "text-amber-700", bgColor: "bg-amber-100" },
+  beta: { label: "Beta", color: "text-blue-700", bgColor: "bg-blue-100" },
+  maintenance: { label: "Wartung", color: "text-red-700", bgColor: "bg-red-100" },
+};
+
+const PRICING_TIERS = [
+  {
+    name: "Standard",
+    checkos: 2,
+    description: "Basis-Analyse mit bewährtem Modell",
+    features: ["Grundlegende Analyse", "Ergebnisse in Sekunden", "Standardqualität"],
+    highlight: false,
+  },
+  {
+    name: "Premium",
+    checkos: 4,
+    description: "Erweiterte Analyse mit fortschrittlichem Modell",
+    features: [
+      "Tiefgehende Analyse",
+      "Höhere Genauigkeit",
+      "Detaillierte Auswertung",
+      "Prioritätsverarbeitung",
+    ],
+    highlight: true,
+  },
+  {
+    name: "Pro",
+    checkos: 7,
+    description: "Maximale Qualität mit dem besten verfügbaren Modell",
+    features: [
+      "Beste verfügbare KI",
+      "Höchste Genauigkeit",
+      "Umfassende Analyse",
+      "Prioritätsverarbeitung",
+      "Erweiterte Ergebnisse",
+    ],
+    highlight: false,
+  },
+];
+
+export default async function ModuleDetailPage({ params }: PageProps) {
+  const { slug } = await params;
+
+  let moduleData;
+  try {
+    moduleData = await prisma.module.findUnique({
+      where: { slug },
+    });
+  } catch {
+    // DB nicht erreichbar — 404
   }
 
-  const title = `${mod.name} — ${mod.description.substring(0, 60)} | checko.ch`;
-  const description = mod.description;
+  if (!moduleData) {
+    notFound();
+  }
 
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      url: `https://checko.ch/module/${mod.slug}`,
-      siteName: "Checko",
-      type: "website",
-      locale: "de_CH",
-    },
-  };
-}
-
-export default async function ModuleDetailPage({ params }: { params: { slug: string } }) {
-  const mod = await prisma.module.findUnique({ where: { slug: params.slug } }).catch(() => null);
-  if (!mod) notFound();
-
-  const isActive = mod.status === "active";
-  const statusLabels: Record<string, string> = {
-    active: "Verfügbar",
-    coming_soon: "Demnächst verfügbar",
-    beta: "Beta",
-    maintenance: "Wartung",
-  };
-  const statusColors: Record<string, string> = {
-    active: "bg-emerald-100 text-emerald-800",
-    coming_soon: "bg-blue-100 text-blue-800",
-    beta: "bg-amber-100 text-amber-800",
-    maintenance: "bg-red-100 text-red-800",
-  };
+  const statusInfo = STATUS_INFO[moduleData.status] || STATUS_INFO.coming_soon;
+  const isActive = moduleData.status === "active";
+  const isComingSoon = moduleData.status === "coming_soon";
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen flex flex-col">
       <ProductJsonLd
-        name={mod.name}
-        description={mod.description}
-        url={`https://checko.ch/module/${mod.slug}`}
+        name={moduleData.name}
+        description={moduleData.description}
+        url={`https://checko.ch/module/${moduleData.slug}`}
       />
-      <div className="max-w-3xl mx-auto px-4 py-16">
-        <Link href="/" className="text-emerald-600 hover:underline mb-8 inline-block">← Zurück zur Übersicht</Link>
+      <Navbar />
 
-        <div className="bg-white rounded-2xl shadow-sm border p-8">
-          <div className="flex items-center gap-4 mb-6">
-            <span className="text-5xl">{mod.icon || "📦"}</span>
+      {/* Header */}
+      <section className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 py-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Link
+            href="/#module"
+            className="inline-flex items-center text-sm text-gray-500 hover:text-emerald-600 transition mb-8"
+          >
+            ← Alle Module
+          </Link>
+
+          <div className="flex items-start gap-4">
+            <div className="text-5xl">{moduleData.icon || "🔧"}</div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">{mod.name}</h1>
-              <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium mt-2 ${statusColors[mod.status] || "bg-gray-100 text-gray-600"}`}>
-                {statusLabels[mod.status] || mod.status}
-              </span>
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
+                  {moduleData.name}
+                </h1>
+                <span
+                  className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusInfo.bgColor} ${statusInfo.color}`}
+                >
+                  {statusInfo.label}
+                </span>
+              </div>
+              <p className="text-lg text-gray-600 leading-relaxed max-w-2xl">
+                {moduleData.description}
+              </p>
             </div>
           </div>
 
-          <p className="text-gray-600 text-lg leading-relaxed mb-8">{mod.description}</p>
-
-          <div className="bg-gray-50 rounded-xl p-6 mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Checkos pro Nutzung</h2>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="text-center p-4 bg-white rounded-lg border">
-                <div className="text-2xl font-bold text-gray-900">2</div>
-                <div className="text-sm text-gray-500">Standard</div>
+          {/* CTA Button */}
+          <div className="mt-8">
+            {isActive ? (
+              <Link
+                href={`/dashboard/${slug}`}
+                className="inline-block bg-emerald-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-emerald-700 transition shadow-lg shadow-emerald-200"
+              >
+                Jetzt nutzen →
+              </Link>
+            ) : isComingSoon ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-md">
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  Benachrichtige mich
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Erhalte eine E-Mail, sobald dieses Modul verfügbar ist.
+                </p>
+                <WaitlistForm moduleId={moduleData.id} moduleName={moduleData.name} />
               </div>
-              <div className="text-center p-4 bg-white rounded-lg border border-emerald-200">
-                <div className="text-2xl font-bold text-emerald-600">4</div>
-                <div className="text-sm text-gray-500">Premium</div>
+            ) : (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 max-w-md">
+                <p className="text-amber-700 text-sm">
+                  Dieses Modul ist aktuell in Wartung. Bitte versuche es später erneut.
+                </p>
               </div>
-              <div className="text-center p-4 bg-white rounded-lg border border-purple-200">
-                <div className="text-2xl font-bold text-purple-600">7</div>
-                <div className="text-sm text-gray-500">Pro</div>
-              </div>
-            </div>
+            )}
           </div>
-
-          {isActive ? (
-            <Link href={`/dashboard/${mod.slug}`} className="block w-full text-center bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-emerald-700 transition">
-              Jetzt nutzen →
-            </Link>
-          ) : (
-            <WaitlistForm moduleId={mod.id} moduleName={mod.name} />
-          )}
         </div>
-      </div>
-    </div>
-  );
-}
+      </section>
 
-function WaitlistForm({ moduleId, moduleName }: { moduleId: string; moduleName: string }) {
-  return (
-    <div className="bg-blue-50 rounded-xl p-6">
-      <h3 className="font-semibold text-gray-900 mb-2">Interesse an {moduleName}?</h3>
-      <p className="text-gray-600 text-sm mb-4">Wir benachrichtigen dich, sobald dieses Modul verfügbar ist.</p>
-      <form action={`/api/modules/${moduleId}/waitlist`} method="POST" className="flex gap-2">
-        <input type="email" name="email" required placeholder="Deine E-Mail-Adresse" className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
-        <button type="submit" className="bg-emerald-600 text-white font-medium px-6 py-2 rounded-lg hover:bg-emerald-700 transition">
-          Benachrichtige mich
-        </button>
-      </form>
+      {/* Pricing Tiers */}
+      <section className="py-16 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">
+              Qualitätsstufen & Preise
+            </h2>
+            <p className="text-gray-600">
+              Wähle die Qualitätsstufe, die zu deinem Bedarf passt. Bezahle pro Nutzung
+              mit Checkos.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {PRICING_TIERS.map((tier) => (
+              <div
+                key={tier.name}
+                className={`relative rounded-xl border p-6 ${
+                  tier.highlight
+                    ? "border-emerald-300 bg-emerald-50 shadow-lg"
+                    : "border-gray-200 bg-white"
+                }`}
+              >
+                {tier.highlight && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="bg-emerald-600 text-white text-xs font-medium px-3 py-1 rounded-full">
+                      Beliebteste Wahl
+                    </span>
+                  </div>
+                )}
+
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  {tier.name}
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">{tier.description}</p>
+
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className="text-3xl font-bold text-gray-900">
+                    {tier.checkos}
+                  </span>
+                  <span className="text-gray-500">Checkos</span>
+                  <span className="text-gray-400 text-sm ml-1">/ Nutzung</span>
+                </div>
+
+                <ul className="space-y-2 mb-6">
+                  {tier.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-sm">
+                      <span className="text-emerald-500 mt-0.5">✓</span>
+                      <span className="text-gray-600">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {isActive ? (
+                  <Link
+                    href={`/dashboard/${slug}`}
+                    className={`block text-center py-2.5 rounded-lg font-medium transition text-sm ${
+                      tier.highlight
+                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {tier.name} wählen
+                  </Link>
+                ) : (
+                  <div className="block text-center py-2.5 rounded-lg font-medium text-sm bg-gray-100 text-gray-400 cursor-not-allowed">
+                    Bald verfügbar
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <Footer />
     </div>
   );
 }

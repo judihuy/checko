@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
+import { OrganizationJsonLd, FaqJsonLd } from "@/components/JsonLd";
 import { Footer } from "@/components/Footer";
 import { GeckoLogo } from "@/components/GeckoLogo";
 import { ModuleCard } from "@/components/ModuleCard";
@@ -238,6 +239,8 @@ export default async function HomePage() {
       </section>
 
       <Footer />
+      <OrganizationJsonLd />
+      <FaqJsonLd />
     </div>
   );
 }

@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://checko.ch
+
+# Sitemaps
+Sitemap: https://checko.ch/sitemap.xml

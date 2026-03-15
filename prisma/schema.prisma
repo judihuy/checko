@@ -221,7 +221,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   type      String // "preisradar_alert", "welcome", "system", "referral"
-  title     String
+  title     String   @db.Text
   message   String   @db.Text
   link      String?  @db.Text // Optional: Link zum Treffer/Seite
   isRead    Boolean  @default(false)

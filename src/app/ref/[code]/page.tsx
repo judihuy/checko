@@ -44,7 +44,7 @@ export default async function ReferralLandingPage({ params }: Props) {
               <ul className="space-y-2">
                 <li className="flex items-center gap-2 text-emerald-700">
                   <span className="text-lg">🎡</span>
-                  <span>Glücksrad mit bis zu 50 Checkos</span>
+                  <span>Glücksrad mit bis zu 20 Checkos</span>
                 </li>
                 <li className="flex items-center gap-2 text-emerald-700">
                   <span className="text-lg">🎁</span>

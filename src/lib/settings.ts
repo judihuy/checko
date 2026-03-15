@@ -41,7 +41,7 @@ export async function getWheelSettings(): Promise<{
 }> {
   const [regMinStr, regMaxStr, dailyMinStr, dailyMaxStr] = await Promise.all([
     getSetting("wheel_registration_min", "1"),
-    getSetting("wheel_registration_max", "50"),
+    getSetting("wheel_registration_max", "20"),
     getSetting("wheel_daily_min", "1"),
     getSetting("wheel_daily_max", "10"),
   ]);

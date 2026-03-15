@@ -8,6 +8,7 @@ import { analyzePrice } from "@/lib/ai/price-analyzer";
 import { deductCheckos } from "@/lib/checkos";
 import { sendPreisradarAlertEmail } from "@/lib/email-preisradar";
 import { createNotification } from "@/lib/notifications";
+import { getPlatformDisplayName } from "@/lib/platform-names";
 
 // Basiskosten pro Dauer (Standard-Stufe)
 const DURATION_BASE_COSTS: Record<string, number> = {
@@ -195,7 +196,7 @@ export async function runSearchJob(searchId: string): Promise<{
             search.user.id,
             "preisradar_alert",
             `Neuer Treffer: ${alert.title}`,
-            `${priceFormatted} auf ${alert.platform}${scoreText}`,
+            `${priceFormatted} auf ${getPlatformDisplayName(alert.platform)}${scoreText}`,
             alert.url
           );
         } catch (notifError) {

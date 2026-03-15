@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import Link from "next/link";
+import { getPlatformDisplayName } from "@/lib/platform-names";
 
 interface SavedAlertItem {
   id: string;
@@ -32,13 +33,7 @@ interface SavedAlertItem {
   };
 }
 
-const PLATFORM_NAMES: Record<string, string> = {
-  tutti: "Tutti.ch",
-  ricardo: "Ricardo.ch",
-  "ebay-ka": "eBay Kleinanzeigen",
-  autoscout: "AutoScout24.ch",
-  comparis: "Comparis Auto",
-};
+
 
 function getScoreColor(score: string | null): string {
   if (!score) return "bg-gray-100 text-gray-500";
@@ -292,7 +287,7 @@ export default function SavedAlertsPage() {
                     {/* Plattform */}
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-medium text-gray-500">
-                        {PLATFORM_NAMES[item.alert.platform] || item.alert.platform}
+                        {getPlatformDisplayName(item.alert.platform)}
                       </span>
                       {!item.alert.imageUrl && item.isFavorite && (
                         <span className="text-yellow-500 text-sm">⭐</span>

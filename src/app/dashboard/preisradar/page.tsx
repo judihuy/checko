@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import Link from "next/link";
+import { getPlatformDisplayName, COUNTRY_PLATFORMS } from "@/lib/platform-names";
 
 interface Search {
   id: string;
@@ -26,11 +27,11 @@ interface Search {
 }
 
 const PLATFORMS = [
-  { id: "tutti", name: "Tutti.ch" },
-  { id: "ricardo", name: "Ricardo.ch" },
-  { id: "ebay-ka", name: "eBay Kleinanzeigen" },
-  { id: "autoscout", name: "AutoScout24.ch" },
-  { id: "comparis", name: "Comparis Auto" },
+  { id: "tutti", name: getPlatformDisplayName("tutti") },
+  { id: "ricardo", name: getPlatformDisplayName("ricardo") },
+  { id: "ebay-ka", name: getPlatformDisplayName("ebay-ka") },
+  { id: "autoscout", name: getPlatformDisplayName("autoscout") },
+  { id: "comparis", name: getPlatformDisplayName("comparis") },
 ];
 
 // Basiskosten pro Dauer (Standard-Stufe = 2 Checkos)
@@ -551,11 +552,69 @@ export default function PreisradarPage() {
                   </div>
                 </div>
 
-                {/* Plattformen */}
+                {/* Plattformen mit Länder-Gruppierung */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Plattformen *
                   </label>
+
+                  {/* Länder-Checkboxen */}
+                  <div className="flex gap-3 mb-3">
+                    {Object.entries(COUNTRY_PLATFORMS).map(([country, platformIds]) => {
+                      const allSelected = platformIds.every((id) => selectedPlatforms.includes(id));
+                      const someSelected = platformIds.some((id) => selectedPlatforms.includes(id));
+                      return (
+                        <label
+                          key={country}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${
+                            allSelected
+                              ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                              : someSelected
+                                ? "border-emerald-300 bg-emerald-25 text-emerald-600"
+                                : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={() => {
+                              if (allSelected) {
+                                // Alle Plattformen dieses Landes entfernen
+                                setSelectedPlatforms((prev) => prev.filter((p) => !platformIds.includes(p)));
+                              } else {
+                                // Alle Plattformen dieses Landes hinzufügen
+                                setSelectedPlatforms((prev) => {
+                                  const next = new Set(prev);
+                                  platformIds.forEach((id) => next.add(id));
+                                  return Array.from(next);
+                                });
+                              }
+                            }}
+                            className="sr-only"
+                          />
+                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                            allSelected
+                              ? "border-emerald-500 bg-emerald-500"
+                              : someSelected
+                                ? "border-emerald-400 bg-emerald-200"
+                                : "border-gray-300"
+                          }`}>
+                            {allSelected && (
+                              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                            {!allSelected && someSelected && (
+                              <span className="w-2 h-0.5 bg-emerald-500 rounded" />
+                            )}
+                          </span>
+                          <span className="text-sm font-medium">{country === "CH" ? "🇨🇭 Schweiz" : "🇩🇪 Deutschland"}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Einzelne Plattform-Checkboxen */}
                   <div className="grid grid-cols-2 gap-2">
                     {PLATFORMS.map((p) => (
                       <label

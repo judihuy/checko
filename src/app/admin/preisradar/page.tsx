@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { getAllScrapers } from "@/lib/scraper";
 import Link from "next/link";
+import { getPlatformDisplayName } from "@/lib/platform-names";
 
 async function getPreisradarStats() {
   try {
@@ -69,13 +70,7 @@ async function getPreisradarStats() {
   }
 }
 
-const PLATFORM_NAMES: Record<string, string> = {
-  tutti: "Tutti.ch",
-  ricardo: "Ricardo.ch",
-  "ebay-ka": "eBay Kleinanzeigen",
-  autoscout: "AutoScout24.ch",
-  comparis: "Comparis Auto",
-};
+
 
 function getScoreColor(score: string | null): string {
   if (!score) return "text-gray-400";
@@ -165,7 +160,7 @@ export default async function AdminPreisradarPage() {
                   &ldquo;{run.query}&rdquo;
                 </span>
                 <span className="text-gray-400">
-                  ({run.platforms.split(",").map((p) => PLATFORM_NAMES[p] || p).join(", ")})
+                  ({run.platforms.split(",").map((p) => getPlatformDisplayName(p)).join(", ")})
                 </span>
                 <span className="text-gray-500 ml-auto text-xs">
                   von {run.user.name || "User"}

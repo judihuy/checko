@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import Link from "next/link";
+import { getPlatformDisplayName } from "@/lib/platform-names";
 
 // Bookmark-Icon Komponente
 function BookmarkIcon({ filled, className }: { filled: boolean; className?: string }) {
@@ -24,6 +25,19 @@ function BookmarkIcon({ filled, className }: { filled: boolean; className?: stri
         d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
       />
     </svg>
+  );
+}
+
+// Kamera-Platzhalter Icon
+function CameraPlaceholder({ platform }: { platform: string }) {
+  return (
+    <div className="w-20 h-20 flex-shrink-0 bg-gray-100 rounded-lg flex flex-col items-center justify-center">
+      <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+      </svg>
+      <span className="text-[9px] text-gray-400 mt-0.5 text-center leading-tight px-1">{getPlatformDisplayName(platform)}</span>
+    </div>
   );
 }
 
@@ -62,14 +76,6 @@ interface Pagination {
   total: number;
   totalPages: number;
 }
-
-const PLATFORM_NAMES: Record<string, string> = {
-  tutti: "Tutti.ch",
-  ricardo: "Ricardo.ch",
-  "ebay-ka": "eBay Kleinanzeigen",
-  autoscout: "AutoScout24.ch",
-  comparis: "Comparis Auto",
-};
 
 function getScoreColor(score: number | null): string {
   if (score === null) return "bg-gray-100 text-gray-500";
@@ -363,12 +369,16 @@ export default function PreisradarAlertsPage() {
 
           {/* Loading */}
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-3">
               {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 animate-pulse">
-                  <div className="h-32 bg-gray-100 rounded-lg mb-3" />
-                  <div className="h-4 bg-gray-100 rounded w-3/4 mb-2" />
-                  <div className="h-4 bg-gray-100 rounded w-1/2" />
+                <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 animate-pulse">
+                  <div className="flex gap-4">
+                    <div className="w-20 h-20 bg-gray-100 rounded-lg flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-100 rounded w-3/4 mb-2" />
+                      <div className="h-4 bg-gray-100 rounded w-1/2" />
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -390,8 +400,8 @@ export default function PreisradarAlertsPage() {
             </div>
           ) : (
             <>
-              {/* Alert-Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Alert-Cards — Marketplace-Feed Layout */}
+              <div className="space-y-3">
                 {alerts.map((alert) => (
                   <div
                     key={alert.id}
@@ -399,88 +409,106 @@ export default function PreisradarAlertsPage() {
                       !alert.isSeen ? "ring-2 ring-emerald-200" : ""
                     } overflow-hidden hover:shadow-lg transition`}
                   >
-                    {/* Bild */}
-                    {alert.imageUrl && (
-                      <div className="h-40 bg-gray-100 relative overflow-hidden">
-                        <img
-                          src={alert.imageUrl}
-                          alt={alert.title}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                        {/* Score Badge oben rechts */}
-                        <div className={`absolute top-2 right-2 px-2 py-1 rounded-lg text-xs font-bold ${getScoreColor(alert.priceScore)}`}>
-                          {getScoreLabel(alert.priceScore)}
-                        </div>
-                      </div>
-                    )}
-
                     <div className="p-4">
-                      {/* Plattform + Ungelesen-Badge */}
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-500">
-                          {PLATFORM_NAMES[alert.platform] || alert.platform}
-                        </span>
-                        {!alert.isSeen && (
-                          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      {/* Hauptbereich: Bild links, Content rechts */}
+                      <div className="flex gap-4">
+                        {/* Thumbnail */}
+                        {alert.imageUrl ? (
+                          <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative">
+                            <img
+                              src={alert.imageUrl}
+                              alt={alert.title}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                // Platzhalter anzeigen
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  parent.classList.add("flex", "flex-col", "items-center", "justify-center");
+                                  const icon = document.createElement("span");
+                                  icon.className = "text-gray-300 text-2xl";
+                                  icon.textContent = "📷";
+                                  parent.appendChild(icon);
+                                }
+                              }}
+                            />
+                            {/* Score Badge oben rechts auf dem Bild */}
+                            {alert.priceScore !== null && (
+                              <div className={`absolute top-0.5 right-0.5 px-1 py-0.5 rounded text-[10px] font-bold ${getScoreColor(alert.priceScore)}`}>
+                                {getScoreLabel(alert.priceScore)}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <CameraPlaceholder platform={alert.platform} />
                         )}
-                      </div>
 
-                      {/* Titel */}
-                      <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 text-sm">
-                        {alert.title}
-                      </h3>
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          {/* Plattform + Ungelesen-Badge */}
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-gray-500">
+                              {getPlatformDisplayName(alert.platform)}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {alert.priceScore !== null && !alert.imageUrl && (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${getScoreColor(alert.priceScore)}`}>
+                                  {getScoreLabel(alert.priceScore)}
+                                </span>
+                              )}
+                              {!alert.isSeen && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                              )}
+                            </div>
+                          </div>
 
-                      {/* Preis + Score */}
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-lg font-bold text-gray-900">
-                          {formatPrice(alert.price)}
-                        </span>
-                        {!alert.imageUrl && alert.priceScore !== null && (
-                          <span className={`px-2 py-1 rounded-lg text-xs font-bold ${getScoreColor(alert.priceScore)}`}>
-                            {getScoreLabel(alert.priceScore)}
-                          </span>
-                        )}
+                          {/* Titel */}
+                          <h3 className="font-semibold text-gray-900 text-sm line-clamp-1">
+                            {alert.title}
+                          </h3>
+
+                          {/* Preis */}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-base font-bold text-gray-900">
+                              {formatPrice(alert.price)}
+                            </span>
+                            {alert.isScam && (
+                              <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-medium">🚨 Betrug</span>
+                            )}
+                          </div>
+
+                          {/* Suche + Datum */}
+                          <div className="text-xs text-gray-400 mt-1">
+                            &ldquo;{alert.searchQuery}&rdquo; · {formatDate(alert.createdAt)}
+                          </div>
+                        </div>
                       </div>
 
                       {/* KI-Bewertung */}
                       {alert.bewertung && (
-                        <div className={`text-xs px-2 py-1.5 rounded-lg mb-2 ${getScoreColor(alert.priceScore)}`}>
+                        <div className={`text-xs px-2 py-1.5 rounded-lg mt-3 ${getScoreColor(alert.priceScore)}`}>
                           <span className="font-medium">KI-Bewertung:</span> {alert.bewertung}
                         </div>
                       )}
 
                       {/* KI-Details */}
                       {alert.details && (
-                        <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1.5 rounded-lg mb-2">
+                        <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1.5 rounded-lg mt-2">
                           💡 {alert.details}
                         </div>
                       )}
 
                       {/* Warnung */}
                       {alert.warnung && (
-                        <div className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1.5 rounded-lg mb-2">
+                        <div className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1.5 rounded-lg mt-2">
                           ⚠️ {alert.warnung}
                         </div>
                       )}
 
-                      {/* Scam-Warnung */}
-                      {alert.isScam && (
-                        <div className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-lg mb-2">
-                          🚨 Verdacht auf Betrug!
-                        </div>
-                      )}
-
-                      {/* Suche + Datum */}
-                      <div className="text-xs text-gray-400 mb-3">
-                        Suche: &ldquo;{alert.searchQuery}&rdquo; · {formatDate(alert.createdAt)}
-                      </div>
-
                       {/* Detail-Analyse Bereich */}
                       {expandedIds.has(alert.id) && alert.detailAnalysis && (
-                        <div className="mb-3 p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 text-xs space-y-2">
+                        <div className="mt-3 p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 text-xs space-y-2">
                           <div className="flex items-center justify-between mb-1">
                             <span className="font-bold text-blue-800 text-sm">🔍 Detail-Analyse</span>
                             <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getEmpfehlungColor(alert.detailAnalysis.empfehlung)}`}>
@@ -541,13 +569,13 @@ export default function PreisradarAlertsPage() {
 
                       {/* Analyse-Fehler */}
                       {analyzeErrors[alert.id] && (
-                        <div className="text-xs bg-red-50 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg mb-3">
+                        <div className="text-xs bg-red-50 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg mt-3">
                           ❌ {analyzeErrors[alert.id]}
                         </div>
                       )}
 
                       {/* Aktionen */}
-                      <div className="flex gap-2 pt-3 border-t border-gray-100">
+                      <div className="flex gap-2 pt-3 mt-3 border-t border-gray-100">
                         {/* Bookmark-Button */}
                         <button
                           onClick={() => handleToggleSave(alert.id)}

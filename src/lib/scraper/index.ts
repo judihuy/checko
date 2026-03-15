@@ -32,6 +32,13 @@ export function getAllScrapers(): BaseScraper[] {
 }
 
 /**
+ * Nur funktionsfähige Scraper zurückgeben (isWorking=true)
+ */
+export function getWorkingScrapers(): BaseScraper[] {
+  return Array.from(scraperRegistry.values()).filter((s) => s.isWorking);
+}
+
+/**
  * Einen Scraper anhand der Plattform-ID finden
  */
 export function getScraperByPlatform(platform: string): BaseScraper | undefined {
@@ -42,16 +49,18 @@ export function getScraperByPlatform(platform: string): BaseScraper | undefined 
  * Verfügbare Plattformen als Array zurückgeben
  * (für UI-Checkboxen etc.)
  */
-export function getAvailablePlatforms(): { id: string; name: string }[] {
+export function getAvailablePlatforms(): { id: string; name: string; isWorking: boolean }[] {
   return getAllScrapers().map((s) => ({
     id: s.platform,
     name: s.displayName,
+    isWorking: s.isWorking,
   }));
 }
 
 /**
  * Scraper anhand einer Komma-getrennten Plattform-Liste zurückgeben
- * z.B. "tutti,ricardo,ebay-ka" → [TuttiScraper, RicardoScraper, EbayKAScraper]
+ * z.B. "tutti,ricardo,ebay-ka" → [RicardoScraper, EbayKAScraper]
+ * Überspringt Scraper mit isWorking=false automatisch!
  */
 export function getScrapersByPlatformList(platformString: string): BaseScraper[] {
   const platforms = platformString.split(",").map((p) => p.trim()).filter(Boolean);
@@ -60,6 +69,10 @@ export function getScrapersByPlatformList(platformString: string): BaseScraper[]
   for (const platform of platforms) {
     const scraper = getScraperByPlatform(platform);
     if (scraper) {
+      if (!scraper.isWorking) {
+        console.warn(`[ScraperRegistry] ⚠️ ${scraper.displayName} übersprungen (isWorking=false)`);
+        continue;
+      }
       scrapers.push(scraper);
     }
   }

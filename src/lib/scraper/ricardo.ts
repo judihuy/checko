@@ -1,5 +1,7 @@
 // Ricardo.ch Scraper
-// Nutzt Puppeteer (headless Browser) mit Proxy für Anti-Bot-Bypass
+// Nutzt Puppeteer (headless Browser) OHNE Proxy (Proxy wird blockiert)
+// Primäre Parse-Methode: JSON-LD (schema.org ItemList)
+// Fallback: HTML-Pattern-Matching
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
@@ -7,6 +9,7 @@ export class RicardoScraper extends BaseScraper {
   readonly platform = "ricardo";
   readonly displayName = "Ricardo.ch";
   readonly baseUrl = "https://www.ricardo.ch";
+  isWorking = true;
 
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
     const results: ScraperResult[] = [];
@@ -17,54 +20,59 @@ export class RicardoScraper extends BaseScraper {
 
       console.log(`[Ricardo] Search URL: ${searchUrl}`);
 
-      // Puppeteer-First, Fallback auf fetchWithHeaders
+      // Browser OHNE Proxy — Ricardo blockiert den Webshare-Proxy nicht,
+      // aber die Seite funktioniert auch ohne Proxy gut
       let html: string;
       try {
-        html = await this.fetchWithBrowser(searchUrl);
+        html = await this.fetchWithBrowserNoProxy(searchUrl);
       } catch (browserError) {
-        console.warn(`[Ricardo] Puppeteer failed, falling back to HTTP fetch:`, browserError);
-        const response = await this.fetchWithHeaders(searchUrl);
-        if (!response.ok) {
-          console.error(`Ricardo.ch: HTTP ${response.status} für "${query}"`);
-          return results;
+        console.warn(`[Ricardo] Browser failed, trying with proxy:`, browserError);
+        try {
+          html = await this.fetchWithBrowser(searchUrl);
+        } catch (proxyError) {
+          console.warn(`[Ricardo] Proxy browser also failed, falling back to HTTP:`, proxyError);
+          const response = await this.fetchWithHeaders(searchUrl);
+          if (!response.ok) {
+            console.error(`Ricardo.ch: HTTP ${response.status} für "${query}"`);
+            return results;
+          }
+          html = await response.text();
         }
-        html = await response.text();
       }
 
       console.log(`[Ricardo] HTML length: ${html.length}`);
 
       // Prüfe ob blockiert
       if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
-        console.warn("[Ricardo] ⚠️ Cloudflare-Challenge erkannt — Scraping blockiert. Proxy wechseln oder Browser-Fingerprint anpassen.");
+        console.warn("[Ricardo] ⚠️ Cloudflare-Challenge erkannt — Scraping blockiert.");
         return results;
       }
 
-      // Prüfe auf leere/minimale Seite
       if (html.length < 1000) {
-        console.warn(`[Ricardo] ⚠️ Sehr kurze Antwort (${html.length} Bytes) — wahrscheinlich Bot-Schutz oder Redirect`);
+        console.warn(`[Ricardo] ⚠️ Sehr kurze Antwort (${html.length} Bytes) — wahrscheinlich Bot-Schutz`);
         return results;
       }
 
-      // Methode 1: __NEXT_DATA__ JSON parsen
-      const nextDataResults = this.parseNextData(html, encodedQuery, options);
-      if (nextDataResults.length > 0) {
-        console.log(`[Ricardo] __NEXT_DATA__ parsed: ${nextDataResults.length} results`);
-        return nextDataResults;
+      // Methode 1 (PRIMÄR): JSON-LD schema.org ItemList
+      const jsonLdResults = this.parseJsonLd(html, options);
+      if (jsonLdResults.length > 0) {
+        console.log(`[Ricardo] ✅ JSON-LD parsed: ${jsonLdResults.length} results`);
+        return jsonLdResults;
       }
 
-      // Methode 2: HTML-Pattern-Matching
-      const htmlResults = this.parseHtmlListings(html, searchUrl, options);
+      // Methode 2: HTML-Links zu /de/a/ mit CHF-Preisen im Kontext
+      const htmlResults = this.parseHtmlListings(html, options);
       if (htmlResults.length > 0) {
         console.log(`[Ricardo] HTML parsing: ${htmlResults.length} results`);
         return htmlResults;
       }
 
-      // Methode 3: Fallback-Regex
-      const fallbackResults = this.parseFallback(html, searchUrl, options);
+      // Methode 3: Fallback — Alle /de/a/ Links sammeln (auch ohne Preis)
+      const fallbackResults = this.parseFallbackLinks(html, options);
       console.log(`[Ricardo] Fallback: ${fallbackResults.length} results`);
 
       if (fallbackResults.length === 0) {
-        console.warn(`[Ricardo] ⚠️ Keine Ergebnisse aus allen 3 Parse-Methoden. HTML-Snippet (erste 500 Zeichen): ${html.substring(0, 500)}`);
+        console.warn(`[Ricardo] ⚠️ Keine Ergebnisse aus allen Parse-Methoden.`);
       }
 
       return fallbackResults;
@@ -73,182 +81,141 @@ export class RicardoScraper extends BaseScraper {
         ? `${error.name}: ${error.message}`
         : String(error);
       console.error(`[Ricardo] ❌ Scraper-Fehler: ${reason}`);
-      if (error instanceof Error && error.message.includes("timeout")) {
-        console.error("[Ricardo] → Timeout: Seite hat zu lange geladen. Puppeteer-Timeout erhöhen oder Proxy prüfen.");
-      }
-      if (error instanceof Error && error.message.includes("net::ERR_")) {
-        console.error("[Ricardo] → Netzwerk-Fehler: Proxy möglicherweise down oder blockiert.");
-      }
     }
 
     return results;
   }
 
   /**
-   * Parse __NEXT_DATA__ JSON
+   * Parse JSON-LD schema.org ItemList aus dem HTML
+   * Ricardo liefert ein <script type="application/ld+json" id="srps-json-ld"> mit:
+   * { "@context": "https://schema.org", "@graph": [
+   *   { "@type": "ItemList", "itemListElement": [
+   *     { "@type": "ListItem", "position": 1, "item": {
+   *       "@type": "Product", "name": "...", "image": "...",
+   *       "url": "...", "offers": { "price": 500, "priceCurrency": "CHF" }
+   *     }}
+   *   ]}
+   * ]}
    */
-  private parseNextData(
-    html: string,
-    encodedQuery: string,
-    options?: ScraperOptions
-  ): ScraperResult[] {
+  private parseJsonLd(html: string, options?: ScraperOptions): ScraperResult[] {
     const results: ScraperResult[] = [];
 
-    const nextDataMatch = html.match(
-      /<script id="__NEXT_DATA__" type="application\/json">([^]*?)<\/script>/
+    // Alle JSON-LD Blöcke finden
+    const jsonLdMatches = html.matchAll(
+      /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi
     );
-    if (!nextDataMatch) return results;
 
-    try {
-      const nextData = JSON.parse(nextDataMatch[1]);
-      const pageProps = nextData?.props?.pageProps || {};
+    for (const match of jsonLdMatches) {
+      try {
+        const jsonData = JSON.parse(match[1]);
 
-      // Verschiedene mögliche Pfade
-      const possiblePaths = [
-        pageProps?.searchResult?.articles,
-        pageProps?.articles,
-        pageProps?.searchResult?.items,
-        pageProps?.listings,
-        pageProps?.results,
-        pageProps?.data?.articles,
-      ];
+        // Ricardo nutzt @graph Array
+        const graphs = jsonData?.["@graph"] || [jsonData];
 
-      let articles: unknown[] = [];
-      for (const path of possiblePaths) {
-        if (Array.isArray(path) && path.length > 0) {
-          articles = path;
-          break;
+        for (const graph of graphs) {
+          // Suche nach ItemList
+          if (graph?.["@type"] !== "ItemList" || !Array.isArray(graph?.itemListElement)) {
+            continue;
+          }
+
+          for (const entry of graph.itemListElement) {
+            const item = entry?.item || entry;
+            if (!item) continue;
+
+            const title = (item.name as string) || "";
+            if (!title) continue;
+
+            // Preis aus offers extrahieren
+            let priceRaw = 0;
+            if (item.offers) {
+              const offers = item.offers;
+              priceRaw = typeof offers.price === "number"
+                ? offers.price
+                : parseFloat(String(offers.price || "0"));
+            } else if (typeof item.price === "number") {
+              priceRaw = item.price;
+            }
+
+            const price = Math.round(priceRaw * 100); // CHF → Rappen
+            if (isNaN(price) || price <= 0) continue;
+
+            // Preisfilter
+            if (options?.minPrice && price < options.minPrice) continue;
+            if (options?.maxPrice && price > options.maxPrice) continue;
+
+            // URL
+            const url = (item.url as string) || "";
+            const fullUrl = url.startsWith("http")
+              ? url
+              : url
+                ? `${this.baseUrl}${url}`
+                : `${this.baseUrl}/de/s/`;
+
+            // Bild
+            const imageUrl = typeof item.image === "string"
+              ? item.image
+              : typeof item.image === "object" && item.image !== null
+                ? ((item.image as Record<string, unknown>).url as string) || null
+                : null;
+
+            results.push({
+              title,
+              price,
+              url: fullUrl,
+              imageUrl,
+              platform: this.platform,
+              scrapedAt: new Date(),
+            });
+
+            if (options?.limit && results.length >= options.limit) break;
+          }
+
+          if (results.length > 0) break;
         }
+
+        if (results.length > 0) break;
+      } catch {
+        // JSON parse error — try next block
       }
-
-      // Rekursiv suchen
-      if (articles.length === 0) {
-        articles = this.findListingsInObject(pageProps);
-      }
-
-      for (const article of articles) {
-        const item = article as Record<string, unknown>;
-        const title =
-          (item.title as string) ||
-          (item.name as string) ||
-          "";
-        if (!title) continue;
-
-        const priceRaw =
-          item.buyNowPrice ||
-          item.currentBidPrice ||
-          item.startPrice ||
-          item.price ||
-          0;
-        const price = Math.round(parseFloat(String(priceRaw)) * 100);
-        if (isNaN(price) || price <= 0) continue;
-
-        if (options?.minPrice && price < options.minPrice) continue;
-        if (options?.maxPrice && price > options.maxPrice) continue;
-
-        const articleId = item.id || item.articleId;
-        const url = articleId
-          ? `${this.baseUrl}/de/a/${articleId}`
-          : `${this.baseUrl}/de/s/${encodedQuery}`;
-
-        const imageUrl =
-          (item.imageUrl as string) ||
-          (item.thumbnailUrl as string) ||
-          (Array.isArray(item.images) && item.images.length > 0
-            ? ((item.images[0] as Record<string, unknown>).url as string)
-            : null) ||
-          null;
-
-        results.push({
-          title,
-          price,
-          url,
-          imageUrl,
-          platform: this.platform,
-          scrapedAt: new Date(),
-        });
-
-        if (options?.limit && results.length >= options.limit) break;
-      }
-    } catch (parseError) {
-      console.error("Ricardo.ch: __NEXT_DATA__ parse error:", parseError);
     }
 
     return results;
   }
 
   /**
-   * Rekursiv nach listing-artigen Arrays suchen
+   * HTML-Pattern-Matching: Links zu /de/a/ mit CHF-Preisen in der Nähe
    */
-  private findListingsInObject(obj: unknown, depth = 0): unknown[] {
-    if (depth > 5 || !obj || typeof obj !== "object") return [];
-
-    if (Array.isArray(obj)) {
-      if (
-        obj.length > 0 &&
-        typeof obj[0] === "object" &&
-        obj[0] !== null
-      ) {
-        const first = obj[0] as Record<string, unknown>;
-        if (first.title || first.name) {
-          return obj;
-        }
-      }
-      return [];
-    }
-
-    for (const value of Object.values(obj as Record<string, unknown>)) {
-      const found = this.findListingsInObject(value, depth + 1);
-      if (found.length > 0) return found;
-    }
-
-    return [];
-  }
-
-  /**
-   * HTML-Pattern-Matching für Listing-Elemente
-   */
-  private parseHtmlListings(
-    html: string,
-    searchUrl: string,
-    options?: ScraperOptions
-  ): ScraperResult[] {
+  private parseHtmlListings(html: string, options?: ScraperOptions): ScraperResult[] {
     const results: ScraperResult[] = [];
-
-    // Suche nach Links zu Artikelseiten /de/a/
-    const linkRegex =
-      /<a[^>]*href="(\/de\/a\/\d+[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
-    let linkMatch;
     const seenUrls = new Set<string>();
+
+    // Finde alle Links zu Artikelseiten /de/a/
+    const linkRegex = /href="(\/de\/a\/[^"]+)"/g;
+    let linkMatch;
 
     while ((linkMatch = linkRegex.exec(html)) !== null) {
       const href = linkMatch[1];
-      if (seenUrls.has(href)) continue;
-      seenUrls.add(href);
+      // Normalisiere URL (entferne trailing slash variations)
+      const normalizedHref = href.replace(/\/$/, "");
+      if (seenUrls.has(normalizedHref)) continue;
+      seenUrls.add(normalizedHref);
 
-      const content = linkMatch[2];
+      // Kontext: 800 Zeichen um den Link herum
+      const start = Math.max(0, linkMatch.index - 400);
+      const end = Math.min(html.length, linkMatch.index + 400);
+      const context = html.substring(start, end);
 
-      // Preis suchen
+      // Preis suchen im Kontext
       const priceMatch =
-        content.match(/(?:CHF|Fr\.?)\s*([\d',.]+)/i) ||
-        content.match(/([\d',.]+)\s*(?:CHF|Fr\.?)/i);
-
-      // Titel: Textinhalt bereinigen
-      const textContent = content
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      if (!textContent || textContent.length < 3) continue;
-
-      const title = priceMatch
-        ? textContent.split(/(?:CHF|Fr\.?)/i)[0]?.trim() || textContent.substring(0, 100)
-        : textContent.substring(0, 100);
+        context.match(/(?:CHF|Fr\.?)\s*([\d',.]+)/i) ||
+        context.match(/([\d',.]+)\s*(?:CHF|Fr\.?)/i);
 
       let price = 0;
       if (priceMatch) {
         const priceStr = priceMatch[1].replace(/[',]/g, "");
         price = Math.round(parseFloat(priceStr) * 100);
+        if (isNaN(price)) price = 0;
       }
 
       if (price > 0) {
@@ -256,12 +223,17 @@ export class RicardoScraper extends BaseScraper {
         if (options?.maxPrice && price > options.maxPrice) continue;
       }
 
-      const imgMatch = content.match(
-        /src="(https?:\/\/[^"]+(?:\.jpg|\.jpeg|\.png|\.webp)[^"]*)"/i
-      );
+      // Titel aus dem href extrahieren (URL-Slug)
+      const slugMatch = href.match(/\/de\/a\/([^/]+?)(?:-\d+)?\/?$/);
+      const title = slugMatch
+        ? slugMatch[1].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+        : "Artikel";
+
+      // Bild in der Nähe
+      const imgMatch = context.match(/src="(https:\/\/img\.ricardostatic\.ch[^"]+)"/i);
 
       results.push({
-        title: title || "Artikel",
+        title,
         price,
         url: `${this.baseUrl}${href}`,
         imageUrl: imgMatch ? imgMatch[1] : null,
@@ -276,47 +248,30 @@ export class RicardoScraper extends BaseScraper {
   }
 
   /**
-   * Fallback-Regex-Parsing
+   * Fallback: Sammle alle /de/a/ Links mit Titel aus dem URL-Slug
    */
-  private parseFallback(
-    html: string,
-    searchUrl: string,
-    options?: ScraperOptions
-  ): ScraperResult[] {
+  private parseFallbackLinks(html: string, options?: ScraperOptions): ScraperResult[] {
     const results: ScraperResult[] = [];
+    const seenUrls = new Set<string>();
 
-    const titleRegex =
-      /class="[^"]*(?:listing|article|item)[^"]*title[^"]*"[^>]*>([^<]+)/gi;
-    const priceRegex =
-      /class="[^"]*(?:listing|article|item)[^"]*price[^"]*"[^>]*>(?:CHF\s*)?([\d',\.]+)/gi;
-    const linkRegex = /href="(\/de\/a\/\d+[^"]*)"/gi;
+    const linkRegex = /href="(\/de\/a\/([^"]+))"/g;
+    let match;
 
-    const titles: string[] = [];
-    const prices: number[] = [];
-    const urls: string[] = [];
+    while ((match = linkRegex.exec(html)) !== null) {
+      const href = match[1];
+      const slug = match[2];
+      const normalized = href.replace(/\/$/, "");
+      if (seenUrls.has(normalized)) continue;
+      seenUrls.add(normalized);
 
-    let m;
-    while ((m = titleRegex.exec(html)) !== null) {
-      titles.push(m[1].trim());
-    }
-    while ((m = priceRegex.exec(html)) !== null) {
-      const cleanPrice = m[1].replace(/[',]/g, "");
-      prices.push(Math.round(parseFloat(cleanPrice) * 100));
-    }
-    while ((m = linkRegex.exec(html)) !== null) {
-      if (!urls.includes(m[1])) urls.push(m[1]);
-    }
-
-    const count = Math.min(titles.length, prices.length, urls.length);
-    for (let i = 0; i < count; i++) {
-      const price = prices[i];
-      if (options?.minPrice && price < options.minPrice) continue;
-      if (options?.maxPrice && price > options.maxPrice) continue;
+      // Titel aus Slug
+      const titlePart = slug.replace(/-\d+\/?$/, "").replace(/-/g, " ");
+      const title = titlePart.replace(/\b\w/g, (c) => c.toUpperCase());
 
       results.push({
-        title: titles[i],
-        price,
-        url: `${this.baseUrl}${urls[i]}`,
+        title: title || "Artikel",
+        price: 0,
+        url: `${this.baseUrl}${href}`,
         imageUrl: null,
         platform: this.platform,
         scrapedAt: new Date(),

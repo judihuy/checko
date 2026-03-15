@@ -27,12 +27,12 @@ interface Search {
 }
 
 const ALL_PLATFORMS = [
-  { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode },
-  { id: "ricardo", name: "Ricardo.ch", country: "ch" as CountryCode },
-  { id: "autoscout", name: "AutoScout24.ch", country: "ch" as CountryCode },
-  { id: "comparis", name: "Comparis.ch", country: "ch" as CountryCode },
-  { id: "ebay-ka", name: "Kleinanzeigen.de", country: "de" as CountryCode },
-  { id: "willhaben", name: "Willhaben.at", country: "at" as CountryCode },
+  { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "Cloudflare-Schutz" },
+  { id: "ricardo", name: "Ricardo.ch", country: "ch" as CountryCode, disabled: false },
+  { id: "autoscout", name: "AutoScout24.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "Bot-Schutz" },
+  { id: "comparis", name: "Comparis.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "DataDome-Schutz" },
+  { id: "ebay-ka", name: "Kleinanzeigen.de", country: "de" as CountryCode, disabled: false },
+  { id: "willhaben", name: "Willhaben.at", country: "at" as CountryCode, disabled: false },
 ];
 
 // Nur aktive Plattformen (ohne willhaben)
@@ -134,7 +134,7 @@ export default function PreisradarPage() {
   const [query, setQuery] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo", "autoscout", "comparis"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["ricardo", "ebay-ka"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
   const [category, setCategory] = useState("");
@@ -174,11 +174,12 @@ export default function PreisradarPage() {
         );
       } else {
         next.add(country);
-        // Alle Plattformen dieses Landes hinzufügen
+        // Alle aktiven Plattformen dieses Landes hinzufügen (disabled überspringen)
+        const disabledIds = new Set(ALL_PLATFORMS.filter((ap) => "disabled" in ap && ap.disabled).map((ap) => ap.id));
         setSelectedPlatforms((platforms) => {
           const newPlatforms = [...platforms];
           for (const p of config.platforms) {
-            if (!newPlatforms.includes(p)) {
+            if (!newPlatforms.includes(p) && !disabledIds.has(p)) {
               newPlatforms.push(p);
             }
           }
@@ -322,7 +323,7 @@ export default function PreisradarPage() {
       setQuery("");
       setMinPrice("");
       setMaxPrice("");
-      setSelectedPlatforms(["tutti", "ricardo", "autoscout", "comparis"]);
+      setSelectedPlatforms(["ricardo", "ebay-ka"]);
       setSelectedCountries(new Set(["ch"]));
       setDuration("1d");
       setQualityTier("standard");
@@ -715,27 +716,35 @@ export default function PreisradarPage() {
                     <div className="grid grid-cols-2 gap-2">
                       {ACTIVE_PLATFORMS.map((p) => {
                         const countryConfig = COUNTRY_PLATFORMS[p.country];
+                        const isDisabled = "disabled" in p && p.disabled;
+                        const disabledReason = "disabledReason" in p ? (p as { disabledReason?: string }).disabledReason : undefined;
                         return (
                           <label
                             key={p.id}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${
-                              selectedPlatforms.includes(p.id)
-                                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                                : "border-gray-200 hover:border-gray-300 bg-white"
+                            title={isDisabled ? `${p.name}: Temporär deaktiviert (${disabledReason || "Bot-Schutz"})` : p.name}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition ${
+                              isDisabled
+                                ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-60"
+                                : selectedPlatforms.includes(p.id)
+                                  ? "border-emerald-500 bg-emerald-50 text-emerald-700 cursor-pointer"
+                                  : "border-gray-200 hover:border-gray-300 bg-white cursor-pointer"
                             }`}
                           >
                             <input
                               type="checkbox"
-                              checked={selectedPlatforms.includes(p.id)}
-                              onChange={() => togglePlatform(p.id)}
+                              checked={!isDisabled && selectedPlatforms.includes(p.id)}
+                              onChange={() => !isDisabled && togglePlatform(p.id)}
+                              disabled={isDisabled}
                               className="sr-only"
                             />
                             <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                              selectedPlatforms.includes(p.id)
-                                ? "border-emerald-500 bg-emerald-500"
-                                : "border-gray-300"
+                              isDisabled
+                                ? "border-gray-300 bg-gray-200"
+                                : selectedPlatforms.includes(p.id)
+                                  ? "border-emerald-500 bg-emerald-500"
+                                  : "border-gray-300"
                             }`}>
-                              {selectedPlatforms.includes(p.id) && (
+                              {!isDisabled && selectedPlatforms.includes(p.id) && (
                                 <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                 </svg>
@@ -743,7 +752,8 @@ export default function PreisradarPage() {
                             </span>
                             <div className="flex items-center gap-1 min-w-0">
                               <span className="text-xs">{countryConfig.flag}</span>
-                              <span className="text-sm truncate">{p.name}</span>
+                              <span className={`text-sm truncate ${isDisabled ? "line-through" : ""}`}>{p.name}</span>
+                              {isDisabled && <span className="text-[10px] text-gray-400 ml-auto">⚠️</span>}
                             </div>
                           </label>
                         );
@@ -950,35 +960,47 @@ export default function PreisradarPage() {
                     Plattformen *
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {ACTIVE_PLATFORMS.map((p) => (
-                      <label
-                        key={p.id}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${
-                          editPlatforms.includes(p.id)
-                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editPlatforms.includes(p.id)}
-                          onChange={() => toggleEditPlatform(p.id)}
-                          className="sr-only"
-                        />
-                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                          editPlatforms.includes(p.id)
-                            ? "border-emerald-500 bg-emerald-500"
-                            : "border-gray-300"
-                        }`}>
-                          {editPlatforms.includes(p.id) && (
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </span>
-                        <span className="text-sm">{p.name}</span>
-                      </label>
-                    ))}
+                    {ACTIVE_PLATFORMS.map((p) => {
+                      const isDisabled = "disabled" in p && p.disabled;
+                      const disabledReason = "disabledReason" in p ? (p as { disabledReason?: string }).disabledReason : undefined;
+                      return (
+                        <label
+                          key={p.id}
+                          title={isDisabled ? `Temporär deaktiviert (${disabledReason || "Bot-Schutz"})` : p.name}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition ${
+                            isDisabled
+                              ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-60"
+                              : editPlatforms.includes(p.id)
+                                ? "border-emerald-500 bg-emerald-50 text-emerald-700 cursor-pointer"
+                                : "border-gray-200 hover:border-gray-300 cursor-pointer"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!isDisabled && editPlatforms.includes(p.id)}
+                            onChange={() => !isDisabled && toggleEditPlatform(p.id)}
+                            disabled={isDisabled}
+                            className="sr-only"
+                          />
+                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                            isDisabled
+                              ? "border-gray-300 bg-gray-200"
+                              : editPlatforms.includes(p.id)
+                                ? "border-emerald-500 bg-emerald-500"
+                                : "border-gray-300"
+                          }`}>
+                            {!isDisabled && editPlatforms.includes(p.id) && (
+                              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </span>
+                          <span className={`text-sm ${isDisabled ? "line-through" : ""}`}>
+                            {p.name} {isDisabled && "⚠️"}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 

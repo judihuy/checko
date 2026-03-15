@@ -86,7 +86,6 @@ function getRandomProxyCredentials(): { username: string; password: string } {
 
 // ===== Browser Semaphore: Max 1 Browser gleichzeitig =====
 let browserLock: Promise<void> = Promise.resolve();
-let browserLockRelease: (() => void) | null = null;
 
 function acquireBrowserLock(): Promise<() => void> {
   return new Promise<() => void>((resolve) => {
@@ -109,6 +108,13 @@ export abstract class BaseScraper {
   abstract readonly platform: string;
   abstract readonly displayName: string;
   abstract readonly baseUrl: string;
+
+  /**
+   * Flag: Ist dieser Scraper aktuell funktionsfähig?
+   * Wird auf false gesetzt wenn die Plattform blockiert (Cloudflare, DataDome etc.)
+   * Der Scheduler überspringt Scraper mit isWorking=false
+   */
+  isWorking: boolean = true;
 
   // Rate-Limiting: Letzte Request-Zeit pro Plattform (für fetchWithHeaders)
   private static lastRequestTime: Map<string, number> = new Map();
@@ -144,6 +150,7 @@ export abstract class BaseScraper {
   /**
    * Fetcht HTML mit echtem Headless-Browser (Puppeteer) + Proxy.
    * Max 1 Browser gleichzeitig (Semaphore). 5s Pause zwischen Requests.
+   * Automatisches Cookie-Banner-Handling + 3s Warte-Zeit nach Page-Load.
    * Bei Fehler wird Error geworfen — Aufrufer sollte Fallback nutzen.
    */
   protected async fetchWithBrowser(url: string): Promise<string> {
@@ -203,12 +210,38 @@ export abstract class BaseScraper {
 
         // Seite laden
         const response = await page.goto(url, {
-          waitUntil: "networkidle0",
+          waitUntil: "networkidle2",
           timeout: 30000,
         });
 
         if (response && !response.ok()) {
           console.warn(`[Scraper/${this.platform}] Browser fetch HTTP ${response.status()} ${response.statusText()}`);
+        }
+
+        // 3 Sekunden warten für JS-Rendering
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        // Cookie-Banner automatisch akzeptieren
+        try {
+          const buttons = await page.$$("button");
+          for (const btn of buttons) {
+            const text = await page.evaluate((el) => el.textContent || "", btn);
+            if (
+              text.includes("Akzeptieren") ||
+              text.includes("akzeptieren") ||
+              text.includes("Accept") ||
+              text.includes("Alle akzeptieren") ||
+              text.includes("Zustimmen") ||
+              text.includes("Einverstanden")
+            ) {
+              await btn.click();
+              console.log(`[Scraper/${this.platform}] Cookie-Banner geklickt: "${text.trim().substring(0, 40)}"`);
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+              break;
+            }
+          }
+        } catch (cookieError) {
+          // Cookie-Banner nicht gefunden oder Klick-Fehler — kein Problem
         }
 
         const html = await page.content();
@@ -224,6 +257,96 @@ export abstract class BaseScraper {
       }
     } finally {
       // Lock IMMER freigeben
+      release();
+    }
+  }
+
+  /**
+   * Fetcht HTML mit echtem Headless-Browser OHNE Proxy.
+   * Für Plattformen die den Proxy ablehnen aber ohne Proxy funktionieren.
+   */
+  protected async fetchWithBrowserNoProxy(url: string): Promise<string> {
+    const release = await acquireBrowserLock();
+
+    try {
+      const now = Date.now();
+      const elapsed = now - lastBrowserRequestTime;
+      if (elapsed < BROWSER_MIN_DELAY_MS) {
+        const waitMs = BROWSER_MIN_DELAY_MS - elapsed;
+        console.log(`[Scraper/${this.platform}] Browser rate-limit: waiting ${waitMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+
+      const userAgent = this.getRandomUserAgent();
+      const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+
+      console.log(`[Scraper/${this.platform}] Launching browser WITHOUT proxy`);
+
+      const browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--no-zygote",
+          "--single-process",
+        ],
+      });
+
+      try {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1920, height: 1080 });
+        await page.setUserAgent(userAgent);
+        await page.setExtraHTTPHeaders({
+          "Accept-Language": "de-CH,de;q=0.9,en;q=0.8",
+        });
+
+        const response = await page.goto(url, {
+          waitUntil: "networkidle2",
+          timeout: 30000,
+        });
+
+        if (response && !response.ok()) {
+          console.warn(`[Scraper/${this.platform}] Browser fetch HTTP ${response.status()} ${response.statusText()}`);
+        }
+
+        // 3 Sekunden warten für JS-Rendering
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        // Cookie-Banner automatisch akzeptieren
+        try {
+          const buttons = await page.$$("button");
+          for (const btn of buttons) {
+            const text = await page.evaluate((el) => el.textContent || "", btn);
+            if (
+              text.includes("Akzeptieren") ||
+              text.includes("akzeptieren") ||
+              text.includes("Accept") ||
+              text.includes("Alle akzeptieren") ||
+              text.includes("Zustimmen") ||
+              text.includes("Einverstanden")
+            ) {
+              await btn.click();
+              console.log(`[Scraper/${this.platform}] Cookie-Banner geklickt: "${text.trim().substring(0, 40)}"`);
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+              break;
+            }
+          }
+        } catch {
+          // Cookie-Banner Fehler — ignorieren
+        }
+
+        const html = await page.content();
+        lastBrowserRequestTime = Date.now();
+
+        console.log(`[Scraper/${this.platform}] Browser (no proxy) fetch OK, HTML length: ${html.length}`);
+        return html;
+      } finally {
+        await browser.close();
+      }
+    } finally {
       release();
     }
   }

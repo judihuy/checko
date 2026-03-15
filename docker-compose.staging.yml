@@ -1,0 +1,69 @@
+# Checko Staging — Docker Compose
+# Separate Staging-Umgebung mit eigener DB, eigenem Port, eigenem Netzwerk
+# NICHT die bestehende docker-compose.yml ersetzen!
+# Start: docker compose -f docker-compose.staging.yml up -d --build
+
+services:
+  checko-staging-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: checko-staging-app
+    restart: unless-stopped
+    ports:
+      - "3101:3000"
+    environment:
+      - DATABASE_URL=mysql://checko_user:${MYSQL_PASSWORD}@checko-staging-mysql:3306/checko
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=https://staging.checko.ch
+      - NEXT_PUBLIC_APP_URL=https://staging.checko.ch
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM=${SMTP_FROM}
+      - SCRAPER_PROXY=${SCRAPER_PROXY}
+      - CRON_SECRET=${CRON_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+      - NODE_ENV=production
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    depends_on:
+      checko-staging-mysql:
+        condition: service_healthy
+    networks:
+      - checko-staging-network
+
+  checko-staging-mysql:
+    image: mysql:8.0
+    container_name: checko-staging-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=checko
+      - MYSQL_USER=checko_user
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    ports:
+      - "3308:3306"
+    volumes:
+      - checko-staging-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - checko-staging-network
+
+volumes:
+  checko-staging-mysql-data:
+
+networks:
+  checko-staging-network:
+    driver: bridge

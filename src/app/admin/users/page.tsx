@@ -14,6 +14,8 @@ interface User {
   isSuspended: boolean;
   suspendReason: string | null;
   isEmailVerified: boolean;
+  bonusSpins: number;
+  bonusSpinsNoSpendRequired: boolean;
   createdAt: string;
 }
 
@@ -440,6 +442,9 @@ export default function AdminUsersPage() {
                 >
                   Checkos {sortIcon("checkosBalance")}
                 </th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">
+                  🎰 Bonus
+                </th>
                 <th
                   className="text-left px-4 py-3 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none"
                   onClick={() => handleSort("createdAt")}
@@ -497,6 +502,20 @@ export default function AdminUsersPage() {
                     <span className="inline-flex items-center gap-1 text-gray-900 font-medium">
                       🦎 {user.checkosBalance}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {user.bonusSpins > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-yellow-700 font-medium">
+                        🎰 {user.bonusSpins}
+                        {user.bonusSpinsNoSpendRequired && (
+                          <span className="text-xs text-yellow-500" title="Ohne Checko-Verbrauch nötig">
+                            (gratis)
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 text-sm">–</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {new Date(user.createdAt).toLocaleDateString("de-CH")}
@@ -579,14 +598,14 @@ export default function AdminUsersPage() {
               ))}
               {!loading && users.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                     Keine Benutzer gefunden.
                   </td>
                 </tr>
               )}
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center">
+                  <td colSpan={8} className="px-4 py-8 text-center">
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
                     </div>

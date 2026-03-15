@@ -226,6 +226,8 @@ const defaultSettings = [
   { key: "wheel_registration_max", value: "50" },
   { key: "wheel_daily_min", value: "1" },
   { key: "wheel_daily_max", value: "10" },
+  { key: "wheel_registration_enabled", value: "true" },
+  { key: "wheel_daily_enabled", value: "true" },
 ];
 
 async function main() {

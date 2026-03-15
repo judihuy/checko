@@ -74,6 +74,8 @@ export async function GET(request: Request) {
         isSuspended: true,
         suspendReason: true,
         isEmailVerified: true,
+        bonusSpins: true,
+        bonusSpinsNoSpendRequired: true,
         createdAt: true,
       },
       orderBy: { [sortField]: sortOrder },

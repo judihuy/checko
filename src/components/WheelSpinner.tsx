@@ -373,15 +373,15 @@ export function WheelSpinner({
           </svg>
         </div>
 
-        {/* Glow-Effekt wenn gelandet */}
+        {/* Glow-Effekt wenn gelandet — kein Scale/Resize! Nur subtiler Glow */}
         {(phase === "landed" || showWinDisplay) && (
-          <div className="absolute inset-0 rounded-full animate-pulse-glow pointer-events-none" />
+          <div className="absolute inset-0 rounded-full pointer-events-none" style={{ boxShadow: "0 0 25px rgba(245, 158, 11, 0.5)" }} />
         )}
       </div>
 
-      {/* Gewinn-Anzeige (gross, nach dem Landen) */}
+      {/* Gewinn-Anzeige (gross, nach dem Landen) — kein scale-Animation! */}
       {showWinDisplay && result !== null && (
-        <div className="text-center animate-bounce-in">
+        <div className="text-center animate-fade-in">
           <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-2xl px-8 py-5 shadow-xl">
             <p className="text-lg font-medium">🎉 Gewonnen!</p>
             <p className="text-4xl font-bold mt-1">
@@ -391,9 +391,9 @@ export function WheelSpinner({
         </div>
       )}
 
-      {/* Kontostand-Animation */}
+      {/* Kontostand-Animation — kein scale! */}
       {showCountUp && previousBalance !== null && newBalance !== null && (
-        <div className="text-center animate-bounce-in">
+        <div className="text-center animate-fade-in">
           <p className="text-sm text-gray-500 mb-1">Dein Guthaben:</p>
           <CountUpDisplay from={previousBalance} to={newBalance} />
         </div>

@@ -1,12 +1,12 @@
 // POST /api/wheel/daily — Tägliches Glücksrad drehen
-// GET /api/wheel/daily — Status abfragen (inkl. dailyEnabled)
+// GET /api/wheel/daily — Status abfragen (inkl. dailyEnabled, min/max, bonusSpins)
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { spinDailyWheel, getDailyWheelStatus } from "@/lib/wheel";
 import { prisma } from "@/lib/prisma";
-import { getWheelEnabledSettings } from "@/lib/settings";
+import { getWheelEnabledSettings, getWheelSettings } from "@/lib/settings";
 
 export async function GET() {
   try {
@@ -15,14 +15,17 @@ export async function GET() {
       return NextResponse.json({ error: "Nicht eingeloggt." }, { status: 401 });
     }
 
-    const [status, enabledSettings] = await Promise.all([
+    const [status, enabledSettings, wheelSettings] = await Promise.all([
       getDailyWheelStatus(session.user.id),
       getWheelEnabledSettings(),
+      getWheelSettings(),
     ]);
 
     return NextResponse.json({
       ...status,
       dailyEnabled: enabledSettings.dailyEnabled,
+      dailyMin: wheelSettings.dailyMin,
+      dailyMax: wheelSettings.dailyMax,
     });
   } catch (error) {
     console.error("Daily wheel status error:", error);

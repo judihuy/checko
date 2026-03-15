@@ -1,15 +1,18 @@
 // Stripe Webhook Handler — Checkos gutschreiben bei erfolgreicher Zahlung
 // Handles: checkout.session.completed (Einmalzahlung)
-// Neu: Affiliate-Provision für Werber (10%)
+// metadata: { userId, checkos }
+// WICHTIG: Raw body parsing! request.text() NICHT request.json()
 
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getStripe } from "@/lib/stripe";
-import { purchaseCheckos } from "@/lib/checkos";
+import { prisma } from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 import { processAffiliateEarnings } from "@/lib/referral";
 import Stripe from "stripe";
 
 export async function POST(request: Request) {
+  // Raw body für Signatur-Verifizierung
   const body = await request.text();
   const headersList = await headers();
   const sig = headersList.get("stripe-signature");
@@ -41,47 +44,85 @@ export async function POST(request: Request) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
-        const packageId = session.metadata?.packageId;
+        const checkosStr = session.metadata?.checkos;
         const paymentIntentId = session.payment_intent as string | null;
 
-        if (!userId || !packageId) {
+        if (!userId || !checkosStr) {
           console.error("Missing metadata in checkout session:", {
             userId,
-            packageId,
+            checkos: checkosStr,
           });
           break;
         }
 
-        // Checkos gutschreiben
-        const result = await purchaseCheckos(
+        const checkosAmount = parseInt(checkosStr, 10);
+        if (isNaN(checkosAmount) || checkosAmount <= 0) {
+          console.error("Invalid checkos amount in metadata:", checkosStr);
+          break;
+        }
+
+        // Alles in einer Transaction
+        const result = await prisma.$transaction(async (tx) => {
+          // CheckoPurchase erstellen
+          await tx.checkoPurchase.create({
+            data: {
+              userId,
+              amount: checkosAmount,
+              priceCHF: session.amount_total || 0,
+              stripePaymentId: paymentIntentId || `session_${session.id}`,
+              status: "completed",
+            },
+          });
+
+          // CheckoTransaction erstellen (Gutschrift)
+          const totalCHF = session.amount_total
+            ? (session.amount_total / 100).toFixed(2)
+            : "?";
+          await tx.checkoTransaction.create({
+            data: {
+              userId,
+              amount: checkosAmount,
+              type: "purchase",
+              description: `${checkosAmount} Checkos gekauft (CHF ${totalCHF})`,
+            },
+          });
+
+          // Balance erhöhen
+          const updatedUser = await tx.user.update({
+            where: { id: userId },
+            data: { checkosBalance: { increment: checkosAmount } },
+            select: { checkosBalance: true },
+          });
+
+          return updatedUser.checkosBalance;
+        });
+
+        // Notification erstellen (ausserhalb der Transaction)
+        await createNotification(
           userId,
-          packageId,
-          paymentIntentId || undefined
+          "purchase",
+          "✅ Checkos gekauft!",
+          `${checkosAmount} Checkos wurden deinem Konto gutgeschrieben. Neuer Stand: ${result} Checkos.`,
+          "/dashboard/checkos"
         );
 
-        if (result.success) {
-          console.log(
-            `Checkos purchased: user=${userId}, package=${packageId}, newBalance=${result.newBalance}`
-          );
+        console.log(
+          `Checkos purchased: user=${userId}, amount=${checkosAmount}, newBalance=${result}`
+        );
 
-          // Affiliate-Provision verarbeiten (10% an Werber)
-          const purchasedAmount = result.newBalance; // Approximation — besser das Paket nachschauen
-          // Aus dem packageId die Menge extrahieren (z.B. "checkos-50" → 50)
-          const match = packageId.match(/checkos-(\d+)/);
-          if (match) {
-            const checkosAmount = parseInt(match[1], 10);
-            const affiliateResult = await processAffiliateEarnings(userId, checkosAmount);
-            if (affiliateResult.affiliateAmount) {
-              console.log(
-                `Affiliate commission: ${affiliateResult.affiliateAmount} Checkos for referrer of user=${userId}`
-              );
-            }
+        // Affiliate-Provision verarbeiten (10% an Werber)
+        try {
+          const affiliateResult = await processAffiliateEarnings(userId, checkosAmount);
+          if (affiliateResult.affiliateAmount) {
+            console.log(
+              `Affiliate commission: ${affiliateResult.affiliateAmount} Checkos for referrer of user=${userId}`
+            );
           }
-        } else {
-          console.error(
-            `Failed to credit checkos: user=${userId}, package=${packageId}, error=${result.error}`
-          );
+        } catch (affiliateError) {
+          // Affiliate-Fehler soll den Kauf nicht blockieren
+          console.error("Affiliate processing error:", affiliateError);
         }
+
         break;
       }
 

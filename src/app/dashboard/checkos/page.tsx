@@ -1,62 +1,161 @@
-// Checkos Kaufseite — Schnellwahl + flexibler Betrag mit Mengenrabatt
+// Checkos Kaufseite — 4 feste Pakete + Slider mit dynamischem Preis
+// Preis-Staffelung: 1-49=1.00CHF, 50-99=0.90, 100-249=0.85, 250+=0.80
 "use client";
 
-import { Suspense, useState, useMemo } from "react";
+import { Suspense, useState, useMemo, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import Link from "next/link";
 
-// ==================== PREISLOGIK ====================
+// ==================== PREISLOGIK (muss mit Server übereinstimmen) ====================
 
-// Mengenrabatt-Staffeln
-const DISCOUNT_TIERS = [
-  { min: 5, max: 19, discount: 0, pricePerChecko: 1.0 },
-  { min: 20, max: 49, discount: 5, pricePerChecko: 0.95 },
-  { min: 50, max: 99, discount: 10, pricePerChecko: 0.9 },
-  { min: 100, max: Infinity, discount: 15, pricePerChecko: 0.85 },
+const PRICE_TIERS = [
+  { min: 1, max: 49, pricePerChecko: 1.0, discountPercent: 0 },
+  { min: 50, max: 99, pricePerChecko: 0.9, discountPercent: 10 },
+  { min: 100, max: 249, pricePerChecko: 0.85, discountPercent: 15 },
+  { min: 250, max: Infinity, pricePerChecko: 0.8, discountPercent: 20 },
 ];
 
-function getDiscountTier(amount: number) {
-  return DISCOUNT_TIERS.find((t) => amount >= t.min && amount <= t.max) || DISCOUNT_TIERS[0];
+function getPriceTier(amount: number) {
+  return PRICE_TIERS.find((t) => amount >= t.min && amount <= t.max) || PRICE_TIERS[0];
 }
 
-function calculatePrice(amount: number): {
-  totalCHF: number;
-  pricePerChecko: number;
-  discountPercent: number;
-  savingsCHF: number;
-} {
-  const tier = getDiscountTier(amount);
+function calculatePrice(amount: number) {
+  const tier = getPriceTier(amount);
   const totalCHF = parseFloat((amount * tier.pricePerChecko).toFixed(2));
-  const fullPrice = amount * 1.0; // Ohne Rabatt
+  const fullPrice = amount * 1.0;
   const savingsCHF = parseFloat((fullPrice - totalCHF).toFixed(2));
   return {
     totalCHF,
     pricePerChecko: tier.pricePerChecko,
-    discountPercent: tier.discount,
+    discountPercent: tier.discountPercent,
     savingsCHF,
   };
 }
 
-// Schnellwahl-Vorschläge
-const QUICK_AMOUNTS = [20, 50, 100];
+// ==================== FESTE PAKETE ====================
 
-const MIN_CHECKOS = 5;
+const FIXED_PACKAGES = [
+  {
+    checkos: 20,
+    priceId: "price_1TBA0mDu7PSxvnovrngeJBlq",
+    totalCHF: 20.0,
+    pricePerChecko: 1.0,
+    discountPercent: 0,
+    savingsCHF: 0,
+    popular: false,
+    emoji: "🦎",
+  },
+  {
+    checkos: 50,
+    priceId: "price_1TBA19Du7PSxvnovj3OaduIm",
+    totalCHF: 45.0,
+    pricePerChecko: 0.9,
+    discountPercent: 10,
+    savingsCHF: 5.0,
+    popular: true,
+    emoji: "🔥",
+  },
+  {
+    checkos: 100,
+    priceId: "price_1TBA1IDu7PSxvnovyfotwnT5",
+    totalCHF: 85.0,
+    pricePerChecko: 0.85,
+    discountPercent: 15,
+    savingsCHF: 15.0,
+    popular: false,
+    emoji: "⚡",
+  },
+  {
+    checkos: 250,
+    priceId: "price_1TBA1JDu7PSxvnovEKMNnI4R",
+    totalCHF: 200.0,
+    pricePerChecko: 0.8,
+    discountPercent: 20,
+    savingsCHF: 50.0,
+    popular: false,
+    emoji: "💎",
+  },
+];
+
+const MIN_CHECKOS = 10;
 const MAX_CHECKOS = 500;
+
+// ==================== KONFETTI ====================
+
+function ConfettiEffect() {
+  const colors = [
+    "#10b981", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6",
+    "#ec4899", "#14b8a6", "#f97316", "#06b6d4", "#84cc16",
+  ];
+
+  const particles = Array.from({ length: 60 }, (_, i) => ({
+    id: i,
+    x: Math.random() * 100,
+    y: -10 - Math.random() * 20,
+    color: colors[i % colors.length],
+    rotation: Math.random() * 360,
+    scale: 0.5 + Math.random() * 1,
+    delay: Math.random() * 0.8,
+    duration: 2 + Math.random() * 2.5,
+    shape: Math.random() > 0.5 ? "rect" : "circle",
+  }));
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          className="absolute animate-confetti-fall"
+          style={{
+            left: `${p.x}%`,
+            top: `${p.y}%`,
+            animationDelay: `${p.delay}s`,
+            animationDuration: `${p.duration}s`,
+          }}
+        >
+          <div
+            className={p.shape === "circle" ? "w-3 h-3 rounded-full" : "w-3 h-3 rounded-sm"}
+            style={{
+              backgroundColor: p.color,
+              transform: `rotate(${p.rotation}deg) scale(${p.scale})`,
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ==================== HAUPTKOMPONENTE ====================
 
 function CheckosKaufContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [customAmount, setCustomAmount] = useState<number>(20);
+  const [sliderAmount, setSliderAmount] = useState<number>(50);
   const [error, setError] = useState("");
+  const [purchasing, setPurchasing] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
-  const checkoutCanceled = searchParams.get("checkout") === "canceled";
+  const isSuccess = searchParams.get("success") === "true";
+  const isCanceled = searchParams.get("canceled") === "true";
 
-  // Live-Preisberechnung
-  const pricing = useMemo(() => calculatePrice(customAmount), [customAmount]);
+  // Konfetti bei Erfolg
+  useEffect(() => {
+    if (isSuccess) {
+      setShowConfetti(true);
+      setSuccessMessage("🎉 Checkos erfolgreich gekauft! Dein Guthaben wurde aufgeladen.");
+      const timer = setTimeout(() => setShowConfetti(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isSuccess]);
+
+  // Live-Preisberechnung für Slider
+  const pricing = useMemo(() => calculatePrice(sliderAmount), [sliderAmount]);
 
   if (status === "loading") {
     return (
@@ -71,47 +170,66 @@ function CheckosKaufContent() {
     return null;
   }
 
+  // Stripe Checkout starten
+  const handleCheckout = useCallback(async (checkos: number, priceId?: string) => {
+    if (purchasing) return;
+    setPurchasing(true);
+    setError("");
+
+    try {
+      const body: { checkos: number; priceId?: string } = { checkos };
+      if (priceId) body.priceId = priceId;
+
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Fehler beim Erstellen der Checkout-Session");
+        return;
+      }
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError("Keine Checkout-URL erhalten");
+      }
+    } catch {
+      setError("Netzwerkfehler. Bitte versuche es erneut.");
+    } finally {
+      setPurchasing(false);
+    }
+  }, [purchasing]);
+
   const handleSliderChange = (value: number) => {
-    setCustomAmount(value);
+    setSliderAmount(value);
     setError("");
   };
 
   const handleInputChange = (value: string) => {
     const num = parseInt(value, 10);
     if (isNaN(num)) return;
-    if (num < MIN_CHECKOS) {
-      setCustomAmount(MIN_CHECKOS);
-    } else if (num > MAX_CHECKOS) {
-      setCustomAmount(MAX_CHECKOS);
-    } else {
-      setCustomAmount(num);
-    }
+    const clamped = Math.max(MIN_CHECKOS, Math.min(MAX_CHECKOS, num));
+    setSliderAmount(clamped);
     setError("");
   };
 
-  const handleQuickSelect = (amount: number) => {
-    setCustomAmount(amount);
-    setError("");
-  };
-
-  const handleCheckout = () => {
-    // Stripe noch nicht konfiguriert — Platzhalter
-    setError("Bezahlung ist bald verfügbar! Stripe wird gerade eingerichtet.");
-  };
-
-  // Fortschrittsanzeige für Rabattstufe
+  // Nächste Rabattstufe Info
   const getNextTierInfo = (): string | null => {
-    if (customAmount < 20) {
-      const needed = 20 - customAmount;
-      return `Noch ${needed} Checkos mehr für 5% Rabatt!`;
-    }
-    if (customAmount < 50) {
-      const needed = 50 - customAmount;
+    if (sliderAmount < 50) {
+      const needed = 50 - sliderAmount;
       return `Noch ${needed} Checkos mehr für 10% Rabatt!`;
     }
-    if (customAmount < 100) {
-      const needed = 100 - customAmount;
+    if (sliderAmount < 100) {
+      const needed = 100 - sliderAmount;
       return `Noch ${needed} Checkos mehr für 15% Rabatt!`;
+    }
+    if (sliderAmount < 250) {
+      const needed = 250 - sliderAmount;
+      return `Noch ${needed} Checkos mehr für 20% Rabatt!`;
     }
     return null;
   };
@@ -120,6 +238,8 @@ function CheckosKaufContent() {
 
   return (
     <main className="flex-1 py-12">
+      {showConfetti && <ConfettiEffect />}
+
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Zurück zum Dashboard */}
         <Link
@@ -139,8 +259,15 @@ function CheckosKaufContent() {
           </p>
         </div>
 
+        {/* Erfolgsmeldung */}
+        {successMessage && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm text-center font-medium">
+            {successMessage}
+          </div>
+        )}
+
         {/* Checkout abgebrochen */}
-        {checkoutCanceled && (
+        {isCanceled && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg text-sm text-center">
             Checkout abgebrochen. Du kannst es jederzeit erneut versuchen.
           </div>
@@ -148,76 +275,65 @@ function CheckosKaufContent() {
 
         {/* Fehler */}
         {error && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg text-sm text-center">
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm text-center">
             {error}
           </div>
         )}
 
-        {/* Schnellwahl-Buttons */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          {QUICK_AMOUNTS.map((amount) => {
-            const p = calculatePrice(amount);
-            const isSelected = customAmount === amount;
-            return (
-              <button
-                key={amount}
-                onClick={() => handleQuickSelect(amount)}
-                className={`relative rounded-2xl p-5 text-center transition-all ${
-                  isSelected
-                    ? "bg-emerald-600 text-white shadow-xl ring-2 ring-emerald-600 ring-offset-2 scale-105"
-                    : "bg-white border-2 border-gray-200 hover:border-emerald-300"
-                }`}
-              >
-                {/* Beliebt Badge für 50 */}
-                {amount === 50 && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-800 text-white text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap">
-                    Beliebteste Wahl
-                  </div>
-                )}
-
-                {/* Sparhinweis */}
-                {p.discountPercent > 0 && (
-                  <div
-                    className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full mb-2 ${
-                      isSelected
-                        ? "bg-emerald-500 text-white"
-                        : "bg-emerald-100 text-emerald-700"
-                    }`}
-                  >
-                    Spare {p.discountPercent}%
-                  </div>
-                )}
-                {p.discountPercent === 0 && <div className="h-5 mb-2" />}
-
-                {/* Menge */}
-                <div className="mb-1">
-                  <span className="text-3xl font-bold">{amount}</span>
+        {/* ==================== 4 PAKET-CARDS ==================== */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+          {FIXED_PACKAGES.map((pkg) => (
+            <button
+              key={pkg.checkos}
+              onClick={() => handleCheckout(pkg.checkos, pkg.priceId)}
+              disabled={purchasing}
+              className={`relative rounded-2xl p-5 text-center transition-all duration-200 cursor-pointer
+                ${purchasing ? "opacity-50 cursor-not-allowed" : "hover:scale-105 hover:shadow-xl"}
+                ${pkg.popular
+                  ? "bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-400 shadow-lg"
+                  : "bg-white border-2 border-gray-200 hover:border-emerald-300"
+                }
+              `}
+            >
+              {/* Beliebt Badge */}
+              {pkg.popular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap">
+                  🔥 Beliebt
                 </div>
-                <p
-                  className={`text-sm mb-1 ${
-                    isSelected ? "text-emerald-100" : "text-gray-500"
-                  }`}
-                >
-                  Checkos
-                </p>
+              )}
 
-                {/* Preis */}
-                <div className="my-3">
-                  <span className="text-xl font-bold">CHF {p.totalCHF.toFixed(2)}</span>
-                </div>
-                <p
-                  className={`text-xs ${
-                    isSelected ? "text-emerald-200" : "text-gray-400"
-                  }`}
-                >
-                  CHF {p.pricePerChecko.toFixed(2)} pro Checko
-                </p>
-              </button>
-            );
-          })}
+              {/* Emoji */}
+              <div className="text-3xl mb-2">{pkg.emoji}</div>
+
+              {/* Menge */}
+              <div className="mb-1">
+                <span className="text-3xl font-bold text-gray-900">{pkg.checkos}</span>
+              </div>
+              <p className="text-sm text-gray-500 mb-3">Checkos</p>
+
+              {/* Preis */}
+              <div className="mb-2">
+                <span className="text-xl font-bold text-gray-900">
+                  CHF {pkg.totalCHF.toFixed(2)}
+                </span>
+              </div>
+
+              {/* Pro Stück */}
+              <p className="text-xs text-gray-400 mb-1">
+                CHF {pkg.pricePerChecko.toFixed(2)} / Stück
+              </p>
+
+              {/* Rabatt */}
+              {pkg.discountPercent > 0 && (
+                <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                  −{pkg.discountPercent}% · Spare CHF {pkg.savingsCHF.toFixed(2)}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
-        {/* Flexibler Kauf — Slider + Input */}
+        {/* ==================== SLIDER — Eigene Menge ==================== */}
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-6 mb-8">
           <h2 className="text-lg font-bold text-gray-900 mb-4 text-center">
             Eigenen Betrag wählen
@@ -230,7 +346,7 @@ function CheckosKaufContent() {
               min={MIN_CHECKOS}
               max={MAX_CHECKOS}
               step={1}
-              value={customAmount}
+              value={sliderAmount}
               onChange={(e) => handleSliderChange(parseInt(e.target.value, 10))}
               className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
             />
@@ -238,7 +354,7 @@ function CheckosKaufContent() {
               <span>{MIN_CHECKOS}</span>
               <span>50</span>
               <span>100</span>
-              <span>200</span>
+              <span>250</span>
               <span>{MAX_CHECKOS}</span>
             </div>
           </div>
@@ -247,7 +363,7 @@ function CheckosKaufContent() {
           <div className="flex items-center justify-center gap-3 mb-4">
             <button
               type="button"
-              onClick={() => handleSliderChange(Math.max(MIN_CHECKOS, customAmount - 5))}
+              onClick={() => handleSliderChange(Math.max(MIN_CHECKOS, sliderAmount - 5))}
               className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold transition flex items-center justify-center"
             >
               −
@@ -257,7 +373,7 @@ function CheckosKaufContent() {
                 type="number"
                 min={MIN_CHECKOS}
                 max={MAX_CHECKOS}
-                value={customAmount}
+                value={sliderAmount}
                 onChange={(e) => handleInputChange(e.target.value)}
                 className="w-28 text-center text-2xl font-bold px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               />
@@ -267,7 +383,7 @@ function CheckosKaufContent() {
             </div>
             <button
               type="button"
-              onClick={() => handleSliderChange(Math.min(MAX_CHECKOS, customAmount + 5))}
+              onClick={() => handleSliderChange(Math.min(MAX_CHECKOS, sliderAmount + 5))}
               className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold transition flex items-center justify-center"
             >
               +
@@ -276,8 +392,8 @@ function CheckosKaufContent() {
 
           {/* Rabatt-Staffeln */}
           <div className="grid grid-cols-4 gap-1 mb-6 mt-8">
-            {DISCOUNT_TIERS.map((tier) => {
-              const isActive = customAmount >= tier.min && customAmount <= tier.max;
+            {PRICE_TIERS.map((tier) => {
+              const isActive = sliderAmount >= tier.min && sliderAmount <= tier.max;
               return (
                 <div
                   key={tier.min}
@@ -288,10 +404,16 @@ function CheckosKaufContent() {
                   }`}
                 >
                   <div className="font-medium">
-                    {tier.min}–{tier.max === Infinity ? "∞" : tier.max}
+                    {tier.min}–{tier.max === Infinity ? "500+" : tier.max}
                   </div>
-                  <div>{tier.discount > 0 ? `${tier.discount}% Rabatt` : "Kein Rabatt"}</div>
-                  <div className="text-xs opacity-75">CHF {tier.pricePerChecko.toFixed(2)}</div>
+                  <div>
+                    {tier.discountPercent > 0
+                      ? `${tier.discountPercent}% Rabatt`
+                      : "Kein Rabatt"}
+                  </div>
+                  <div className="text-xs opacity-75">
+                    CHF {tier.pricePerChecko.toFixed(2)}
+                  </div>
                 </div>
               );
             })}
@@ -300,7 +422,7 @@ function CheckosKaufContent() {
           {/* Live-Preisanzeige */}
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-center">
             <div className="text-2xl font-bold text-emerald-800 mb-1">
-              {customAmount} Checkos für CHF {pricing.totalCHF.toFixed(2)}
+              {sliderAmount} Checkos für CHF {pricing.totalCHF.toFixed(2)}
             </div>
             <div className="text-sm text-emerald-600">
               CHF {pricing.pricePerChecko.toFixed(2)} pro Checko
@@ -322,15 +444,23 @@ function CheckosKaufContent() {
             )}
           </div>
 
-          {/* Checkout-Button */}
+          {/* Kaufen-Button */}
           <button
-            onClick={handleCheckout}
-            className="w-full mt-4 py-3.5 bg-emerald-600 text-white rounded-xl font-semibold text-lg hover:bg-emerald-700 transition"
+            onClick={() => handleCheckout(sliderAmount)}
+            disabled={purchasing}
+            className={`w-full mt-4 py-3.5 rounded-xl font-semibold text-lg transition
+              ${purchasing
+                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                : "bg-emerald-600 text-white hover:bg-emerald-700"
+              }
+            `}
           >
-            🦎 {customAmount} Checkos kaufen — CHF {pricing.totalCHF.toFixed(2)}
+            {purchasing
+              ? "⏳ Wird vorbereitet..."
+              : `🦎 ${sliderAmount} Checkos kaufen — CHF ${pricing.totalCHF.toFixed(2)}`}
           </button>
           <p className="text-center text-xs text-gray-400 mt-2">
-            Bezahlung via Stripe — bald verfügbar
+            Sichere Bezahlung via Stripe · CHF · Kein Abo
           </p>
         </div>
 
@@ -382,12 +512,14 @@ function CheckosKaufContent() {
             </div>
           </div>
           <p className="text-center text-xs text-gray-400 mt-3">
-            Beispiel Preisradar: 1 Tag Standard = 2 Checkos, 1 Tag Premium = 4 Checkos, 1 Tag Pro = 7 Checkos
+            Beispiel Preisradar: 1 Tag Standard = 2 Checkos, 1 Tag Premium = 4 Checkos, 1 Tag
+            Pro = 7 Checkos
           </p>
         </div>
 
         <p className="text-center text-gray-400 text-xs mt-6">
-          Alle Preise in CHF inkl. MwSt. Bezahlung via Stripe. Checkos sind nicht rückerstattbar.
+          Alle Preise in CHF inkl. MwSt. Bezahlung via Stripe. Checkos sind nicht
+          rückerstattbar.
         </p>
       </div>
     </main>

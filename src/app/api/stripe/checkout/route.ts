@@ -1,10 +1,22 @@
 // Stripe Checkout — Einmalzahlung für Checko-Pakete (KEIN Abo!)
+// Body: { checkos: number, priceId?: string }
+// - priceId vorhanden: Festes Paket (20/50/100/250)
+// - priceId fehlt: Dynamischer Preis via price_data (Slider-Kauf)
+// Minimum: 10 Checkos
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getStripe } from "@/lib/stripe";
-import { getPackageById } from "@/lib/checkos";
+import {
+  getStripe,
+  getFixedPackageByPriceId,
+  calculatePrice,
+  STRIPE_PRODUCT_ID,
+} from "@/lib/stripe";
+import { getBaseUrl } from "@/lib/utils";
+
+const MIN_CHECKOS = 10;
+const MAX_CHECKOS = 500;
 
 export async function POST(request: Request) {
   try {
@@ -13,46 +25,82 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
     }
 
-    const { packageId } = await request.json();
+    const body = await request.json();
+    const { checkos, priceId } = body as { checkos?: number; priceId?: string };
 
-    if (!packageId || typeof packageId !== "string") {
-      return NextResponse.json({ error: "packageId erforderlich" }, { status: 400 });
+    // Validierung: checkos muss vorhanden und gültig sein
+    if (!checkos || typeof checkos !== "number" || !Number.isInteger(checkos)) {
+      return NextResponse.json(
+        { error: "Ungültige Checko-Menge" },
+        { status: 400 }
+      );
     }
 
-    // Paket validieren
-    const pkg = getPackageById(packageId);
-    if (!pkg) {
-      return NextResponse.json({ error: "Ungültiges Paket" }, { status: 400 });
+    if (checkos < MIN_CHECKOS || checkos > MAX_CHECKOS) {
+      return NextResponse.json(
+        { error: `Checko-Menge muss zwischen ${MIN_CHECKOS} und ${MAX_CHECKOS} liegen` },
+        { status: 400 }
+      );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const baseUrl = getBaseUrl();
+    const stripe = getStripe();
 
-    // Einmalzahlung — KEIN Abo!
-    const checkoutSession = await getStripe().checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card"],
-      customer_email: session.user.email || undefined,
-      metadata: {
-        userId: session.user.id,
-        packageId: pkg.id,
-        checkosAmount: pkg.amount.toString(),
-      },
-      line_items: [
-        {
-          price_data: {
-            currency: "chf",
-            product_data: {
-              name: `${pkg.amount} Checkos`,
-              description: `${pkg.amount} Checkos für dein Checko-Konto`,
-            },
-            unit_amount: pkg.priceCHF,
+    // Gemeinsame Session-Optionen
+    const metadata = {
+      userId: session.user.id,
+      checkos: checkos.toString(),
+    };
+
+    let checkoutSession;
+
+    if (priceId) {
+      // ==================== FESTES PAKET ====================
+      const pkg = getFixedPackageByPriceId(priceId);
+      if (!pkg || pkg.checkos !== checkos) {
+        return NextResponse.json(
+          { error: "Ungültiges Paket" },
+          { status: 400 }
+        );
+      }
+
+      checkoutSession = await stripe.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        customer_email: session.user.email || undefined,
+        metadata,
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
           },
-          quantity: 1,
-        },
-      ],
-      success_url: `${appUrl}/dashboard?checkout=success`,
-      cancel_url: `${appUrl}/dashboard/checkos?checkout=canceled`,
-    });
+        ],
+        success_url: `${baseUrl}/dashboard/checkos?success=true`,
+        cancel_url: `${baseUrl}/dashboard/checkos?canceled=true`,
+      });
+    } else {
+      // ==================== DYNAMISCHER PREIS (Slider) ====================
+      const pricing = calculatePrice(checkos);
+
+      checkoutSession = await stripe.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        customer_email: session.user.email || undefined,
+        metadata,
+        line_items: [
+          {
+            price_data: {
+              currency: "chf",
+              product: STRIPE_PRODUCT_ID,
+              unit_amount: pricing.unitAmountRappen,
+            },
+            quantity: checkos,
+          },
+        ],
+        success_url: `${baseUrl}/dashboard/checkos?success=true`,
+        cancel_url: `${baseUrl}/dashboard/checkos?canceled=true`,
+      });
+    }
 
     return NextResponse.json({ url: checkoutSession.url });
   } catch (error) {

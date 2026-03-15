@@ -18,7 +18,8 @@ interface Search {
   duration: string;
   qualityTier: string;
   interval: number;
-  status: "aktiv" | "pausiert" | "abgelaufen";
+  status: "aktiv" | "pausiert" | "abgelaufen" | "entwurf";
+  isDraft?: boolean;
   alertCount: number;
   expiresAt: string | null;
   lastScrapedAt: string | null;
@@ -868,26 +869,82 @@ export default function PreisradarPage() {
                   </div>
                 </div>
 
-                {/* Live-Kostenanzeige — reagiert auf Qualität UND Dauer */}
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-sm text-emerald-700 font-medium">Kosten für diese Suche:</span>
-                      <div className="text-xs text-emerald-600 mt-0.5">
-                        {DURATIONS.find((d) => d.id === duration)?.name || duration}
-                        {" · "}
-                        {QUALITY_TIERS.find((t) => t.id === qualityTier)?.name || "Standard"}
-                        {" · "}
-                        {QUALITY_TIERS.find((t) => t.id === qualityTier)?.intervalLabel || "Alle 30 Minuten"}
+                {/* Live-Kostenanzeige + Guthaben-Check */}
+                <div className="space-y-3">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm text-emerald-700 font-medium">Kosten für diese Suche:</span>
+                        <div className="text-xs text-emerald-600 mt-0.5">
+                          {DURATIONS.find((d) => d.id === duration)?.name || duration}
+                          {" · "}
+                          {QUALITY_TIERS.find((t) => t.id === qualityTier)?.name || "Standard"}
+                          {" · "}
+                          {QUALITY_TIERS.find((t) => t.id === qualityTier)?.intervalLabel || "Alle 30 Minuten"}
+                        </div>
                       </div>
+                      <span className="text-lg font-bold text-emerald-800">
+                        🦎 {currentCost} Checko{currentCost > 1 ? "s" : ""}
+                      </span>
                     </div>
-                    <span className="text-lg font-bold text-emerald-800">
-                      🦎 {currentCost} Checko{currentCost > 1 ? "s" : ""}
-                    </span>
+                    {qualityTier !== "standard" && (
+                      <div className="text-xs text-emerald-600 mt-2 pt-2 border-t border-emerald-200">
+                        💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 2} Checko{(DURATION_BASE_COSTS[duration] || 2) > 1 ? "s" : ""} kosten
+                      </div>
+                    )}
                   </div>
-                  {qualityTier !== "standard" && (
-                    <div className="text-xs text-emerald-600 mt-2 pt-2 border-t border-emerald-200">
-                      💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 2} Checko{(DURATION_BASE_COSTS[duration] || 2) > 1 ? "s" : ""} kosten
+
+                  {/* Guthaben-Anzeige */}
+                  {checkosBalance !== null && (
+                    <div className={`rounded-lg p-3 border ${
+                      checkosBalance >= currentCost
+                        ? "bg-emerald-50 border-emerald-200"
+                        : "bg-red-50 border-red-200"
+                    }`}>
+                {/* Guthaben-Anzeige */}
+                <div className={`rounded-lg p-3 ${checkosBalance !== null && checkosBalance < currentCost ? "bg-red-50 border border-red-200" : "bg-emerald-50 border border-emerald-200"}`}>
+                  <p className={`text-sm font-medium ${checkosBalance !== null && checkosBalance < currentCost ? "text-red-700" : "text-emerald-700"}`}>
+                    💰 Dein Guthaben: <strong>{checkosBalance ?? 0} Checkos</strong>
+                    {checkosBalance !== null && checkosBalance < currentCost && (
+                      <span className="block mt-1 text-red-600">
+                        ⚠️ Nicht genug! Du brauchst {currentCost}, hast aber nur {checkosBalance}.{" "}
+                        <a href="/dashboard/checkos" className="underline font-bold">Checkos kaufen →</a>
+                      </span>
+                    )}
+                    {checkosBalance !== null && checkosBalance >= currentCost && (
+                      <span className="text-emerald-600"> ✅ Reicht</span>
+                    )}
+                  </p>
+                </div>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-sm font-medium ${
+                          checkosBalance >= currentCost ? "text-emerald-700" : "text-red-700"
+                        }`}>
+                          Dein Guthaben: {checkosBalance} Checko{checkosBalance !== 1 ? "s" : ""}
+                        </span>
+                        {checkosBalance >= currentCost ? (
+                          <span className="text-xs font-medium text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                            ✓ Guthaben reicht
+                          </span>
+                        ) : (
+                          <span className="text-xs font-medium text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                            ✗ Nicht genug
+                          </span>
+                        )}
+                      </div>
+                      {checkosBalance < currentCost && (
+                        <div className="mt-2 pt-2 border-t border-red-200">
+                          <p className="text-xs text-red-600 mb-2">
+                            Nicht genug Checkos! Du brauchst {currentCost}, hast aber nur {checkosBalance}.
+                          </p>
+                          <Link
+                            href="/dashboard/checkos"
+                            className="inline-flex items-center text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg transition"
+                          >
+                            💰 Checkos kaufen
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -899,21 +956,29 @@ export default function PreisradarPage() {
                   </p>
                 </div>
 
-                {/* Submit */}
-                <div className="flex gap-3 pt-2">
+                {/* Submit — 3 Buttons: Abbrechen / Speichern (Draft) / Suche starten */}
+                <div className="flex gap-2 pt-2">
                   <button
                     type="button"
                     onClick={() => { setShowModal(false); setError(null); }}
-                    className="flex-1 py-3 px-4 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition"
+                    className="py-3 px-4 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition text-sm"
                   >
                     Abbrechen
                   </button>
                   <button
-                    type="submit"
+                    type="button"
                     disabled={creating || selectedPlatforms.length === 0 || !query.trim()}
-                    className="flex-1 py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleSaveDraft}
+                    className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
-                    {creating ? "Wird erstellt..." : `Suche starten (${currentCost} 🦎)`}
+                    {creating ? "Wird gespeichert..." : "💾 Speichern"}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={creating || selectedPlatforms.length === 0 || !query.trim() || (checkosBalance !== null && checkosBalance < currentCost)}
+                    className="flex-1 py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {creating ? "Wird erstellt..." : `🚀 Starten (${currentCost} 🦎)`}
                   </button>
                 </div>
               </form>

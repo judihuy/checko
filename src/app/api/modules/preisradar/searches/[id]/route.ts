@@ -8,12 +8,14 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
+import { chargeForSearch, calculateExpiresAt, getSearchCost, runSearchJob } from "@/lib/scraper/scheduler";
 
 const VALID_PLATFORMS = ["tutti", "ricardo", "ebay-ka", "autoscout", "comparis"];
 
 // Zod-Schema für Update — erlaubt Pause/Aktivierung UND Bearbeitung
 const updateSearchSchema = z.object({
   isActive: z.boolean().optional(),
+  activateDraft: z.boolean().optional(), // Draft → aktive Suche (Checkos abziehen)
   query: z.string().min(2).max(200).optional(),
   maxPrice: z.number().int().min(0).nullable().optional(),
   minPrice: z.number().int().min(0).nullable().optional(),
@@ -42,7 +44,7 @@ export async function PUT(
     // Prüfen ob Suche dem User gehört (findFirst statt findUnique wegen Engine-Bug)
     const search = await prisma.preisradarSearch.findFirst({
       where: { id },
-      select: { userId: true, expiresAt: true, isActive: true },
+      select: { userId: true, expiresAt: true, isActive: true, isDraft: true, duration: true, qualityTier: true },
     });
 
     if (!search) {
@@ -61,6 +63,48 @@ export async function PUT(
         { error: "Ungültige Eingabe", details: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
+    }
+
+    // Draft aktivieren: Checkos abziehen und Suche starten
+    if (parsed.data.activateDraft && search.isDraft) {
+      const totalCost = getSearchCost(search.duration, search.qualityTier);
+      const chargeResult = await chargeForSearch(session.user.id, search.duration, search.qualityTier);
+      if (!chargeResult.success) {
+        return NextResponse.json(
+          {
+            error: chargeResult.error || "Nicht genügend Checkos",
+            cost: totalCost,
+          },
+          { status: 402 }
+        );
+      }
+
+      const updated = await prisma.preisradarSearch.update({
+        where: { id },
+        data: {
+          isActive: true,
+          isDraft: false,
+          expiresAt: calculateExpiresAt(search.duration),
+          checkosCharged: chargeResult.cost,
+        },
+      });
+
+      // Sofort-Suche im Hintergrund starten
+      runSearchJob(updated.id).catch((err) => {
+        console.error(`[Preisradar] Sofort-Suche fehlgeschlagen für ${updated.id}:`, err);
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Entwurf aktiviert! Der erste Scan läuft bereits.",
+        search: {
+          id: updated.id,
+          isActive: true,
+          isDraft: false,
+          checkosCharged: chargeResult.cost,
+          expiresAt: updated.expiresAt,
+        },
+      });
     }
 
     // Abgelaufene Suchen können nicht reaktiviert werden

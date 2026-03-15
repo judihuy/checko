@@ -271,6 +271,7 @@ model PreisradarSearch {
   subcategory    String?           // Unterkategorie: Autos, Smartphones, etc.
   condition      String?           // Zustand: Alle, Neu, Gebraucht
   isActive       Boolean           @default(true)
+  isDraft        Boolean           @default(false) // Draft: isActive=false, isDraft=true
   duration       String            @default("1d") // "1d" | "1w" | "1m"
   qualityTier    String            @default("standard") // "standard" | "premium" | "pro"
   interval       Int               @default(30) // Minuten: 30=Standard, 15=Premium, 5=Pro

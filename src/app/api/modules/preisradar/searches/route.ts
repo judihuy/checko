@@ -29,6 +29,7 @@ const createSearchSchema = z.object({
   category: z.string().max(100).optional(),
   subcategory: z.string().max(100).optional(),
   condition: z.string().max(50).optional(),
+  isDraft: z.boolean().default(false),
 });
 
 // POST: Neue Suche erstellen
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { query, maxPrice, minPrice, platforms, duration, qualityTier, category: searchCategory, subcategory: searchSubcategory, condition: searchCondition } = parsed.data;
+    const { query, maxPrice, minPrice, platforms, duration, qualityTier, isDraft, category: searchCategory, subcategory: searchSubcategory, condition: searchCondition } = parsed.data;
 
     // Intervall: Entweder explizit gesetzt oder vom Tier abgeleitet
     const interval = parsed.data.interval || TIER_INTERVALS[qualityTier] || 30;
@@ -67,6 +68,45 @@ export async function POST(request: NextRequest) {
 
     // Kosten berechnen (Dauer × Qualität)
     const totalCost = getSearchCost(duration, qualityTier);
+
+    // Draft-Modus: Speichern OHNE Checkos abzuziehen
+    if (isDraft) {
+      const search = await prisma.preisradarSearch.create({
+        data: {
+          userId: session.user.id,
+          query,
+          maxPrice: maxPrice || null,
+          minPrice: minPrice || null,
+          platforms: platforms.join(","),
+          category: searchCategory || null,
+          subcategory: searchSubcategory || null,
+          condition: searchCondition || null,
+          duration,
+          qualityTier,
+          interval,
+          expiresAt: null, // Kein Ablaufdatum für Drafts
+          checkosCharged: 0,
+          isActive: false,
+          isDraft: true,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        search: {
+          id: search.id,
+          query: search.query,
+          platforms: search.platforms,
+          duration: search.duration,
+          qualityTier: search.qualityTier,
+          interval: search.interval,
+          expiresAt: search.expiresAt,
+          checkosCharged: 0,
+          isDraft: true,
+        },
+        message: "Suche als Entwurf gespeichert.",
+      });
+    }
 
     // Checkos abziehen — mit qualityTier!
     const chargeResult = await chargeForSearch(session.user.id, duration, qualityTier);
@@ -97,6 +137,7 @@ export async function POST(request: NextRequest) {
         expiresAt: calculateExpiresAt(duration),
         checkosCharged: chargeResult.cost,
         isActive: true,
+        isDraft: false,
       },
     });
 
@@ -151,9 +192,10 @@ export async function GET(request: NextRequest) {
 
     // Status berechnen
     const searchesWithStatus = searches.map((s) => {
-      let status: "aktiv" | "pausiert" | "abgelaufen" = "aktiv";
-      if (!s.isActive) status = "pausiert";
-      if (s.expiresAt && new Date() > s.expiresAt) status = "abgelaufen";
+      let status: "aktiv" | "pausiert" | "abgelaufen" | "entwurf" = "aktiv";
+      if (s.isDraft) status = "entwurf";
+      else if (!s.isActive) status = "pausiert";
+      if (!s.isDraft && s.expiresAt && new Date() > s.expiresAt) status = "abgelaufen";
 
       return {
         id: s.id,
@@ -165,6 +207,7 @@ export async function GET(request: NextRequest) {
         qualityTier: s.qualityTier,
         interval: s.interval,
         status,
+        isDraft: s.isDraft,
         alertCount: s._count.alerts,
         expiresAt: s.expiresAt,
         lastScrapedAt: s.lastScrapedAt,

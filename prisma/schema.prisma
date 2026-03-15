@@ -70,11 +70,13 @@ model User {
   checkosBalance      Int       @default(0)
   referralCode        String?   @unique
   referredBy          String?
-  isSuspended         Boolean   @default(false)
-  suspendReason       String?
-  registrationNumber  Int?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  isSuspended                Boolean   @default(false)
+  suspendReason              String?
+  registrationNumber         Int?
+  bonusSpins                 Int       @default(0)
+  bonusSpinsNoSpendRequired  Boolean   @default(false)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   accounts                Account[]
   sessions                Session[]

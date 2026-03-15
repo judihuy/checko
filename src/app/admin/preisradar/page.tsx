@@ -130,7 +130,7 @@ export default async function AdminPreisradarPage() {
               className="flex items-center justify-between border border-gray-100 rounded-lg p-4"
             >
               <div>
-                <p className="font-medium text-gray-900">{scraper.displayName}</p>
+                <p className="font-medium text-gray-900">{getPlatformDisplayName(scraper.platform)}</p>
                 <p className="text-xs text-gray-500">{scraper.baseUrl}</p>
               </div>
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
@@ -201,7 +201,7 @@ export default async function AdminPreisradarPage() {
                       CHF {(alert.price / 100).toFixed(2)}
                     </td>
                     <td className="py-2 px-3">
-                      {PLATFORM_NAMES[alert.platform] || alert.platform}
+                      {getPlatformDisplayName(alert.platform)}
                     </td>
                     <td className={`py-2 px-3 font-bold ${getScoreColor(alert.priceScore)}`}>
                       {alert.priceScore || "–"}

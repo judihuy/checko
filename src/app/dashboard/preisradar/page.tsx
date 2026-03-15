@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import Link from "next/link";
-import { getPlatformDisplayName, COUNTRY_PLATFORMS } from "@/lib/platform-names";
+import { getPlatformDisplayName, COUNTRY_PLATFORMS, type CountryCode } from "@/lib/platform-names";
 
 interface Search {
   id: string;
@@ -26,13 +26,17 @@ interface Search {
   createdAt: string;
 }
 
-const PLATFORMS = [
-  { id: "tutti", name: getPlatformDisplayName("tutti") },
-  { id: "ricardo", name: getPlatformDisplayName("ricardo") },
-  { id: "ebay-ka", name: getPlatformDisplayName("ebay-ka") },
-  { id: "autoscout", name: getPlatformDisplayName("autoscout") },
-  { id: "comparis", name: getPlatformDisplayName("comparis") },
+const ALL_PLATFORMS = [
+  { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode },
+  { id: "ricardo", name: "Ricardo.ch", country: "ch" as CountryCode },
+  { id: "autoscout", name: "AutoScout24.ch", country: "ch" as CountryCode },
+  { id: "comparis", name: "Comparis.ch", country: "ch" as CountryCode },
+  { id: "ebay-ka", name: "Kleinanzeigen.de", country: "de" as CountryCode },
+  { id: "willhaben", name: "Willhaben.at", country: "at" as CountryCode },
 ];
+
+// Nur aktive Plattformen (ohne willhaben)
+const ACTIVE_PLATFORMS = ALL_PLATFORMS.filter((p) => p.country !== "at");
 
 // Basiskosten pro Dauer (Standard-Stufe = 2 Checkos)
 const DURATION_BASE_COSTS: Record<string, number> = {
@@ -111,9 +115,12 @@ export default function PreisradarPage() {
   const [query, setQuery] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo", "autoscout", "comparis"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
+
+  // Länder-Checkbox-State (für Neue Suche)
+  const [selectedCountries, setSelectedCountries] = useState<Set<CountryCode>>(new Set(["ch"]));
 
   // Intervall wird automatisch vom qualityTier abgeleitet
   const currentInterval = useMemo(() => {
@@ -129,6 +136,56 @@ export default function PreisradarPage() {
     const ratio = qualityCost / QUALITY_CHECKO_COSTS["standard"];
     return Math.round(baseCost * ratio);
   }, [duration, qualityTier]);
+
+  // Synchronisiere Länder-Checkboxen mit Plattform-Auswahl
+  const handleCountryToggle = (country: CountryCode) => {
+    const config = COUNTRY_PLATFORMS[country];
+    if (!config.enabled) return; // AT = coming soon
+
+    setSelectedCountries((prev) => {
+      const next = new Set(prev);
+      if (next.has(country)) {
+        next.delete(country);
+        // Alle Plattformen dieses Landes entfernen
+        setSelectedPlatforms((platforms) =>
+          platforms.filter((p) => !config.platforms.includes(p))
+        );
+      } else {
+        next.add(country);
+        // Alle Plattformen dieses Landes hinzufügen
+        setSelectedPlatforms((platforms) => {
+          const newPlatforms = [...platforms];
+          for (const p of config.platforms) {
+            if (!newPlatforms.includes(p)) {
+              newPlatforms.push(p);
+            }
+          }
+          return newPlatforms;
+        });
+      }
+      return next;
+    });
+  };
+
+  // Einzelne Plattform togglen — Länder-Checkbox synchron halten
+  const togglePlatform = (platformId: string) => {
+    setSelectedPlatforms((prev) => {
+      const next = prev.includes(platformId)
+        ? prev.filter((p) => p !== platformId)
+        : [...prev, platformId];
+
+      // Länder-Checkboxen synchronisieren
+      const newCountries = new Set<CountryCode>();
+      for (const [code, config] of Object.entries(COUNTRY_PLATFORMS) as [CountryCode, typeof COUNTRY_PLATFORMS[CountryCode]][]) {
+        if (!config.enabled) continue;
+        const hasAny = config.platforms.some((p) => next.includes(p));
+        if (hasAny) newCountries.add(code);
+      }
+      setSelectedCountries(newCountries);
+
+      return next;
+    });
+  };
 
   const loadSearches = useCallback(async () => {
     try {
@@ -240,7 +297,8 @@ export default function PreisradarPage() {
       setQuery("");
       setMinPrice("");
       setMaxPrice("");
-      setSelectedPlatforms(["tutti", "ricardo"]);
+      setSelectedPlatforms(["tutti", "ricardo", "autoscout", "comparis"]);
+      setSelectedCountries(new Set(["ch"]));
       setDuration("1d");
       setQualityTier("standard");
       setSuccessMessage("🚀 Suche erstellt! Der erste Scan läuft bereits im Hintergrund.");
@@ -285,14 +343,6 @@ export default function PreisradarPage() {
     }
   };
 
-  const togglePlatform = (platformId: string) => {
-    setSelectedPlatforms((prev) =>
-      prev.includes(platformId)
-        ? prev.filter((p) => p !== platformId)
-        : [...prev, platformId]
-    );
-  };
-
   const getStatusBadge = (searchStatus: string) => {
     switch (searchStatus) {
       case "aktiv":
@@ -322,8 +372,6 @@ export default function PreisradarPage() {
     if (interval <= 15) return "Alle 15 Min";
     return "Alle 30 Min";
   };
-
-  const getPlatformName = (id: string) => PLATFORMS.find((p) => p.id === id)?.name || id;
 
   if (status === "loading" || loading) {
     return (
@@ -423,7 +471,7 @@ export default function PreisradarPage() {
                   <div className="flex flex-wrap gap-1 mb-3">
                     {search.platforms.map((p) => (
                       <span key={p} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                        {getPlatformName(p)}
+                        {getPlatformDisplayName(p)}
                       </span>
                     ))}
                     {getQualityBadge(search.qualityTier)}
@@ -552,99 +600,75 @@ export default function PreisradarPage() {
                   </div>
                 </div>
 
-                {/* Plattformen mit Länder-Gruppierung */}
+                {/* Länder-Auswahl */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Plattformen *
+                    Welche Länder durchsuchen?
                   </label>
-
-                  {/* Länder-Checkboxen */}
-                  <div className="flex gap-3 mb-3">
-                    {Object.entries(COUNTRY_PLATFORMS).map(([country, platformIds]) => {
-                      const allSelected = platformIds.every((id) => selectedPlatforms.includes(id));
-                      const someSelected = platformIds.some((id) => selectedPlatforms.includes(id));
-                      return (
-                        <label
-                          key={country}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${
-                            allSelected
-                              ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                              : someSelected
-                                ? "border-emerald-300 bg-emerald-25 text-emerald-600"
-                                : "border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={allSelected}
-                            onChange={() => {
-                              if (allSelected) {
-                                // Alle Plattformen dieses Landes entfernen
-                                setSelectedPlatforms((prev) => prev.filter((p) => !platformIds.includes(p)));
-                              } else {
-                                // Alle Plattformen dieses Landes hinzufügen
-                                setSelectedPlatforms((prev) => {
-                                  const next = new Set(prev);
-                                  platformIds.forEach((id) => next.add(id));
-                                  return Array.from(next);
-                                });
-                              }
-                            }}
-                            className="sr-only"
-                          />
-                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                            allSelected
-                              ? "border-emerald-500 bg-emerald-500"
-                              : someSelected
-                                ? "border-emerald-400 bg-emerald-200"
-                                : "border-gray-300"
-                          }`}>
-                            {allSelected && (
-                              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                            )}
-                            {!allSelected && someSelected && (
-                              <span className="w-2 h-0.5 bg-emerald-500 rounded" />
-                            )}
-                          </span>
-                          <span className="text-sm font-medium">{country === "CH" ? "🇨🇭 Schweiz" : "🇩🇪 Deutschland"}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-
-                  {/* Einzelne Plattform-Checkboxen */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {PLATFORMS.map((p) => (
-                      <label
-                        key={p.id}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${
-                          selectedPlatforms.includes(p.id)
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {(Object.entries(COUNTRY_PLATFORMS) as [CountryCode, typeof COUNTRY_PLATFORMS[CountryCode]][]).map(([code, config]) => (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => handleCountryToggle(code)}
+                        disabled={!config.enabled}
+                        className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm font-medium transition ${
+                          !config.enabled
+                            ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                            : selectedCountries.has(code)
                             ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                            : "border-gray-200 hover:border-gray-300"
+                            : "border-gray-200 hover:border-gray-300 text-gray-600"
                         }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={selectedPlatforms.includes(p.id)}
-                          onChange={() => togglePlatform(p.id)}
-                          className="sr-only"
-                        />
-                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                          selectedPlatforms.includes(p.id)
-                            ? "border-emerald-500 bg-emerald-500"
-                            : "border-gray-300"
-                        }`}>
-                          {selectedPlatforms.includes(p.id) && (
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </span>
-                        <span className="text-sm">{p.name}</span>
-                      </label>
+                        <span>{config.flag}</span>
+                        <span>{config.label}</span>
+                        {!config.enabled && (
+                          <span className="text-[10px] text-gray-400 ml-0.5">(Demnächst)</span>
+                        )}
+                      </button>
                     ))}
+                  </div>
+
+                  {/* Plattformen (Sub-Checkboxen) */}
+                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                    <p className="text-xs text-gray-500 mb-2">Einzelne Plattformen an-/abwählen:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {ACTIVE_PLATFORMS.map((p) => {
+                        const countryConfig = COUNTRY_PLATFORMS[p.country];
+                        return (
+                          <label
+                            key={p.id}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${
+                              selectedPlatforms.includes(p.id)
+                                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                                : "border-gray-200 hover:border-gray-300 bg-white"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedPlatforms.includes(p.id)}
+                              onChange={() => togglePlatform(p.id)}
+                              className="sr-only"
+                            />
+                            <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                              selectedPlatforms.includes(p.id)
+                                ? "border-emerald-500 bg-emerald-500"
+                                : "border-gray-300"
+                            }`}>
+                              {selectedPlatforms.includes(p.id) && (
+                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </span>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-xs">{countryConfig.flag}</span>
+                              <span className="text-sm truncate">{p.name}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -840,13 +864,13 @@ export default function PreisradarPage() {
                   </div>
                 </div>
 
-                {/* Plattformen */}
+                {/* Plattformen (Edit-Modal — einfache Checkboxen) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Plattformen *
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {PLATFORMS.map((p) => (
+                    {ACTIVE_PLATFORMS.map((p) => (
                       <label
                         key={p.id}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${

@@ -33,7 +33,18 @@ interface SavedAlertItem {
   };
 }
 
-
+// Kamera-Platzhalter Icon
+function CameraPlaceholder({ platform }: { platform: string }) {
+  return (
+    <div className="w-20 h-20 flex-shrink-0 bg-gray-100 rounded-lg flex flex-col items-center justify-center">
+      <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+      </svg>
+      <span className="text-[9px] text-gray-400 mt-0.5 text-center leading-tight px-1">{getPlatformDisplayName(platform)}</span>
+    </div>
+  );
+}
 
 function getScoreColor(score: string | null): string {
   if (!score) return "bg-gray-100 text-gray-500";
@@ -221,12 +232,16 @@ export default function SavedAlertsPage() {
 
           {/* Loading */}
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 animate-pulse">
-                  <div className="h-32 bg-gray-100 rounded-lg mb-3" />
-                  <div className="h-4 bg-gray-100 rounded w-3/4 mb-2" />
-                  <div className="h-4 bg-gray-100 rounded w-1/2" />
+                <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 animate-pulse">
+                  <div className="flex gap-4">
+                    <div className="w-20 h-20 bg-gray-100 rounded-lg flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-100 rounded w-3/4 mb-2" />
+                      <div className="h-4 bg-gray-100 rounded w-1/2" />
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -249,7 +264,7 @@ export default function SavedAlertsPage() {
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-3">
               {saved.map((item) => (
                 <div
                   key={item.id}
@@ -257,70 +272,92 @@ export default function SavedAlertsPage() {
                     item.isFavorite ? "border-yellow-300" : "border-gray-200"
                   }`}
                 >
-                  {/* Bild */}
-                  {item.alert.imageUrl && (
-                    <div className="h-40 bg-gray-100 relative overflow-hidden">
-                      <img
-                        src={item.alert.imageUrl}
-                        alt={item.alert.title}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                      {/* Score Badge */}
-                      {item.alert.priceScore && (
-                        <div className={`absolute top-2 right-2 px-2 py-1 rounded-lg text-xs font-bold ${getScoreColor(item.alert.priceScore)}`}>
-                          {item.alert.priceScore}/10
-                        </div>
-                      )}
-                      {/* Favorit Badge */}
-                      {item.isFavorite && (
-                        <div className="absolute top-2 left-2 bg-yellow-400 text-white px-2 py-1 rounded-lg text-xs font-bold">
-                          ⭐ Favorit
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   <div className="p-4">
-                    {/* Plattform */}
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-gray-500">
-                        {getPlatformDisplayName(item.alert.platform)}
-                      </span>
-                      {!item.alert.imageUrl && item.isFavorite && (
-                        <span className="text-yellow-500 text-sm">⭐</span>
+                    {/* Hauptbereich: Bild links, Content rechts */}
+                    <div className="flex gap-4">
+                      {/* Thumbnail */}
+                      {item.alert.imageUrl ? (
+                        <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative">
+                          <img
+                            src={item.alert.imageUrl}
+                            alt={item.alert.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.classList.add("flex", "flex-col", "items-center", "justify-center");
+                                const icon = document.createElement("span");
+                                icon.className = "text-gray-300 text-2xl";
+                                icon.textContent = "📷";
+                                parent.appendChild(icon);
+                              }
+                            }}
+                          />
+                          {/* Score Badge */}
+                          {item.alert.priceScore && (
+                            <div className={`absolute top-0.5 right-0.5 px-1 py-0.5 rounded text-[10px] font-bold ${getScoreColor(item.alert.priceScore)}`}>
+                              {item.alert.priceScore}/10
+                            </div>
+                          )}
+                          {/* Favorit Badge */}
+                          {item.isFavorite && (
+                            <div className="absolute top-0.5 left-0.5 bg-yellow-400 text-white px-1 py-0.5 rounded text-[10px] font-bold">
+                              ⭐
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <CameraPlaceholder platform={item.alert.platform} />
+                          {item.isFavorite && (
+                            <div className="absolute top-0.5 left-0.5 bg-yellow-400 text-white px-1 py-0.5 rounded text-[10px] font-bold">
+                              ⭐
+                            </div>
+                          )}
+                        </div>
                       )}
-                    </div>
 
-                    {/* Titel */}
-                    <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 text-sm">
-                      {item.alert.title}
-                    </h3>
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        {/* Plattform */}
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-gray-500">
+                            {getPlatformDisplayName(item.alert.platform)}
+                          </span>
+                          {!item.alert.imageUrl && item.alert.priceScore && (
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${getScoreColor(item.alert.priceScore)}`}>
+                              {item.alert.priceScore}/10
+                            </span>
+                          )}
+                        </div>
 
-                    {/* Preis */}
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-lg font-bold text-gray-900">
-                        {formatPrice(item.alert.price)}
-                      </span>
-                    </div>
+                        {/* Titel */}
+                        <h3 className="font-semibold text-gray-900 text-sm line-clamp-1">
+                          {item.alert.title}
+                        </h3>
 
-                    {/* Suche + Datum */}
-                    <div className="text-xs text-gray-400 mb-2">
-                      Suche: &ldquo;{item.alert.search.query}&rdquo; · Gespeichert am {formatDate(item.createdAt)}
-                    </div>
+                        {/* Preis */}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-base font-bold text-gray-900">
+                            {formatPrice(item.alert.price)}
+                          </span>
+                          {item.alert.isScam && (
+                            <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-medium">🚨 Betrug</span>
+                          )}
+                        </div>
 
-                    {/* Scam-Warnung */}
-                    {item.alert.isScam && (
-                      <div className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-lg mb-2">
-                        🚨 Verdacht auf Betrug!
+                        {/* Suche + Datum */}
+                        <div className="text-xs text-gray-400 mt-1">
+                          &ldquo;{item.alert.search.query}&rdquo; · Gespeichert am {formatDate(item.createdAt)}
+                        </div>
                       </div>
-                    )}
+                    </div>
 
                     {/* Notiz */}
                     {editingNoteId === item.id ? (
-                      <div className="mb-3">
+                      <div className="mt-3">
                         <textarea
                           value={noteText}
                           onChange={(e) => setNoteText(e.target.value)}
@@ -347,7 +384,7 @@ export default function SavedAlertsPage() {
                       </div>
                     ) : item.note ? (
                       <div
-                        className="text-xs bg-blue-50 text-blue-700 px-2 py-1.5 rounded-lg mb-3 cursor-pointer hover:bg-blue-100 transition"
+                        className="text-xs bg-blue-50 text-blue-700 px-2 py-1.5 rounded-lg mt-3 cursor-pointer hover:bg-blue-100 transition"
                         onClick={() => startEditNote(item)}
                       >
                         📝 {item.note}
@@ -355,14 +392,14 @@ export default function SavedAlertsPage() {
                     ) : (
                       <button
                         onClick={() => startEditNote(item)}
-                        className="text-xs text-gray-400 hover:text-gray-600 mb-3 block transition"
+                        className="text-xs text-gray-400 hover:text-gray-600 mt-3 block transition"
                       >
                         + Notiz hinzufügen
                       </button>
                     )}
 
                     {/* Aktionen */}
-                    <div className="flex gap-2 pt-3 border-t border-gray-100">
+                    <div className="flex gap-2 pt-3 mt-3 border-t border-gray-100">
                       <a
                         href={item.alert.url}
                         target="_blank"

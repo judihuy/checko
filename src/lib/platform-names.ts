@@ -1,4 +1,5 @@
-// Platform display names and country groupings
+// Plattform-Anzeigenamen — zentrale Mapping-Datei
+// NIEMALS Slugs direkt im Frontend anzeigen!
 
 const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   "ebay-ka": "Kleinanzeigen.de",
@@ -6,17 +7,40 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   "ricardo": "Ricardo.ch",
   "autoscout": "AutoScout24.ch",
   "comparis": "Comparis.ch",
+  "willhaben": "Willhaben.at",
 };
 
 export function getPlatformDisplayName(slug: string): string {
   return PLATFORM_DISPLAY_NAMES[slug] || slug;
 }
 
-// Country → platform slugs (used for country-level checkboxes in search form)
-export const COUNTRY_PLATFORMS: Record<string, readonly string[]> = {
-  "🇨🇭 Schweiz": ["tutti", "ricardo", "autoscout", "comparis"],
-  "🇩🇪 Deutschland": ["ebay-ka"],
-  "🇦🇹 Österreich (bald)": [],
-} as const;
+// Länder-Gruppen für die Suche
+export type CountryCode = "ch" | "de" | "at";
 
-export const ALL_PLATFORMS = Object.values(COUNTRY_PLATFORMS).flat();
+interface CountryConfig {
+  label: string;
+  flag: string;
+  platforms: string[];
+  enabled: boolean;
+}
+
+export const COUNTRY_PLATFORMS: Record<CountryCode, CountryConfig> = {
+  ch: {
+    label: "Schweiz",
+    flag: "🇨🇭",
+    platforms: ["tutti", "ricardo", "autoscout", "comparis"],
+    enabled: true,
+  },
+  de: {
+    label: "Deutschland",
+    flag: "🇩🇪",
+    platforms: ["ebay-ka"],
+    enabled: true,
+  },
+  at: {
+    label: "Österreich",
+    flag: "🇦🇹",
+    platforms: ["willhaben"],
+    enabled: false, // Coming soon
+  },
+};

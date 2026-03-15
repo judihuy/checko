@@ -35,7 +35,7 @@ export async function POST() {
     // Balance VOR dem Spin auslesen
     const userBefore = await prisma.user.findFirst({
       where: { id: session.user.id },
-      select: { checkosBalance: true },
+      select: { checkosBalance: true, bonusSpins: true },
     });
     const previousBalance = userBefore?.checkosBalance ?? 0;
 
@@ -48,11 +48,21 @@ export async function POST() {
       );
     }
 
+    // Aktualisierte Bonus-Spins auslesen
+    const userAfter = await prisma.user.findFirst({
+      where: { id: session.user.id },
+      select: { bonusSpins: true },
+    });
+
     return NextResponse.json({
       amount: result.amount,
       previousBalance,
       newBalance: previousBalance + (result.amount ?? 0),
-      message: `Du hast ${result.amount} Checkos gewonnen!`,
+      bonusSpin: result.bonusSpin,
+      bonusSpinsRemaining: userAfter?.bonusSpins ?? 0,
+      message: result.bonusSpin
+        ? `Du hast ${result.amount} Checkos gewonnen! (Bonus-Drehung)`
+        : `Du hast ${result.amount} Checkos gewonnen!`,
     });
   } catch (error) {
     console.error("Daily wheel error:", error);

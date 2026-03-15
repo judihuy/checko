@@ -16,7 +16,7 @@ export function Navbar() {
         <div className="flex justify-between h-16 items-center">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 text-xl font-bold text-emerald-700">
-            <span className="text-2xl">🦎</span>
+            <img src="/gecko-logo.png" alt="Checko" className="w-8 h-8 inline-block" />
             <span>Checko</span>
           </Link>
 
@@ -48,7 +48,7 @@ export function Navbar() {
                   href="/dashboard/checkos"
                   className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-medium transition"
                 >
-                  🦎 Checkos
+                  Checkos
                 </Link>
                 <NotificationBell />
                 <button
@@ -132,7 +132,7 @@ export function Navbar() {
                   className="block px-3 py-2 text-emerald-600 hover:bg-emerald-50 rounded font-medium"
                   onClick={() => setMobileOpen(false)}
                 >
-                  🦎 Checkos aufladen
+                  Checkos aufladen
                 </Link>
                 <Link
                   href="/dashboard/benachrichtigungen"

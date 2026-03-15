@@ -9,7 +9,7 @@ export function Footer() {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2 text-white text-lg font-bold mb-3">
-              <span className="text-xl">🦎</span>
+              <img src="/gecko-logo.png" alt="Checko" className="w-6 h-6 inline-block" />
               <span>Checko</span>
             </div>
             <p className="text-sm">

@@ -289,10 +289,10 @@ function CheckosKaufContent() {
               onClick={() => handleCheckout(pkg.checkos, pkg.priceId)}
               disabled={purchasing}
               className={`relative rounded-2xl p-5 text-center transition-all duration-200 cursor-pointer
-                ${purchasing ? "opacity-50 cursor-not-allowed" : "hover:scale-105 hover:shadow-xl"}
+                ${purchasing ? "opacity-50 cursor-not-allowed" : "hover:scale-105 hover:shadow-lg"}
                 ${pkg.popular
                   ? "bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-400 shadow-lg"
-                  : "bg-white border-2 border-gray-200 hover:border-emerald-300"
+                  : "bg-white border-2 border-gray-200 hover:border-emerald-500"
                 }
               `}
             >

@@ -27,7 +27,7 @@ interface Search {
 }
 
 const ALL_PLATFORMS = [
-  { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "Cloudflare-Schutz" },
+  { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode, disabled: false },
   { id: "ricardo", name: "Ricardo.ch", country: "ch" as CountryCode, disabled: false },
   { id: "autoscout", name: "AutoScout24.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "Bot-Schutz" },
   { id: "comparis", name: "Comparis.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "DataDome-Schutz" },
@@ -35,7 +35,7 @@ const ALL_PLATFORMS = [
   { id: "willhaben", name: "Willhaben.at", country: "at" as CountryCode, disabled: false },
 ];
 
-// Nur aktive Plattformen: ohne AT und ohne deaktivierte (tutti, autoscout, comparis komplett ausblenden)
+// Nur aktive Plattformen: ohne AT und ohne deaktivierte (autoscout, comparis komplett ausblenden)
 const ACTIVE_PLATFORMS = ALL_PLATFORMS.filter((p) => p.country !== "at" && !("disabled" in p && p.disabled));
 
 // Basiskosten pro Dauer (Standard-Stufe = 2 Checkos)
@@ -139,7 +139,7 @@ export default function PreisradarPage() {
   const [query, setQuery] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["ricardo", "ebay-ka"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo", "ebay-ka"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
   const [category, setCategory] = useState("");

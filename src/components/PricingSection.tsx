@@ -1,31 +1,99 @@
-// Pricing section — Checko-Pakete statt Abo-Rabattstufen
+// Pricing section — Checko-Pakete klickbar mit Stripe Checkout
+// Eingeloggt → POST /api/stripe/checkout → Stripe
+// Nicht eingeloggt → Redirect zu /login?callbackUrl=/dashboard/checkos
 "use client";
+
+import { useState } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 const PACKAGES = [
   {
     amount: 20,
+    priceId: "price_1TBA0mDu7PSxvnovrngeJBlq",
     price: "CHF 20.00",
     perChecko: "CHF 1.00",
     savings: "",
+    discountPercent: 0,
     popular: false,
+    emoji: "🦎",
   },
   {
     amount: 50,
+    priceId: "price_1TBA19Du7PSxvnovj3OaduIm",
     price: "CHF 45.00",
     perChecko: "CHF 0.90",
     savings: "Spare 10%",
+    discountPercent: 10,
     popular: true,
+    emoji: "🔥",
   },
   {
     amount: 100,
+    priceId: "price_1TBA1IDu7PSxvnovyfotwnT5",
     price: "CHF 85.00",
     perChecko: "CHF 0.85",
     savings: "Spare 15%",
+    discountPercent: 15,
     popular: false,
+    emoji: "⚡",
+  },
+  {
+    amount: 250,
+    priceId: "price_1TBA1JDu7PSxvnovEKMNnI4R",
+    price: "CHF 200.00",
+    perChecko: "CHF 0.80",
+    savings: "Spare 20%",
+    discountPercent: 20,
+    popular: false,
+    emoji: "💎",
   },
 ];
 
 export function PricingSection() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [loadingPkg, setLoadingPkg] = useState<number | null>(null);
+  const [error, setError] = useState("");
+
+  async function handleBuy(amount: number, priceId: string) {
+    // Nicht eingeloggt → Login mit Callback
+    if (!session) {
+      router.push("/login?callbackUrl=/dashboard/checkos");
+      return;
+    }
+
+    if (loadingPkg !== null) return;
+    setLoadingPkg(amount);
+    setError("");
+
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checkos: amount, priceId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Fehler beim Erstellen der Checkout-Session");
+        return;
+      }
+
+      if (data.url) {
+        window.open(data.url, "_blank");
+      } else {
+        setError("Keine Checkout-URL erhalten");
+      }
+    } catch {
+      setError("Netzwerkfehler. Bitte versuche es erneut.");
+    } finally {
+      setLoadingPkg(null);
+    }
+  }
+
+  const isLoading = status === "loading";
+
   return (
     <section id="preise" className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -39,58 +107,82 @@ export function PricingSection() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
-          {PACKAGES.map((pkg, index) => (
-            <div
-              key={index}
-              className={`relative rounded-2xl p-6 text-center transition-all ${
-                pkg.popular
-                  ? "bg-emerald-600 text-white shadow-xl scale-105"
-                  : "bg-gray-50 border-2 border-gray-200"
-              }`}
-            >
-              {pkg.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-800 text-white text-xs px-3 py-1 rounded-full font-medium">
-                  Beliebt
-                </div>
-              )}
+        {/* Fehlermeldung */}
+        {error && (
+          <div className="mb-6 max-w-3xl mx-auto p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm text-center">
+            {error}
+          </div>
+        )}
 
-              {pkg.savings && (
-                <div
-                  className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full mb-3 ${
-                    pkg.popular
-                      ? "bg-emerald-500 text-white"
-                      : "bg-emerald-100 text-emerald-700"
-                  }`}
-                >
-                  {pkg.savings}
-                </div>
-              )}
-              {!pkg.savings && <div className="h-6 mb-3" />}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto">
+          {PACKAGES.map((pkg) => {
+            const isThisLoading = loadingPkg === pkg.amount;
+            const isAnyLoading = loadingPkg !== null;
 
-              <div className="mb-1">
-                <span className="text-4xl font-bold">{pkg.amount}</span>
-              </div>
-              <p
-                className={`text-sm mb-4 ${
-                  pkg.popular ? "text-emerald-100" : "text-gray-500"
-                }`}
+            return (
+              <button
+                key={pkg.amount}
+                onClick={() => handleBuy(pkg.amount, pkg.priceId)}
+                disabled={isAnyLoading || isLoading}
+                className={`relative rounded-2xl p-6 text-center transition-all duration-200 cursor-pointer
+                  ${isAnyLoading || isLoading ? "opacity-50 cursor-not-allowed" : "hover:scale-105 hover:border-emerald-500 hover:shadow-lg"}
+                  ${pkg.popular
+                    ? "bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-400 shadow-lg"
+                    : "bg-gray-50 border-2 border-gray-200"
+                  }
+                `}
               >
-                Checkos
-              </p>
+                {pkg.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap">
+                    🔥 Beliebt
+                  </div>
+                )}
 
-              <div className="mb-1">
-                <span className="text-2xl font-bold">{pkg.price}</span>
-              </div>
-              <p
-                className={`text-xs ${
-                  pkg.popular ? "text-emerald-200" : "text-gray-400"
-                }`}
-              >
-                {pkg.perChecko} pro Checko
-              </p>
-            </div>
-          ))}
+                {pkg.savings && (
+                  <div
+                    className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full mb-3 ${
+                      pkg.popular
+                        ? "bg-emerald-200 text-emerald-800"
+                        : "bg-emerald-100 text-emerald-700"
+                    }`}
+                  >
+                    {pkg.savings}
+                  </div>
+                )}
+                {!pkg.savings && <div className="h-6 mb-3" />}
+
+                {/* Emoji */}
+                <div className="text-3xl mb-2">{pkg.emoji}</div>
+
+                <div className="mb-1">
+                  <span className="text-3xl font-bold text-gray-900">{pkg.amount}</span>
+                </div>
+                <p className="text-sm text-gray-500 mb-3">Checkos</p>
+
+                <div className="mb-1">
+                  <span className="text-xl font-bold text-gray-900">{pkg.price}</span>
+                </div>
+                <p className="text-xs text-gray-400 mb-2">
+                  {pkg.perChecko} pro Checko
+                </p>
+
+                {/* Loading-Indikator */}
+                {isThisLoading && (
+                  <div className="mt-2">
+                    <div className="animate-spin inline-block w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full" />
+                    <p className="text-xs text-emerald-600 mt-1">Wird vorbereitet...</p>
+                  </div>
+                )}
+
+                {/* CTA-Hinweis wenn nicht loading */}
+                {!isThisLoading && (
+                  <div className="mt-2 text-xs font-medium text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {session ? "Jetzt kaufen →" : "Anmelden & kaufen →"}
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Qualitätsstufen */}

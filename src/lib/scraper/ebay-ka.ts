@@ -218,10 +218,13 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
     const priceRegex = /class="aditem-main--middle--price-shipping--price"[^>]*>\s*([\d.,]+)\s*€/gi;
     // Alle Anzeigen-Links
     const hrefRegex = /data-href="(\/s-anzeige\/[^"]+)"/gi;
+    // Alle Bilder
+    const imgRegex = /src="(https:\/\/img\.kleinanzeigen\.de[^"]+)"/gi;
 
     const titles: string[] = [];
     const prices: number[] = [];
     const urls: string[] = [];
+    const images: string[] = [];
 
     let m;
     while ((m = titleRegex.exec(html)) !== null) {
@@ -234,6 +237,9 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
     while ((m = hrefRegex.exec(html)) !== null) {
       urls.push(m[1]);
     }
+    while ((m = imgRegex.exec(html)) !== null) {
+      images.push(m[1]);
+    }
 
     const count = Math.min(titles.length, prices.length);
     for (let i = 0; i < count; i++) {
@@ -245,7 +251,7 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
         title: titles[i],
         price,
         url: urls[i] ? `${this.baseUrl}${urls[i]}` : searchUrl,
-        imageUrl: null,
+        imageUrl: images[i] || null,
         platform: this.platform,
         scrapedAt: new Date(),
       });

@@ -87,6 +87,62 @@ export class RicardoScraper extends BaseScraper {
   }
 
   /**
+   * Preis aus einem offers-Objekt oder offers-Array extrahieren
+   * Unterstützt: offers.price, offers.lowPrice, offers.highPrice,
+   * offers als Array mit erstem Element, und verschachtelte Strukturen
+   */
+  private extractPriceFromOffers(offers: unknown): number {
+    if (!offers) return 0;
+
+    // Falls offers ein Array ist → erstes Element nehmen
+    const offer = Array.isArray(offers) ? offers[0] : offers;
+    if (!offer || typeof offer !== "object") return 0;
+
+    const o = offer as Record<string, unknown>;
+
+    // Versuche verschiedene Preis-Felder in Prioritäts-Reihenfolge
+    const priceFields = ["price", "lowPrice", "highPrice"];
+    for (const field of priceFields) {
+      const val = o[field];
+      if (val === undefined || val === null || val === "") continue;
+
+      const parsed = typeof val === "number" ? val : parseFloat(String(val).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+
+    return 0;
+  }
+
+  /**
+   * Bild-URL aus einem JSON-LD image-Feld extrahieren
+   * Unterstützt: string, {url: string}, [{url: string}], [string]
+   */
+  private extractImageUrl(image: unknown): string | null {
+    if (!image) return null;
+    if (typeof image === "string" && image.length > 0) return image;
+
+    // Array → erstes Element
+    if (Array.isArray(image)) {
+      const first = image[0];
+      if (typeof first === "string" && first.length > 0) return first;
+      if (first && typeof first === "object") {
+        const url = (first as Record<string, unknown>).url || (first as Record<string, unknown>).contentUrl;
+        if (typeof url === "string" && url.length > 0) return url;
+      }
+      return null;
+    }
+
+    // Objekt mit url/contentUrl
+    if (typeof image === "object" && image !== null) {
+      const obj = image as Record<string, unknown>;
+      const url = obj.url || obj.contentUrl;
+      if (typeof url === "string" && url.length > 0) return url;
+    }
+
+    return null;
+  }
+
+  /**
    * Parse JSON-LD schema.org ItemList aus dem HTML
    * Ricardo liefert ein <script type="application/ld+json" id="srps-json-ld"> mit:
    * { "@context": "https://schema.org", "@graph": [
@@ -97,6 +153,12 @@ export class RicardoScraper extends BaseScraper {
    *     }}
    *   ]}
    * ]}
+   *
+   * Auch unterstützt:
+   * - offers als Array: "offers": [{ "price": "500.00", ... }]
+   * - offers.lowPrice / offers.highPrice als Fallback
+   * - price direkt auf dem Item
+   * - image als String, Objekt oder Array
    */
   private parseJsonLd(html: string, options?: ScraperOptions): ScraperResult[] {
     const results: ScraperResult[] = [];
@@ -126,23 +188,30 @@ export class RicardoScraper extends BaseScraper {
             const title = (item.name as string) || "";
             if (!title) continue;
 
-            // Preis aus offers extrahieren
-            let priceRaw = 0;
-            if (item.offers) {
-              const offers = item.offers;
-              priceRaw = typeof offers.price === "number"
-                ? offers.price
-                : parseFloat(String(offers.price || "0"));
-            } else if (typeof item.price === "number") {
-              priceRaw = item.price;
+            // Preis aus offers extrahieren (robust)
+            let priceRaw = this.extractPriceFromOffers(item.offers);
+
+            // Fallback: Preis direkt auf dem Item
+            if (priceRaw <= 0 && item.price !== undefined) {
+              const directPrice = typeof item.price === "number"
+                ? item.price
+                : parseFloat(String(item.price).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+              if (!isNaN(directPrice) && directPrice > 0) {
+                priceRaw = directPrice;
+              }
             }
 
             const price = Math.round(priceRaw * 100); // CHF → Rappen
-            if (isNaN(price) || price <= 0) continue;
 
-            // Preisfilter
-            if (options?.minPrice && price < options.minPrice) continue;
-            if (options?.maxPrice && price > options.maxPrice) continue;
+            // Treffer AUCH mit Preis 0 aufnehmen (besser als nichts)
+            // Nur explizit NaN rausfiltern
+            if (isNaN(price)) continue;
+
+            // Preisfilter (nur wenn Preis > 0, damit 0-Preis-Items durchkommen)
+            if (price > 0) {
+              if (options?.minPrice && price < options.minPrice) continue;
+              if (options?.maxPrice && price > options.maxPrice) continue;
+            }
 
             // URL
             const url = (item.url as string) || "";
@@ -152,12 +221,8 @@ export class RicardoScraper extends BaseScraper {
                 ? `${this.baseUrl}${url}`
                 : `${this.baseUrl}/de/s/`;
 
-            // Bild
-            const imageUrl = typeof item.image === "string"
-              ? item.image
-              : typeof item.image === "object" && item.image !== null
-                ? ((item.image as Record<string, unknown>).url as string) || null
-                : null;
+            // Bild (robust)
+            const imageUrl = this.extractImageUrl(item.image);
 
             results.push({
               title,

@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       success: true,
       totalSearches: result.totalSearches,
       totalNewAlerts: result.totalNewAlerts,
+      skippedSearches: result.skippedSearches,
       errors: result.errors.length > 0 ? result.errors : undefined,
       timestamp: new Date().toISOString(),
     });

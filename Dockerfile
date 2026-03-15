@@ -32,7 +32,8 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 # ⚠️ OpenSSL ist PFLICHT für Prisma Engine!
-RUN apk add --no-cache openssl
+# ⚠️ Chromium + Deps sind PFLICHT für Puppeteer Scraper!
+RUN apk add --no-cache openssl chromium nss freetype harfbuzz ca-certificates ttf-freefont
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -52,6 +53,13 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/nodemailer ./node_modules/nodemailer
 # undici für Proxy-Support
 COPY --from=builder /app/node_modules/undici ./node_modules/undici
+# Puppeteer für Scraper (nutzt System-Chromium)
+COPY --from=builder /app/node_modules/puppeteer ./node_modules/puppeteer
+COPY --from=builder /app/node_modules/puppeteer-core ./node_modules/puppeteer-core
+
+# Puppeteer: System-Chromium verwenden (nicht eigenes downloaden)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 USER nextjs
 

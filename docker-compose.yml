@@ -23,6 +23,14 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_FROM=${SMTP_FROM}
+      - SCRAPER_PROXY=${SCRAPER_PROXY}
+      - CRON_SECRET=${CRON_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       checko-mysql:
         condition: service_healthy

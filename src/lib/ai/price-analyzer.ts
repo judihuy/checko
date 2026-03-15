@@ -1,6 +1,8 @@
 // KI-Preisbewertung mit Anthropic API (DIREKT, nicht OpenRouter!)
-// Modell: claude-haiku-4-5-20251001
-// Analysiert Preise und erkennt Scam-Angebote
+// Modell je nach Qualitätsstufe:
+// - Standard → claude-haiku-4-5-20251001 (schnell, günstig)
+// - Premium  → claude-sonnet-4-5-20250514 (ausführlicher)
+// - Pro      → claude-opus-4-20250514 (beste Qualität)
 
 export interface PriceAnalysis {
   priceScore: number;       // 1-10 (1=überteuert, 10=sehr günstig)
@@ -11,28 +13,26 @@ export interface PriceAnalysis {
 }
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-haiku-4-5-20251001";
+
+// Modelle pro Qualitätsstufe
+const TIER_MODELS: Record<string, string> = {
+  standard: "claude-haiku-4-5-20251001",
+  premium: "claude-sonnet-4-5-20250514",
+  pro: "claude-opus-4-20250514",
+};
+
+// Max Tokens pro Stufe (höhere Stufen = ausführlichere Antworten)
+const TIER_MAX_TOKENS: Record<string, number> = {
+  standard: 400,
+  premium: 800,
+  pro: 1200,
+};
 
 /**
- * Analysiere den Preis eines Inserats mit KI
+ * Standard-Prompt für Preisanalyse
  */
-export async function analyzePrice(
-  title: string,
-  price: number,          // in Rappen
-  platform: string,
-  category?: string,
-  description?: string
-): Promise<PriceAnalysis> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-
-  if (!apiKey) {
-    console.warn("ANTHROPIC_API_KEY nicht gesetzt — Fallback-Bewertung");
-    return getFallbackAnalysis();
-  }
-
-  const priceCHF = (price / 100).toFixed(2);
-
-  const prompt = `Du bist ein Schweizer Secondhand-Markt-Experte. Bewerte dieses Inserat.
+function getStandardPrompt(title: string, priceCHF: string, platform: string, category?: string, description?: string): string {
+  return `Du bist ein Schweizer Secondhand-Markt-Experte. Bewerte dieses Inserat.
 
 WICHTIG:
 - Berücksichtige das ALTER des Produkts anhand des Titels (z.B. "E53" = 2000-2006, "iPhone 12" = 2020)
@@ -56,8 +56,80 @@ Antworte NUR mit JSON:
   "isScam": <true/false — NUR bei unmöglich tiefen Preisen oder bekannten Scam-Mustern>,
   "details": "<kurze Erklärung warum dieser Preis so bewertet wird, max 2 Sätze>"
 }`;
+}
+
+/**
+ * Premium/Pro-Prompt: Ausführlicher, mehr Details
+ */
+function getPremiumPrompt(title: string, priceCHF: string, platform: string, tier: string, category?: string, description?: string): string {
+  const tierLabel = tier === "pro" ? "Pro (maximale Tiefe)" : "Premium (erweiterte Analyse)";
+
+  return `Du bist ein erfahrener Schweizer Secondhand-Markt-Experte mit tiefem Wissen über Preise, Marken und Markttrends. Erstelle eine ${tierLabel} Bewertung.
+
+ANALYSE-REGELN:
+- Berücksichtige das ALTER des Produkts anhand des Titels (z.B. "E53" = 2000-2006, "iPhone 12" = 2020)
+- Bei Autos: Ältere Modelle (10+ Jahre) können SEHR günstig sein — das ist KEIN Scam
+- Bei Elektronik: Ältere Generationen sind deutlich günstiger
+- "Scam" NUR wenn der Preis UNMÖGLICH tief ist (z.B. neues iPhone für 50 CHF)
+- "überteuert" und "isScam=true" dürfen NIEMALS gleichzeitig vorkommen!
+- Wenn etwas teuer ist, ist es per Definition kein Scam
+
+ZUSÄTZLICHE ANFORDERUNGEN (${tierLabel}):
+- Schätze den Neupreis und aktuellen Marktwert
+- Vergleiche mit typischen Preisen auf ${platform}
+- Bewerte den Zustand anhand der verfügbaren Informationen
+- Gib Verhandlungstipps wenn sinnvoll
+${tier === "pro" ? `- Erkenne mögliche versteckte Mängel aus dem Titel
+- Bewerte die Wertstabilität des Produkts
+- Gib eine Kauf-Empfehlung (kaufen/abwarten/meiden)` : ""}
+
+Inserat:
+- Titel: ${title}
+- Preis: CHF ${priceCHF}
+- Plattform: ${platform}
+- Kategorie: ${category || "Allgemein"}${description ? `\n- Beschreibung: ${description}` : ""}
+
+Antworte NUR mit JSON:
+{
+  "priceScore": <1-10, 10=sehr günstig, 1=überteuert>,
+  "bewertung": "<sehr günstig|günstig|fair|teuer|überteuert>",
+  "warnung": "<string oder null — NUR bei echten Problemen>",
+  "isScam": <true/false — NUR bei unmöglich tiefen Preisen oder bekannten Scam-Mustern>,
+  "details": "<ausführliche Erklärung: Neupreis-Schätzung, Marktvergleich, Zustandsbewertung, Verhandlungstipps${tier === "pro" ? ", Wertstabilität, Kauf-Empfehlung" : ""}. 3-5 Sätze.>"
+}`;
+}
+
+/**
+ * Analysiere den Preis eines Inserats mit KI
+ * @param qualityTier - "standard" | "premium" | "pro" — bestimmt Modell und Prompt-Tiefe
+ */
+export async function analyzePrice(
+  title: string,
+  price: number,          // in Rappen
+  platform: string,
+  category?: string,
+  description?: string,
+  qualityTier: string = "standard"
+): Promise<PriceAnalysis> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+
+  if (!apiKey) {
+    console.warn("ANTHROPIC_API_KEY nicht gesetzt — Fallback-Bewertung");
+    return getFallbackAnalysis();
+  }
+
+  const priceCHF = (price / 100).toFixed(2);
+  const model = TIER_MODELS[qualityTier] || TIER_MODELS["standard"];
+  const maxTokens = TIER_MAX_TOKENS[qualityTier] || TIER_MAX_TOKENS["standard"];
+
+  // Standard-Prompt oder Premium/Pro-Prompt
+  const prompt = qualityTier === "standard"
+    ? getStandardPrompt(title, priceCHF, platform, category, description)
+    : getPremiumPrompt(title, priceCHF, platform, qualityTier, category, description);
 
   try {
+    console.log(`[PriceAnalyzer] Modell: ${model} (Tier: ${qualityTier})`);
+
     const response = await fetch(ANTHROPIC_API_URL, {
       method: "POST",
       headers: {
@@ -66,8 +138,8 @@ Antworte NUR mit JSON:
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 400,
+        model,
+        max_tokens: maxTokens,
         messages: [
           {
             role: "user",
@@ -141,12 +213,13 @@ export async function analyzePriceBatch(
     platform: string;
     category?: string;
     description?: string;
-  }>
+  }>,
+  qualityTier: string = "standard"
 ): Promise<PriceAnalysis[]> {
   const results: PriceAnalysis[] = [];
 
   for (const item of items) {
-    const analysis = await analyzePrice(item.title, item.price, item.platform, item.category, item.description);
+    const analysis = await analyzePrice(item.title, item.price, item.platform, item.category, item.description, qualityTier);
     results.push(analysis);
 
     // Kleine Pause zwischen Anfragen (Rate-Limiting)

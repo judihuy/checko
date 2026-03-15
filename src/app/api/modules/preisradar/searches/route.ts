@@ -1,5 +1,5 @@
 // Preisradar Suchen API
-// POST: Neue Suche erstellen
+// POST: Neue Suche erstellen (+ Sofort-Suche im Hintergrund)
 // GET: Eigene Suchen auflisten
 
 import { NextRequest, NextResponse } from "next/server";
@@ -7,7 +7,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { chargeForSearch, calculateExpiresAt, getSearchCost } from "@/lib/scraper/scheduler";
+import { chargeForSearch, calculateExpiresAt, getSearchCost, runSearchJob } from "@/lib/scraper/scheduler";
+
+// Intervall-Optionen nach Qualitätsstufe
+const TIER_INTERVALS: Record<string, number> = {
+  standard: 30, // Alle 30 Minuten
+  premium: 15,  // Alle 15 Minuten
+  pro: 5,       // Alle 5 Minuten
+};
 
 // Zod-Schema für neue Suche
 const createSearchSchema = z.object({
@@ -17,6 +24,7 @@ const createSearchSchema = z.object({
   platforms: z.array(z.enum(["tutti", "ricardo", "ebay-ka", "autoscout", "comparis"])).min(1, "Mindestens 1 Plattform wählen"),
   duration: z.enum(["1d", "1w", "1m"]).default("1d"),
   qualityTier: z.enum(["standard", "premium", "pro"]).default("standard"),
+  interval: z.number().int().min(5).max(60).optional(),
 });
 
 // POST: Neue Suche erstellen
@@ -38,6 +46,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { query, maxPrice, minPrice, platforms, duration, qualityTier } = parsed.data;
+
+    // Intervall: Entweder explizit gesetzt oder vom Tier abgeleitet
+    const interval = parsed.data.interval || TIER_INTERVALS[qualityTier] || 30;
 
     // Preisvalidierung
     if (minPrice && maxPrice && minPrice > maxPrice) {
@@ -72,10 +83,16 @@ export async function POST(request: NextRequest) {
         platforms: platforms.join(","),
         duration,
         qualityTier,
+        interval,
         expiresAt: calculateExpiresAt(duration),
         checkosCharged: chargeResult.cost,
         isActive: true,
       },
+    });
+
+    // Feature A: Sofort-Suche im Hintergrund (fire-and-forget)
+    runSearchJob(search.id).catch((err) => {
+      console.error(`[Preisradar] Sofort-Suche fehlgeschlagen für ${search.id}:`, err);
     });
 
     return NextResponse.json({
@@ -86,9 +103,11 @@ export async function POST(request: NextRequest) {
         platforms: search.platforms,
         duration: search.duration,
         qualityTier: search.qualityTier,
+        interval: search.interval,
         expiresAt: search.expiresAt,
         checkosCharged: search.checkosCharged,
       },
+      message: "Suche erstellt! Der erste Scan läuft bereits im Hintergrund.",
     });
   } catch (error) {
     console.error("Preisradar search create error:", error);
@@ -131,6 +150,7 @@ export async function GET() {
         platforms: s.platforms.split(","),
         duration: s.duration,
         qualityTier: s.qualityTier,
+        interval: s.interval,
         status,
         alertCount: s._count.alerts,
         expiresAt: s.expiresAt,

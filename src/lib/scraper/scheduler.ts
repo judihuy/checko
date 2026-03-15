@@ -110,7 +110,7 @@ export async function runSearchJob(searchId: string): Promise<{
 
     const newResults = allResults.filter((r) => !existingUrls.has(r.url));
 
-    // KI-Bewertung für neue Treffer
+    // KI-Bewertung für neue Treffer — mit qualityTier!
     const alertsToCreate: Array<{
       title: string;
       price: number;
@@ -127,7 +127,10 @@ export async function runSearchJob(searchId: string): Promise<{
         const analysis = await analyzePrice(
           result.title,
           result.price,
-          result.platform
+          result.platform,
+          undefined,
+          undefined,
+          search.qualityTier
         );
 
         alertsToCreate.push({
@@ -228,14 +231,19 @@ export async function runSearchJob(searchId: string): Promise<{
 
 /**
  * Alle aktiven Suchen verarbeiten
+ * Berücksichtigt das Intervall jeder Suche:
+ * - Nur scrapen wenn lastScrapedAt + interval Minuten vergangen ist
+ * - Neue Suchen (lastScrapedAt = null) werden sofort gescrapt
  */
 export async function runAllActiveSearches(): Promise<{
   totalSearches: number;
   totalNewAlerts: number;
+  skippedSearches: number;
   errors: string[];
 }> {
   const errors: string[] = [];
   let totalNewAlerts = 0;
+  let skippedSearches = 0;
 
   try {
     // Alle aktiven, nicht abgelaufenen Suchen finden
@@ -247,12 +255,28 @@ export async function runAllActiveSearches(): Promise<{
           { expiresAt: { gt: new Date() } },
         ],
       },
-      select: { id: true },
+      select: { id: true, interval: true, lastScrapedAt: true, query: true },
     });
 
-    console.log(`[Scheduler] Starte ${activeSearches.length} aktive Suchen...`);
+    console.log(`[Scheduler] ${activeSearches.length} aktive Suchen gefunden, prüfe Intervalle...`);
+
+    const now = Date.now();
 
     for (const search of activeSearches) {
+      // Intervall-Prüfung: Nur scrapen wenn genug Zeit vergangen ist
+      if (search.lastScrapedAt) {
+        const intervalMs = (search.interval || 30) * 60 * 1000;
+        const timeSinceLastScrape = now - search.lastScrapedAt.getTime();
+
+        if (timeSinceLastScrape < intervalMs) {
+          const remainingMin = Math.ceil((intervalMs - timeSinceLastScrape) / 60000);
+          console.log(`[Scheduler] Suche "${search.query}" übersprungen — nächster Lauf in ${remainingMin} Min (Intervall: ${search.interval}min)`);
+          skippedSearches++;
+          continue;
+        }
+      }
+
+      console.log(`[Scheduler] Starte Suche "${search.query}" (Intervall: ${search.interval}min)...`);
       const result = await runSearchJob(search.id);
       totalNewAlerts += result.newAlerts;
       errors.push(...result.errors);
@@ -263,17 +287,20 @@ export async function runAllActiveSearches(): Promise<{
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    console.log(`[Scheduler] Fertig: ${activeSearches.length} Suchen, ${totalNewAlerts} neue Alerts, ${errors.length} Fehler`);
+    const executedCount = activeSearches.length - skippedSearches;
+    console.log(`[Scheduler] Fertig: ${executedCount}/${activeSearches.length} Suchen ausgeführt (${skippedSearches} übersprungen), ${totalNewAlerts} neue Alerts, ${errors.length} Fehler`);
 
     return {
       totalSearches: activeSearches.length,
       totalNewAlerts,
+      skippedSearches,
       errors,
     };
   } catch (error) {
     return {
       totalSearches: 0,
       totalNewAlerts: 0,
+      skippedSearches: 0,
       errors: [error instanceof Error ? error.message : String(error)],
     };
   }

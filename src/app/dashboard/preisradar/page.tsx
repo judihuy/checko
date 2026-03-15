@@ -16,6 +16,7 @@ interface Search {
   platforms: string[];
   duration: string;
   qualityTier: string;
+  interval: number;
   status: "aktiv" | "pausiert" | "abgelaufen";
   alertCount: number;
   expiresAt: string | null;
@@ -53,9 +54,33 @@ const DURATIONS = [
 ];
 
 const QUALITY_TIERS = [
-  { id: "standard", name: "Standard", desc: "Schnell und zuverlässig", checkos: 2 },
-  { id: "premium", name: "Premium", desc: "Bessere Qualität", checkos: 4 },
-  { id: "pro", name: "Pro", desc: "Maximale Qualität", checkos: 7 },
+  {
+    id: "standard",
+    name: "Standard",
+    desc: "Schnell und zuverlässig",
+    checkos: 2,
+    interval: 30,
+    intervalLabel: "Alle 30 Minuten",
+    model: "Haiku",
+  },
+  {
+    id: "premium",
+    name: "Premium",
+    desc: "Bessere Qualität & häufiger",
+    checkos: 4,
+    interval: 15,
+    intervalLabel: "Alle 15 Minuten",
+    model: "Sonnet",
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    desc: "Maximale Qualität & Echtzeit",
+    checkos: 7,
+    interval: 5,
+    intervalLabel: "Alle 5 Minuten",
+    model: "Opus",
+  },
 ];
 
 export default function PreisradarPage() {
@@ -88,6 +113,12 @@ export default function PreisradarPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
+
+  // Intervall wird automatisch vom qualityTier abgeleitet
+  const currentInterval = useMemo(() => {
+    const tier = QUALITY_TIERS.find((t) => t.id === qualityTier);
+    return tier?.interval || 30;
+  }, [qualityTier]);
 
   // Live-Kostenberechnung: Dauer-Kosten skaliert nach Qualitätsstufe
   const currentCost = useMemo(() => {
@@ -192,6 +223,7 @@ export default function PreisradarPage() {
           platforms: selectedPlatforms,
           duration,
           qualityTier,
+          interval: currentInterval,
         }),
       });
 
@@ -210,7 +242,7 @@ export default function PreisradarPage() {
       setSelectedPlatforms(["tutti", "ricardo"]);
       setDuration("1d");
       setQualityTier("standard");
-      setSuccessMessage("Suche erstellt! Du wirst benachrichtigt bei Treffern.");
+      setSuccessMessage("🚀 Suche erstellt! Der erste Scan läuft bereits im Hintergrund.");
       setTimeout(() => setSuccessMessage(null), 5000);
       await loadSearches();
     } catch {
@@ -276,12 +308,18 @@ export default function PreisradarPage() {
   const getQualityBadge = (tier: string) => {
     switch (tier) {
       case "premium":
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Premium</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">⚡ Premium</span>;
       case "pro":
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">Pro</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">🔥 Pro</span>;
       default:
         return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Standard</span>;
     }
+  };
+
+  const getIntervalLabel = (interval: number) => {
+    if (interval <= 5) return "Alle 5 Min";
+    if (interval <= 15) return "Alle 15 Min";
+    return "Alle 30 Min";
   };
 
   const getPlatformName = (id: string) => PLATFORMS.find((p) => p.id === id)?.name || id;
@@ -401,6 +439,7 @@ export default function PreisradarPage() {
                     )}
                     <p>🔔 {search.alertCount} Treffer</p>
                     <p>⏱ {DURATIONS.find((d) => d.id === search.duration)?.name || search.duration}</p>
+                    <p>🔄 {getIntervalLabel(search.interval)}</p>
                     <p>🦎 {search.checkosCharged} Checko{search.checkosCharged > 1 ? "s" : ""} bezahlt</p>
                     {search.expiresAt && (
                       <p>📅 Läuft ab: {new Date(search.expiresAt).toLocaleDateString("de-CH")}</p>
@@ -550,10 +589,10 @@ export default function PreisradarPage() {
                   </div>
                 </div>
 
-                {/* Qualitätsstufe — VOR Dauer, damit User zuerst Qualität wählt */}
+                {/* Qualitätsstufe — mit Intervall-Info */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    KI-Qualitätsstufe
+                    KI-Qualitätsstufe & Scan-Intervall
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {QUALITY_TIERS.map((tier) => (
@@ -573,6 +612,12 @@ export default function PreisradarPage() {
                       >
                         <div className="font-medium text-sm">{tier.name}</div>
                         <div className="text-xs text-gray-500 mt-0.5">{tier.desc}</div>
+                        <div className="text-xs font-semibold mt-1">
+                          🔄 {tier.intervalLabel}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          🤖 {tier.model}
+                        </div>
                         <div className="text-xs font-semibold mt-1">
                           {tier.checkos} Checko{tier.checkos > 1 ? "s" : ""}
                         </div>
@@ -622,6 +667,8 @@ export default function PreisradarPage() {
                         {DURATIONS.find((d) => d.id === duration)?.name || duration}
                         {" · "}
                         {QUALITY_TIERS.find((t) => t.id === qualityTier)?.name || "Standard"}
+                        {" · "}
+                        {QUALITY_TIERS.find((t) => t.id === qualityTier)?.intervalLabel || "Alle 30 Minuten"}
                       </div>
                     </div>
                     <span className="text-lg font-bold text-emerald-800">
@@ -633,6 +680,13 @@ export default function PreisradarPage() {
                       💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 2} Checko{(DURATION_BASE_COSTS[duration] || 2) > 1 ? "s" : ""} kosten
                     </div>
                   )}
+                </div>
+
+                {/* Sofort-Suche Hinweis */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs text-blue-700">
+                    🚀 <strong>Sofort-Scan:</strong> Deine Suche wird direkt nach dem Erstellen gescannt — du musst nicht auf den nächsten Cron-Lauf warten!
+                  </p>
                 </div>
 
                 {/* Submit */}
@@ -765,15 +819,17 @@ export default function PreisradarPage() {
                   </div>
                 </div>
 
-                {/* Info: Dauer/Qualität nicht änderbar */}
+                {/* Info: Dauer/Qualität/Intervall nicht änderbar */}
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                   <p className="text-xs text-gray-500">
-                    ℹ️ Dauer und KI-Qualitätsstufe können nach der Erstellung nicht mehr geändert werden, da die Checkos bereits berechnet wurden.
+                    ℹ️ Dauer, KI-Qualitätsstufe und Scan-Intervall können nach der Erstellung nicht mehr geändert werden, da die Checkos bereits berechnet wurden.
                   </p>
                   <div className="flex gap-3 mt-2 text-sm text-gray-700">
                     <span>⏱ {DURATIONS.find((d) => d.id === editingSearch.duration)?.name || editingSearch.duration}</span>
                     <span>·</span>
                     <span>{QUALITY_TIERS.find((t) => t.id === editingSearch.qualityTier)?.name || "Standard"}</span>
+                    <span>·</span>
+                    <span>🔄 {getIntervalLabel(editingSearch.interval)}</span>
                   </div>
                 </div>
 

@@ -8,6 +8,7 @@ import Link from "next/link";
 interface Notification {
   id: string;
   type: string;
+  category?: string;
   title: string;
   message: string;
   link: string | null;
@@ -16,6 +17,14 @@ interface Notification {
 }
 
 const PAGE_SIZE = 10;
+
+const CATEGORY_TABS = [
+  { id: "", label: "Alle", emoji: "📋" },
+  { id: "wheel", label: "Glücksrad", emoji: "🎰" },
+  { id: "preisradar", label: "Preisradar", emoji: "📡" },
+  { id: "checkos", label: "Checkos", emoji: "💰" },
+  { id: "system", label: "System", emoji: "🔔" },
+];
 
 export default function BenachrichtigungenPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -26,13 +35,17 @@ export default function BenachrichtigungenPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkActing, setBulkActing] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("");
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/notifications?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`
-      );
+      const params = new URLSearchParams();
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(page * PAGE_SIZE));
+      if (categoryFilter) params.set("category", categoryFilter);
+
+      const res = await fetch(`/api/notifications?${params}`);
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications);
@@ -43,7 +56,7 @@ export default function BenachrichtigungenPage() {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, categoryFilter]);
 
   useEffect(() => {
     fetchNotifications();
@@ -274,6 +287,26 @@ export default function BenachrichtigungenPage() {
             ⚙️ Einstellungen
           </Link>
         </div>
+      </div>
+
+      {/* Kategorie-Filter-Tabs */}
+      <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
+        {CATEGORY_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => {
+              setCategoryFilter(tab.id);
+              setPage(0);
+            }}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition ${
+              categoryFilter === tab.id
+                ? "bg-emerald-600 text-white"
+                : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {tab.emoji} {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Bulk-Aktionsleiste */}

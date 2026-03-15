@@ -1,5 +1,5 @@
 // GET /api/notifications — Eigene Benachrichtigungen laden
-// Query params: ?unread=true&limit=10&offset=0
+// Query params: ?unread=true&limit=10&offset=0&category=wheel
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -20,12 +20,14 @@ export async function GET(request: NextRequest) {
   const unreadOnly = searchParams.get("unread") === "true";
   const limit = Math.min(parseInt(searchParams.get("limit") || "10", 10), 50);
   const offset = Math.max(parseInt(searchParams.get("offset") || "0", 10), 0);
+  const category = searchParams.get("category") || undefined;
 
   const { notifications, total } = await getNotifications(
     session.user.id,
     limit,
     offset,
-    unreadOnly
+    unreadOnly,
+    category
   );
 
   return NextResponse.json({ notifications, total, limit, offset });

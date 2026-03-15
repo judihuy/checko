@@ -98,6 +98,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "E-Mail", type: "email" },
         password: { label: "Passwort", type: "password" },
+        rememberMe: { label: "Angemeldet bleiben", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -139,12 +140,15 @@ export const authOptions: NextAuthOptions = {
         // Erfolgreicher Login — Counter zurücksetzen
         resetLoginAttempts(normalizedEmail);
 
+        const wantsRemember = credentials.rememberMe === "true";
+
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           image: user.image,
           role: user.role,
+          rememberMe: wantsRemember,
         };
       },
     }),
@@ -163,6 +167,13 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: string }).role || "user";
+        // "Angemeldet bleiben": 30 Tage, sonst 24 Stunden (Session-like)
+        const rememberMe = (user as { rememberMe?: boolean }).rememberMe;
+        if (rememberMe) {
+          token.maxAge = 30 * 24 * 60 * 60; // 30 Tage
+        } else {
+          token.maxAge = 24 * 60 * 60; // 24 Stunden
+        }
       }
       return token;
     },

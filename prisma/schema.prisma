@@ -223,6 +223,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   type      String // "preisradar_alert", "welcome", "system", "referral"
+  category  String   @default("system") // "wheel", "preisradar", "checkos", "system"
   title     String   @db.Text
   message   String   @db.Text
   link      String?  @db.Text // Optional: Link zum Treffer/Seite
@@ -266,6 +267,9 @@ model PreisradarSearch {
   maxPrice       Int?
   minPrice       Int?
   platforms      String // Komma-getrennt: "tutti,ricardo,ebay-ka"
+  category       String?           // Hauptkategorie: Fahrzeuge, Elektronik, etc.
+  subcategory    String?           // Unterkategorie: Autos, Smartphones, etc.
+  condition      String?           // Zustand: Alle, Neu, Gebraucht
   isActive       Boolean           @default(true)
   duration       String            @default("1d") // "1d" | "1w" | "1m"
   qualityTier    String            @default("standard") // "standard" | "premium" | "pro"

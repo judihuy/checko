@@ -18,6 +18,7 @@ function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -37,6 +38,7 @@ function LoginForm() {
       const result = await signIn("credentials", {
         email,
         password,
+        rememberMe: rememberMe ? "true" : "false",
         redirect: false,
       });
 
@@ -102,10 +104,24 @@ function LoginForm() {
         </div>
       </div>
 
+      {/* Angemeldet bleiben Checkbox */}
+      <div className="flex items-center mt-4">
+        <input
+          id="rememberMe"
+          type="checkbox"
+          checked={rememberMe}
+          onChange={(e) => setRememberMe(e.target.checked)}
+          className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+        />
+        <label htmlFor="rememberMe" className="ml-2 text-sm text-gray-600 cursor-pointer select-none">
+          Angemeldet bleiben
+        </label>
+      </div>
+
       <button
         type="submit"
         disabled={loading}
-        className="w-full mt-6 bg-emerald-600 text-white py-2.5 rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full mt-4 bg-emerald-600 text-white py-2.5 rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Wird angemeldet..." : "Anmelden"}
       </button>

@@ -96,6 +96,15 @@ function getScoreLabel(score: number | null): string {
   return `${score}/10`;
 }
 
+function getScoreText(score: number | null): string {
+  if (score === null) return "";
+  if (score <= 3) return "❌ Überteuert";
+  if (score <= 5) return "⚠️ Durchschnittlich";
+  if (score <= 7) return "✅ Guter Preis";
+  if (score <= 9) return "🔥 Schnäppchen!";
+  return "💎 Aussergewöhnlich günstig!";
+}
+
 function getEmpfehlungColor(empfehlung: string): string {
   if (empfehlung === "Kaufen") return "bg-emerald-100 text-emerald-700";
   if (empfehlung === "Verhandeln") return "bg-yellow-100 text-yellow-700";
@@ -284,13 +293,13 @@ export default function PreisradarAlertsPage() {
   };
 
   const formatDate = (dateStr: string): string => {
-    return new Date(dateStr).toLocaleDateString("de-CH", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const d = new Date(dateStr);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    return `${day}.${month}.${year} um ${hours}:${minutes}`;
   };
 
   if (status === "loading") {
@@ -478,9 +487,18 @@ export default function PreisradarAlertsPage() {
                             )}
                           </div>
 
+                          {/* Score-Text */}
+                          {alert.priceScore !== null && (
+                            <div className="text-xs font-medium mt-1">
+                              <span className={getScoreColor(alert.priceScore).replace('bg-', 'text-').replace('100', '700')}>
+                                {getScoreText(alert.priceScore)}
+                              </span>
+                            </div>
+                          )}
+
                           {/* Suche + Datum */}
                           <div className="text-xs text-gray-400 mt-1">
-                            &ldquo;{alert.searchQuery}&rdquo; · {formatDate(alert.createdAt)}
+                            &ldquo;{alert.searchQuery}&rdquo; · Gefunden am {formatDate(alert.createdAt)}
                           </div>
                         </div>
                       </div>

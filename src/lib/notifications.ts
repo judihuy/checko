@@ -4,6 +4,16 @@
 import { prisma } from "@/lib/prisma";
 
 /**
+ * Kategorie aus dem Notification-Typ ableiten
+ */
+function inferCategory(type: string): string {
+  if (type.startsWith("wheel") || type === "daily_wheel" || type === "registration_wheel") return "wheel";
+  if (type.startsWith("preisradar")) return "preisradar";
+  if (type.includes("checko") || type.includes("gift") || type === "purchase" || type === "admin_gift") return "checkos";
+  return "system";
+}
+
+/**
  * Neue Benachrichtigung erstellen
  */
 export async function createNotification(
@@ -11,7 +21,8 @@ export async function createNotification(
   type: string,
   title: string,
   message: string,
-  link?: string
+  link?: string,
+  category?: string
 ) {
   return prisma.notification.create({
     data: {
@@ -20,6 +31,7 @@ export async function createNotification(
       title,
       message,
       link: link || null,
+      category: category || inferCategory(type),
     },
   });
 }
@@ -37,17 +49,21 @@ export async function getUnreadCount(userId: string): Promise<number> {
 }
 
 /**
- * Benachrichtigungen laden (mit Pagination)
+ * Benachrichtigungen laden (mit Pagination + optionalem Kategorie-Filter)
  */
 export async function getNotifications(
   userId: string,
   limit: number = 10,
   offset: number = 0,
-  unreadOnly: boolean = false
+  unreadOnly: boolean = false,
+  category?: string
 ) {
-  const where: { userId: string; isRead?: boolean } = { userId };
+  const where: { userId: string; isRead?: boolean; category?: string } = { userId };
   if (unreadOnly) {
     where.isRead = false;
+  }
+  if (category) {
+    where.category = category;
   }
 
   const [notifications, total] = await Promise.all([

@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { giftCheckos } from "@/lib/checkos";
 import { logAdminAction } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 export async function POST(
@@ -48,6 +49,21 @@ export async function POST(
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    // In-App Benachrichtigung erstellen
+    try {
+      await createNotification(
+        userId,
+        "admin_gift",
+        `🎁 ${amount} Checkos geschenkt!`,
+        description
+          ? `Admin hat dir ${amount} Checkos geschenkt: ${description}`
+          : `Admin hat dir ${amount} Checkos geschenkt!`,
+        "/dashboard/checkos"
+      );
+    } catch (notifError) {
+      console.error("Gift notification error:", notifError);
     }
 
     // AuditLog

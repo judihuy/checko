@@ -9,6 +9,7 @@ import { deductCheckos } from "@/lib/checkos";
 import { sendPreisradarAlertEmail } from "@/lib/email-preisradar";
 import { createNotification } from "@/lib/notifications";
 import { getPlatformDisplayName } from "@/lib/platform-names";
+import { getSetting } from "@/lib/settings";
 
 // Basiskosten pro Dauer (Standard-Stufe)
 const DURATION_BASE_COSTS: Record<string, number> = {
@@ -70,19 +71,26 @@ export async function runSearchJob(searchId: string): Promise<{
       return { success: false, newAlerts: 0, errors };
     }
 
-    // Alle Plattformen scrapen
+    // Alle Plattformen PARALLEL scrapen (Promise.allSettled)
     const allResults: ScraperResult[] = [];
 
-    for (const scraper of scrapers) {
+    console.log(`[Scheduler] Starte parallelen Scrape für ${scrapers.length} Plattformen: "${search.query}"...`);
+    const scrapePromises = scrapers.map(async (scraper) => {
       const scraperStart = Date.now();
-      console.log(`[Scheduler] Scraping ${scraper.displayName} für Suche "${search.query}"...`);
-      try {
-        const results = await scraper.scrape(search.query, {
-          minPrice: search.minPrice || undefined,
-          maxPrice: search.maxPrice || undefined,
-          limit: 20, // Max 20 Ergebnisse pro Plattform
-        });
-        const durationMs = Date.now() - scraperStart;
+      const results = await scraper.scrape(search.query, {
+        minPrice: search.minPrice || undefined,
+        maxPrice: search.maxPrice || undefined,
+        limit: 20,
+      });
+      const durationMs = Date.now() - scraperStart;
+      return { scraper, results, durationMs };
+    });
+
+    const scrapeResults = await Promise.allSettled(scrapePromises);
+
+    for (const result of scrapeResults) {
+      if (result.status === "fulfilled") {
+        const { scraper, results, durationMs } = result.value;
         if (results.length === 0) {
           const msg = `[Scheduler] ${scraper.displayName}: 0 Treffer nach ${durationMs}ms — möglicherweise blockiert oder Parse-Fehler`;
           console.warn(msg);
@@ -91,12 +99,11 @@ export async function runSearchJob(searchId: string): Promise<{
           console.log(`[Scheduler] ${scraper.displayName}: ${results.length} Treffer in ${durationMs}ms`);
         }
         allResults.push(...results);
-      } catch (error) {
-        const durationMs = Date.now() - scraperStart;
-        const errorDetail = error instanceof Error
-          ? `${error.message}${error.stack ? `\n${error.stack.split("\n").slice(0, 3).join("\n")}` : ""}`
-          : String(error);
-        const msg = `[Scheduler] ${scraper.displayName} FEHLER nach ${durationMs}ms: ${errorDetail}`;
+      } else {
+        const errorDetail = result.reason instanceof Error
+          ? `${result.reason.message}${result.reason.stack ? `\n${result.reason.stack.split("\n").slice(0, 3).join("\n")}` : ""}`
+          : String(result.reason);
+        const msg = `[Scheduler] Scraper FEHLER: ${errorDetail}`;
         errors.push(msg);
         console.error(msg);
       }
@@ -123,13 +130,16 @@ export async function runSearchJob(searchId: string): Promise<{
       isScam: boolean;
     }> = [];
 
+    // Kategorie-String für KI-Prompt zusammenbauen
+    const categoryLabel = [search.category, search.subcategory].filter(Boolean).join(" > ") || undefined;
+
     for (const result of newResults) {
       try {
         const analysis = await analyzePrice(
           result.title,
           result.price,
           result.platform,
-          undefined,
+          categoryLabel,
           undefined,
           search.qualityTier
         );

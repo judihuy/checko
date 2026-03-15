@@ -58,6 +58,25 @@ const DURATIONS = [
   { id: "1m", name: "1 Monat" },
 ];
 
+// ==================== KATEGORIEN ====================
+
+const CATEGORIES: Record<string, string[]> = {
+  "Fahrzeuge": ["Autos", "Motorräder", "Ersatzteile", "Zubehör", "Wohnmobile", "Fahrräder"],
+  "Elektronik": ["Smartphones", "Laptops", "Tablets", "Fernseher", "Kameras", "Audio", "Gaming"],
+  "Möbel": ["Sofas", "Tische", "Stühle", "Schränke", "Betten", "Regale"],
+  "Kleidung": ["Damen", "Herren", "Kinder", "Schuhe", "Accessoires"],
+  "Sport": ["Fitness", "Wintersport", "Radsport", "Outdoor", "Wassersport"],
+  "Haushalt": ["Küche", "Bad", "Reinigung", "Werkzeug", "Garten"],
+  "Immobilien": ["Wohnungen", "Häuser", "Grundstücke", "Gewerbe"],
+  "Sonstiges": ["Bücher", "Musik", "Filme", "Sammeln", "Kunst"],
+};
+
+const CONDITIONS = [
+  { id: "", name: "Alle Zustände" },
+  { id: "neu", name: "Neu" },
+  { id: "gebraucht", name: "Gebraucht" },
+];
+
 const QUALITY_TIERS = [
   {
     id: "standard",
@@ -118,6 +137,9 @@ export default function PreisradarPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo", "autoscout", "comparis"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
+  const [category, setCategory] = useState("");
+  const [subcategory, setSubcategory] = useState("");
+  const [condition, setCondition] = useState("");
 
   // Länder-Checkbox-State (für Neue Suche)
   const [selectedCountries, setSelectedCountries] = useState<Set<CountryCode>>(new Set(["ch"]));
@@ -282,6 +304,9 @@ export default function PreisradarPage() {
           duration,
           qualityTier,
           interval: currentInterval,
+          category: category || undefined,
+          subcategory: subcategory || undefined,
+          condition: condition || undefined,
         }),
       });
 
@@ -301,6 +326,9 @@ export default function PreisradarPage() {
       setSelectedCountries(new Set(["ch"]));
       setDuration("1d");
       setQualityTier("standard");
+      setCategory("");
+      setSubcategory("");
+      setCondition("");
       setSuccessMessage("🚀 Suche erstellt! Der erste Scan läuft bereits im Hintergrund.");
       setTimeout(() => setSuccessMessage(null), 5000);
       await loadSearches();
@@ -597,6 +625,58 @@ export default function PreisradarPage() {
                       min="0"
                       className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     />
+                  </div>
+                </div>
+
+                {/* Kategorie-Dropdowns */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Hauptkategorie
+                    </label>
+                    <select
+                      value={category}
+                      onChange={(e) => {
+                        setCategory(e.target.value);
+                        setSubcategory("");
+                      }}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm"
+                    >
+                      <option value="">Alle Kategorien</option>
+                      {Object.keys(CATEGORIES).map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Unterkategorie
+                    </label>
+                    <select
+                      value={subcategory}
+                      onChange={(e) => setSubcategory(e.target.value)}
+                      disabled={!category}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm disabled:opacity-50 disabled:bg-gray-50"
+                    >
+                      <option value="">Alle</option>
+                      {category && CATEGORIES[category]?.map((sub) => (
+                        <option key={sub} value={sub}>{sub}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Zustand
+                    </label>
+                    <select
+                      value={condition}
+                      onChange={(e) => setCondition(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm"
+                    >
+                      {CONDITIONS.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

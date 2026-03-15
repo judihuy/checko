@@ -26,6 +26,9 @@ const createSearchSchema = z.object({
   duration: z.enum(["1d", "1w", "1m"]).default("1d"),
   qualityTier: z.enum(["standard", "premium", "pro"]).default("standard"),
   interval: z.number().int().min(5).max(60).optional(),
+  category: z.string().max(100).optional(),
+  subcategory: z.string().max(100).optional(),
+  condition: z.string().max(50).optional(),
 });
 
 // POST: Neue Suche erstellen
@@ -49,7 +52,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { query, maxPrice, minPrice, platforms, duration, qualityTier } = parsed.data;
+    const { query, maxPrice, minPrice, platforms, duration, qualityTier, category: searchCategory, subcategory: searchSubcategory, condition: searchCondition } = parsed.data;
 
     // Intervall: Entweder explizit gesetzt oder vom Tier abgeleitet
     const interval = parsed.data.interval || TIER_INTERVALS[qualityTier] || 30;
@@ -85,6 +88,9 @@ export async function POST(request: NextRequest) {
         maxPrice: maxPrice || null,
         minPrice: minPrice || null,
         platforms: platforms.join(","),
+        category: searchCategory || null,
+        subcategory: searchSubcategory || null,
+        condition: searchCondition || null,
         duration,
         qualityTier,
         interval,

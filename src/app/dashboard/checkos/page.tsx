@@ -180,7 +180,7 @@ function CheckosKaufContent() {
       }
 
       if (data.url) {
-        window.location.href = data.url;
+        window.open(data.url, '_blank');
       } else {
         setError("Keine Checkout-URL erhalten");
       }

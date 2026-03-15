@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { DailyWheelWidgetWrapper } from "@/components/DailyWheelWidgetWrapper";
+import { LoginSummaryModal } from "@/components/LoginSummaryModal";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -85,6 +86,7 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
+      <LoginSummaryModal />
       <main className="flex-1 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}

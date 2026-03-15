@@ -11,6 +11,12 @@ interface WheelSettings {
   dailyEnabled: boolean;
 }
 
+interface IntervalSettings {
+  standardInterval: number;
+  premiumInterval: number;
+  proInterval: number;
+}
+
 export default function AdminSettingsPage() {
   const [wheelSettings, setWheelSettings] = useState<WheelSettings>({
     regMin: 1,
@@ -20,9 +26,16 @@ export default function AdminSettingsPage() {
     regEnabled: true,
     dailyEnabled: true,
   });
+  const [intervalSettings, setIntervalSettings] = useState<IntervalSettings>({
+    standardInterval: 30,
+    premiumInterval: 15,
+    proInterval: 5,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingIntervals, setSavingIntervals] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [intervalMessage, setIntervalMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Settings beim Laden der Seite abrufen
   useEffect(() => {
@@ -31,10 +44,18 @@ export default function AdminSettingsPage() {
 
   async function fetchSettings() {
     try {
-      const res = await fetch("/api/admin/settings/wheel");
-      if (!res.ok) throw new Error("Fehler beim Laden");
-      const data = await res.json();
-      setWheelSettings(data.settings);
+      const [wheelRes, intervalRes] = await Promise.all([
+        fetch("/api/admin/settings/wheel"),
+        fetch("/api/admin/settings/intervals"),
+      ]);
+      if (wheelRes.ok) {
+        const data = await wheelRes.json();
+        setWheelSettings(data.settings);
+      }
+      if (intervalRes.ok) {
+        const data = await intervalRes.json();
+        setIntervalSettings(data.settings);
+      }
     } catch {
       setMessage({ type: "error", text: "Einstellungen konnten nicht geladen werden." });
     } finally {
@@ -332,6 +353,123 @@ export default function AdminSettingsPage() {
                   }`}
                 >
                   {message.text}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Preisradar Intervall-Einstellungen */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          📡 Preisradar Scan-Intervalle
+        </h2>
+        <p className="text-sm text-gray-500 mb-6">
+          Definiere die Scan-Intervalle für jede Qualitätsstufe (in Minuten).
+          Neue Suchen verwenden diese Werte automatisch.
+        </p>
+
+        {loading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto" />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Standard (Minuten)
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  max={120}
+                  value={intervalSettings.standardInterval}
+                  onChange={(e) =>
+                    setIntervalSettings((s) => ({
+                      ...s,
+                      standardInterval: parseInt(e.target.value) || 30,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Premium (Minuten)
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  max={120}
+                  value={intervalSettings.premiumInterval}
+                  onChange={(e) =>
+                    setIntervalSettings((s) => ({
+                      ...s,
+                      premiumInterval: parseInt(e.target.value) || 15,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Pro (Minuten)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={intervalSettings.proInterval}
+                  onChange={(e) =>
+                    setIntervalSettings((s) => ({
+                      ...s,
+                      proInterval: parseInt(e.target.value) || 5,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 pt-2">
+              <button
+                onClick={async () => {
+                  setSavingIntervals(true);
+                  setIntervalMessage(null);
+                  try {
+                    const res = await fetch("/api/admin/settings/intervals", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(intervalSettings),
+                    });
+                    if (!res.ok) {
+                      const data = await res.json();
+                      throw new Error(data.error || "Fehler beim Speichern");
+                    }
+                    setIntervalMessage({ type: "success", text: "Intervall-Einstellungen gespeichert!" });
+                  } catch (err) {
+                    setIntervalMessage({
+                      type: "error",
+                      text: err instanceof Error ? err.message : "Fehler beim Speichern",
+                    });
+                  } finally {
+                    setSavingIntervals(false);
+                  }
+                }}
+                disabled={savingIntervals}
+                className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {savingIntervals ? "Speichern..." : "💾 Speichern"}
+              </button>
+              {intervalMessage && (
+                <span
+                  className={`text-sm ${
+                    intervalMessage.type === "success" ? "text-green-600" : "text-red-600"
+                  }`}
+                >
+                  {intervalMessage.text}
                 </span>
               )}
             </div>

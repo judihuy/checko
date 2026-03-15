@@ -8,6 +8,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAdminAction } from "@/lib/audit";
 import { z } from "zod";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
@@ -29,6 +30,9 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const rl = checkRateLimit(request, "admin-user-edit", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 403 });
@@ -126,6 +130,9 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const rl = checkRateLimit(_request, "admin-user-delete", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 403 });

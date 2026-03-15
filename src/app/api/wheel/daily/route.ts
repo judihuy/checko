@@ -7,8 +7,12 @@ import { authOptions } from "@/lib/auth";
 import { spinDailyWheel, getDailyWheelStatus } from "@/lib/wheel";
 import { prisma } from "@/lib/prisma";
 import { getWheelEnabledSettings, getWheelSettings } from "@/lib/settings";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rl = checkRateLimit(request, "wheel-daily", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -36,7 +40,10 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const rl = checkRateLimit(request, "wheel-daily-spin", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session) {

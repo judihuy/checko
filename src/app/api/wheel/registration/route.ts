@@ -7,8 +7,12 @@ import { authOptions } from "@/lib/auth";
 import { spinRegistrationWheel } from "@/lib/wheel";
 import { prisma } from "@/lib/prisma";
 import { getWheelEnabledSettings } from "@/lib/settings";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rl = checkRateLimit(request, "wheel-registration", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -37,6 +41,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const rl = checkRateLimit(request, "wheel-registration-spin", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session) {

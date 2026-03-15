@@ -8,6 +8,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { chargeForSearch, calculateExpiresAt, getSearchCost, runSearchJob } from "@/lib/scraper/scheduler";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 // Intervall-Optionen nach Qualitätsstufe
 const TIER_INTERVALS: Record<string, number> = {
@@ -29,6 +30,9 @@ const createSearchSchema = z.object({
 
 // POST: Neue Suche erstellen
 export async function POST(request: NextRequest) {
+  const rl = checkRateLimit(request, "preisradar-searches", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
@@ -119,7 +123,10 @@ export async function POST(request: NextRequest) {
 }
 
 // GET: Eigene Suchen auflisten
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rl = checkRateLimit(request, "preisradar-searches", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });

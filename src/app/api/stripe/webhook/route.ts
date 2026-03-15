@@ -10,8 +10,12 @@ import { prisma } from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 import { processAffiliateEarnings } from "@/lib/referral";
 import Stripe from "stripe";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
+  // Moderates Rate-Limiting als DDoS-Schutz (Stripe sendet nicht so viele)
+  const rl = checkRateLimit(request, "stripe-webhook", 60, 60 * 1000);
+  if (rl) return rl;
   // Raw body für Signatur-Verifizierung
   const body = await request.text();
   const headersList = await headers();

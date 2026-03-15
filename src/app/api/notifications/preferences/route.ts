@@ -6,8 +6,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getUserPreferences, updatePreference } from "@/lib/notifications";
 import { z } from "zod";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rl = checkRateLimit(request, "notifications-preferences", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
@@ -24,6 +28,9 @@ const updateSchema = z.object({
 });
 
 export async function PUT(request: NextRequest) {
+  const rl = checkRateLimit(request, "notifications-preferences", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });

@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,10 @@ async function requireAdmin() {
   return session;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rl = checkRateLimit(request, "admin-stats-wheel", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 403 });

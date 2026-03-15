@@ -6,11 +6,15 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { giftCheckos } from "@/lib/checkos";
 import { logAdminAction } from "@/lib/audit";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const rl = checkRateLimit(request, "admin-gift-checkos", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== "admin") {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 403 });

@@ -9,11 +9,15 @@ import { prisma } from "@/lib/prisma";
 import { logAdminAction } from "@/lib/audit";
 import { sendVerificationEmail } from "@/lib/email";
 import crypto from "crypto";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const rl = checkRateLimit(_request, "admin-resend-verification", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   // Nur admin darf
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== "admin") {

@@ -25,4 +25,4 @@ npm run dev
 Docker Container auf Hostinger VPS (separat von OpenClaw).
 
 ---
-© 2026 Checko — Ein Produkt von HuyDigital
+© 2026 Checko — Ein Produkt von Huy Digital

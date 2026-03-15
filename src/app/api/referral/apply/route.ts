@@ -5,12 +5,16 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { processReferral } from "@/lib/referral";
 import { z } from "zod";
+import { checkRateLimit, RATE_LIMIT_SENSITIVE } from "@/lib/rate-limit";
 
 const applySchema = z.object({
   referralCode: z.string().min(1, "Referral-Code fehlt.").max(20),
 });
 
 export async function POST(request: Request) {
+  const rl = checkRateLimit(request, "referral-apply", RATE_LIMIT_SENSITIVE.max, RATE_LIMIT_SENSITIVE.windowMs);
+  if (rl) return rl;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session) {

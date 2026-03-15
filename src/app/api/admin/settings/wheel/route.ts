@@ -9,6 +9,7 @@ import { z } from "zod";
 import { getWheelSettings, getWheelEnabledSettings } from "@/lib/settings";
 import { setSetting } from "@/lib/settings";
 import { logAdminAction } from "@/lib/audit";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
@@ -17,7 +18,10 @@ async function requireAdmin() {
 }
 
 // GET: Aktuelle Settings lesen (inkl. enabled-Status)
-export async function GET() {
+export async function GET(request: Request) {
+  const rl = checkRateLimit(request, "admin-settings-wheel", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 403 });
@@ -57,6 +61,9 @@ const wheelSettingsSchema = z.object({
 });
 
 export async function PUT(request: Request) {
+  const rl = checkRateLimit(request, "admin-settings-wheel", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 403 });

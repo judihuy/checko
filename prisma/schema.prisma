@@ -247,6 +247,16 @@ model NotificationPreference {
   @@unique([userId, channel])
 }
 
+// ==================== SYSTEM SETTINGS ====================
+
+model SystemSettings {
+  id    String @id @default("default")
+  key   String @unique
+  value String @db.Text
+
+  @@map("system_settings")
+}
+
 // ==================== PREISRADAR ====================
 
 model PreisradarSearch {
@@ -310,4 +320,10 @@ model SavedAlert {
   @@unique([userId, alertId])
   @@index([userId])
   @@index([alertId])
+}
+
+model SystemSettings {
+  id    String @id @default("default")
+  key   String @unique
+  value String @db.Text
 }

@@ -1,9 +1,10 @@
 // Glücksrad-System für Checko
 // - Registrierungs-Glücksrad (gestaffelt nach User-Nummer)
-// - Tägliches Glücksrad (1-5 Checkos, nur wenn Checkos verbraucht wurden)
+// - Tägliches Glücksrad (dynamisch aus Settings, nur wenn Checkos verbraucht wurden)
 // - Bonus-Spins (Admin-freigeschaltet, umgehen 24h + optional Verbrauchs-Bedingung)
 
 import { prisma } from "@/lib/prisma";
+import { getWheelSettings } from "@/lib/settings";
 
 // ==================== USER NUMBER ====================
 
@@ -43,17 +44,25 @@ export async function assignRegistrationNumber(userId: string): Promise<number> 
 
 /**
  * Berechnet den Gewinn basierend auf der User-Nummer
- * User 1-100: 50 Checkos fix
- * User 101-200: Random 1-50 Checkos
- * User 201+: Random 1-20 Checkos
+ * Staffelung (mit dynamischen Min/Max aus Settings):
+ * User 1-100: fix = regMax
+ * User 101-200: Random regMin - regMax
+ * User 201+: Random regMin - floor(regMax/2) (mindestens regMin)
  */
-export function calculateRegistrationPrize(userNumber: number): number {
+export function calculateRegistrationPrize(
+  userNumber: number,
+  regMin: number,
+  regMax: number
+): number {
   if (userNumber <= 100) {
-    return 50;
+    return regMax;
   } else if (userNumber <= 200) {
-    return Math.floor(Math.random() * 50) + 1; // 1-50
+    const range = regMax - regMin;
+    return Math.floor(Math.random() * (range + 1)) + regMin;
   } else {
-    return Math.floor(Math.random() * 20) + 1; // 1-20
+    const halfMax = Math.max(Math.floor(regMax / 2), regMin);
+    const range = halfMax - regMin;
+    return Math.floor(Math.random() * (range + 1)) + regMin;
   }
 }
 
@@ -100,8 +109,11 @@ export async function spinRegistrationWheel(
     // Registrierungsnummer zuweisen
     const userNumber = await assignRegistrationNumber(userId);
 
-    // Gewinn berechnen
-    const amount = calculateRegistrationPrize(userNumber);
+    // Settings lesen
+    const { regMin, regMax } = await getWheelSettings();
+
+    // Gewinn berechnen (mit dynamischen Werten)
+    const amount = calculateRegistrationPrize(userNumber, regMin, regMax);
 
     // In Transaktion speichern
     await prisma.$transaction(async (tx) => {
@@ -140,6 +152,14 @@ export async function spinRegistrationWheel(
 }
 
 // ==================== DAILY WHEEL ====================
+
+/**
+ * Berechnet den täglichen Gewinn (dynamisch aus Settings)
+ */
+function calculateDailyPrize(dailyMin: number, dailyMax: number): number {
+  const range = dailyMax - dailyMin;
+  return Math.floor(Math.random() * (range + 1)) + dailyMin;
+}
 
 /**
  * Tägliches Glücksrad drehen
@@ -228,8 +248,11 @@ export async function spinDailyWheel(
       }
     }
 
-    // Gewinn: 1-5 Checkos
-    const amount = Math.floor(Math.random() * 5) + 1;
+    // Settings lesen
+    const { dailyMin, dailyMax } = await getWheelSettings();
+
+    // Gewinn berechnen (dynamisch aus Settings)
+    const amount = calculateDailyPrize(dailyMin, dailyMax);
 
     // In Transaktion speichern
     await prisma.$transaction(async (tx) => {

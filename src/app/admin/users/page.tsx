@@ -1,5 +1,6 @@
 // Admin Users — Benutzerverwaltung
-// Features: Suche, Filter, Sortierung, Bearbeiten, Löschen, Sperren, Checkos schenken
+// Features: Suche, Filter, Sortierung, Bearbeiten, Löschen, Sperren, Checkos schenken,
+//           Glücksrad Bonus-Spins, Verifizierungs-Mail, Passwort-Reset-Mail
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -47,6 +48,10 @@ export default function AdminUsersPage() {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resendSuccess, setResendSuccess] = useState<string | null>(null);
 
+  // Password Reset State
+  const [resetSendingId, setResetSendingId] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
+
   // Delete Modal State
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -55,6 +60,13 @@ export default function AdminUsersPage() {
   const [suspendUser, setSuspendUser] = useState<User | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
   const [suspendLoading, setSuspendLoading] = useState(false);
+
+  // Bonus Spins Modal State
+  const [bonusSpinUserId, setBonusSpinUserId] = useState<string | null>(null);
+  const [bonusSpinCount, setBonusSpinCount] = useState("1");
+  const [bonusSpinNoSpend, setBonusSpinNoSpend] = useState(false);
+  const [bonusSpinLoading, setBonusSpinLoading] = useState(false);
+  const [bonusSpinSuccess, setBonusSpinSuccess] = useState("");
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -267,6 +279,69 @@ export default function AdminUsersPage() {
     }
   };
 
+  // ==================== Passwort-Reset-Mail senden ====================
+  const handleSendPasswordReset = async (userId: string) => {
+    setResetSendingId(userId);
+    setResetSuccess(null);
+
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/send-reset`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fehler");
+
+      setResetSuccess(`Passwort-Reset-Mail an ${data.email || "User"} gesendet!`);
+      setTimeout(() => setResetSuccess(null), 3000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Fehler beim Senden");
+    } finally {
+      setResetSendingId(null);
+    }
+  };
+
+  // ==================== Bonus-Spins freischalten ====================
+  const openBonusSpinModal = (userId: string) => {
+    setBonusSpinUserId(userId);
+    setBonusSpinCount("1");
+    setBonusSpinNoSpend(false);
+    setBonusSpinSuccess("");
+  };
+
+  const handleGrantBonusSpins = async () => {
+    if (!bonusSpinUserId) return;
+    const spins = parseInt(bonusSpinCount);
+
+    setBonusSpinLoading(true);
+    setBonusSpinSuccess("");
+
+    try {
+      const res = await fetch(`/api/admin/users/${bonusSpinUserId}/bonus-spins`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          spins,
+          noSpendRequired: bonusSpinNoSpend,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fehler");
+
+      setBonusSpinSuccess(data.message || `${spins} Bonus-Drehungen freigeschaltet!`);
+
+      setTimeout(() => {
+        setBonusSpinUserId(null);
+        setBonusSpinSuccess("");
+      }, 2000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Fehler beim Freischalten");
+    } finally {
+      setBonusSpinLoading(false);
+    }
+  };
+
   // ==================== Sortierung Toggle ====================
   const handleSort = (field: string) => {
     if (sort === field) {
@@ -284,6 +359,7 @@ export default function AdminUsersPage() {
 
   // ==================== Render ====================
   const giftUser = users.find((u) => u.id === giftUserId);
+  const bonusSpinUser = users.find((u) => u.id === bonusSpinUserId);
 
   return (
     <div>
@@ -326,10 +402,15 @@ export default function AdminUsersPage() {
         </select>
       </div>
 
-      {/* Resend Verification Erfolg */}
+      {/* Erfolgs-Meldungen */}
       {resendSuccess && (
         <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm">
           ✅ {resendSuccess}
+        </div>
+      )}
+      {resetSuccess && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm">
+          ✅ {resetSuccess}
         </div>
       )}
 
@@ -422,6 +503,7 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2 flex-wrap">
+                      {/* Verifizierungs-Mail (nur wenn nicht verifiziert) */}
                       {!user.isEmailVerified && (
                         <button
                           onClick={() => handleResendVerification(user.id)}
@@ -432,6 +514,24 @@ export default function AdminUsersPage() {
                           {resendingId === user.id ? "⏳ Sende…" : "📧 Verifizieren"}
                         </button>
                       )}
+                      {/* Passwort-Reset-Mail */}
+                      <button
+                        onClick={() => handleSendPasswordReset(user.id)}
+                        disabled={resetSendingId === user.id}
+                        className="text-indigo-600 hover:text-indigo-700 text-xs font-medium whitespace-nowrap disabled:opacity-50"
+                        title="Passwort-Reset-Mail senden"
+                      >
+                        {resetSendingId === user.id ? "⏳ Sende…" : "🔑 Reset-Mail"}
+                      </button>
+                      {/* Glücksrad Bonus-Spins */}
+                      <button
+                        onClick={() => openBonusSpinModal(user.id)}
+                        className="text-yellow-600 hover:text-yellow-700 text-xs font-medium whitespace-nowrap"
+                        title="Glücksrad Bonus-Drehungen freischalten"
+                      >
+                        🎰 Glücksrad
+                      </button>
+                      {/* Checkos schenken */}
                       <button
                         onClick={() => {
                           setGiftUserId(user.id);
@@ -444,6 +544,7 @@ export default function AdminUsersPage() {
                       >
                         🎁 Schenken
                       </button>
+                      {/* Bearbeiten */}
                       <button
                         onClick={() => openEditModal(user)}
                         className="text-blue-600 hover:text-blue-700 text-xs font-medium whitespace-nowrap"
@@ -451,6 +552,7 @@ export default function AdminUsersPage() {
                       >
                         ✏️ Bearbeiten
                       </button>
+                      {/* Sperren/Entsperren */}
                       <button
                         onClick={() => handleSuspendToggle(user)}
                         disabled={suspendLoading}
@@ -463,6 +565,7 @@ export default function AdminUsersPage() {
                       >
                         {user.isSuspended ? "🔓 Entsperren" : "🔒 Sperren"}
                       </button>
+                      {/* Löschen */}
                       <button
                         onClick={() => setDeleteUser(user)}
                         className="text-red-600 hover:text-red-700 text-xs font-medium whitespace-nowrap"
@@ -554,6 +657,76 @@ export default function AdminUsersPage() {
                     className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {giftLoading ? "Wird geschenkt…" : "Schenken"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== Bonus Spins Modal ==================== */}
+      {bonusSpinUserId && bonusSpinUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-1">🎰 Glücksrad freischalten</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Für: <strong>{bonusSpinUser.name || bonusSpinUser.email}</strong>
+            </p>
+
+            {bonusSpinSuccess ? (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm text-center">
+                ✅ {bonusSpinSuccess}
+              </div>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Anzahl Drehungen
+                    </label>
+                    <select
+                      value={bonusSpinCount}
+                      onChange={(e) => setBonusSpinCount(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    >
+                      <option value="1">1 Drehung</option>
+                      <option value="3">3 Drehungen</option>
+                      <option value="5">5 Drehungen</option>
+                      <option value="10">10 Drehungen</option>
+                    </select>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="noSpendRequired"
+                      checked={bonusSpinNoSpend}
+                      onChange={(e) => setBonusSpinNoSpend(e.target.checked)}
+                      className="mt-1 h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="noSpendRequired" className="text-sm text-gray-700">
+                      <span className="font-medium">Ohne Checkos-Verbrauch als Bedingung</span>
+                      <br />
+                      <span className="text-xs text-gray-500">
+                        User muss keine Checkos verbraucht haben, um drehen zu können
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-5">
+                  <button
+                    onClick={() => setBonusSpinUserId(null)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    onClick={handleGrantBonusSpins}
+                    disabled={bonusSpinLoading}
+                    className="flex-1 px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-semibold hover:bg-yellow-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {bonusSpinLoading ? "Wird freigeschaltet…" : "Freischalten"}
                   </button>
                 </div>
               </>

@@ -219,8 +219,29 @@ const modules: ModuleSeed[] = [
   },
 ];
 
+// ==================== SYSTEM SETTINGS ====================
+
+const defaultSettings = [
+  { key: "wheel_registration_min", value: "1" },
+  { key: "wheel_registration_max", value: "50" },
+  { key: "wheel_daily_min", value: "1" },
+  { key: "wheel_daily_max", value: "10" },
+];
+
 async function main() {
   console.log("🦎 Starte Checko Module Seed...\n");
+
+  // System-Settings seeden
+  console.log("⚙️ System-Settings...");
+  for (const setting of defaultSettings) {
+    await prisma.systemSettings.upsert({
+      where: { key: setting.key },
+      update: {}, // Bestehende Werte NICHT überschreiben
+      create: { id: setting.key, key: setting.key, value: setting.value },
+    });
+    console.log(`  ✅ ${setting.key} = ${setting.value}`);
+  }
+  console.log("");
 
   for (const mod of modules) {
     const result = await prisma.module.upsert({

@@ -1,11 +1,12 @@
 // POST /api/wheel/daily — Tägliches Glücksrad drehen
-// GET /api/wheel/daily — Status abfragen
+// GET /api/wheel/daily — Status abfragen (inkl. dailyEnabled)
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { spinDailyWheel, getDailyWheelStatus } from "@/lib/wheel";
 import { prisma } from "@/lib/prisma";
+import { getWheelEnabledSettings } from "@/lib/settings";
 
 export async function GET() {
   try {
@@ -14,8 +15,15 @@ export async function GET() {
       return NextResponse.json({ error: "Nicht eingeloggt." }, { status: 401 });
     }
 
-    const status = await getDailyWheelStatus(session.user.id);
-    return NextResponse.json(status);
+    const [status, enabledSettings] = await Promise.all([
+      getDailyWheelStatus(session.user.id),
+      getWheelEnabledSettings(),
+    ]);
+
+    return NextResponse.json({
+      ...status,
+      dailyEnabled: enabledSettings.dailyEnabled,
+    });
   } catch (error) {
     console.error("Daily wheel status error:", error);
     return NextResponse.json(
@@ -30,6 +38,15 @@ export async function POST() {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Nicht eingeloggt." }, { status: 401 });
+    }
+
+    // Prüfe ob tägliches Glücksrad aktiviert ist (zusätzlicher Check in der Route)
+    const { dailyEnabled } = await getWheelEnabledSettings();
+    if (!dailyEnabled) {
+      return NextResponse.json(
+        { error: "Das Glücksrad ist aktuell nicht verfügbar." },
+        { status: 400 }
+      );
     }
 
     // Balance VOR dem Spin auslesen

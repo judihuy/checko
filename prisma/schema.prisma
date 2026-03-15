@@ -321,9 +321,3 @@ model SavedAlert {
   @@index([userId])
   @@index([alertId])
 }
-
-model SystemSettings {
-  id    String @id @default("default")
-  key   String @unique
-  value String @db.Text
-}

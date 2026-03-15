@@ -4,7 +4,7 @@
 // - Bonus-Spins (Admin-freigeschaltet, umgehen 24h + optional Verbrauchs-Bedingung)
 
 import { prisma } from "@/lib/prisma";
-import { getWheelSettings } from "@/lib/settings";
+import { getWheelSettings, getWheelEnabledSettings } from "@/lib/settings";
 
 // ==================== USER NUMBER ====================
 
@@ -79,6 +79,15 @@ export async function spinRegistrationWheel(
   error?: string;
 }> {
   try {
+    // Prüfe ob Registrierungs-Glücksrad aktiviert ist
+    const { regEnabled } = await getWheelEnabledSettings();
+    if (!regEnabled) {
+      return {
+        success: false,
+        error: "Das Glücksrad ist aktuell nicht verfügbar.",
+      };
+    }
+
     // Prüfe ob User bereits gedreht hat
     const existingSpin = await prisma.wheelSpin.findFirst({
       where: { userId, type: "registration" },
@@ -178,6 +187,15 @@ export async function spinDailyWheel(
   bonusSpin?: boolean;
 }> {
   try {
+    // Prüfe ob tägliches Glücksrad aktiviert ist
+    const { dailyEnabled } = await getWheelEnabledSettings();
+    if (!dailyEnabled) {
+      return {
+        success: false,
+        error: "Das Glücksrad ist aktuell nicht verfügbar.",
+      };
+    }
+
     // User laden für Bonus-Spins Check
     const user = await prisma.user.findFirst({
       where: { id: userId },
@@ -322,7 +340,18 @@ export async function getDailyWheelStatus(userId: string): Promise<{
   nextSpinAt?: Date;
   lastAmount?: number;
   bonusSpins?: number;
+  dailyEnabled?: boolean;
 }> {
+  // Prüfe ob tägliches Glücksrad aktiviert ist
+  const { dailyEnabled } = await getWheelEnabledSettings();
+  if (!dailyEnabled) {
+    return {
+      available: false,
+      reason: "Das Glücksrad ist aktuell nicht verfügbar.",
+      dailyEnabled: false,
+    };
+  }
+
   // User laden für Bonus-Spins
   const user = await prisma.user.findFirst({
     where: { id: userId },

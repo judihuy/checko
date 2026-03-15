@@ -53,3 +53,21 @@ export async function getWheelSettings(): Promise<{
     dailyMax: parseInt(dailyMaxStr, 10) || 10,
   };
 }
+
+/**
+ * Glücksrad-Aktivierungsstatus lesen
+ */
+export async function getWheelEnabledSettings(): Promise<{
+  regEnabled: boolean;
+  dailyEnabled: boolean;
+}> {
+  const [regEnabledStr, dailyEnabledStr] = await Promise.all([
+    getSetting("wheel_registration_enabled", "true"),
+    getSetting("wheel_daily_enabled", "true"),
+  ]);
+
+  return {
+    regEnabled: regEnabledStr === "true",
+    dailyEnabled: dailyEnabledStr === "true",
+  };
+}

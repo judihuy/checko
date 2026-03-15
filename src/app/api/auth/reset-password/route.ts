@@ -5,8 +5,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import { checkRateLimit, RATE_LIMIT_SENSITIVE } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
+  // Rate-Limiting: 5 pro 15 Minuten
+  const rl = checkRateLimit(request, "reset-password", RATE_LIMIT_SENSITIVE.max, RATE_LIMIT_SENSITIVE.windowMs);
+  if (rl) return rl;
   try {
     const { token, password } = await request.json();
 

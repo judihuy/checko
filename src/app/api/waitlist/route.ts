@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { checkRateLimit, RATE_LIMIT_SENSITIVE } from "@/lib/rate-limit";
 
 const waitlistSchema = z.object({
   moduleId: z.string().min(1, "moduleId ist erforderlich"),
@@ -11,6 +12,10 @@ const waitlistSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // Rate-Limiting: 5 pro 15 Minuten (Spam-Schutz)
+  const rl = checkRateLimit(request, "waitlist", RATE_LIMIT_SENSITIVE.max, RATE_LIMIT_SENSITIVE.windowMs);
+  if (rl) return rl;
+
   try {
     const body = await request.json();
     const parsed = waitlistSchema.safeParse(body);

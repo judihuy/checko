@@ -10,41 +10,7 @@ import { z } from "zod";
 import { sendVerificationEmail } from "@/lib/email";
 import { processReferral } from "@/lib/referral";
 import { generateReferralCode } from "@/lib/referral";
-
-// --- In-Memory Rate-Limiting ---
-// Max 5 Registrierungen pro IP innerhalb von 15 Minuten
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
-const RATE_LIMIT_MAX = 5;
-
-const rateLimitMap = new Map<string, number[]>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const timestamps = rateLimitMap.get(ip) ?? [];
-  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  rateLimitMap.set(ip, recent);
-
-  if (recent.length >= RATE_LIMIT_MAX) {
-    return true;
-  }
-
-  recent.push(now);
-  rateLimitMap.set(ip, recent);
-  return false;
-}
-
-// Alte Einträge regelmässig aufräumen (alle 10 Minuten)
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, timestamps] of rateLimitMap.entries()) {
-    const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-    if (recent.length === 0) {
-      rateLimitMap.delete(ip);
-    } else {
-      rateLimitMap.set(ip, recent);
-    }
-  }
-}, 10 * 60 * 1000);
+import { checkRateLimit, RATE_LIMIT_REGISTER } from "@/lib/rate-limit";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name muss mindestens 2 Zeichen lang sein."),
@@ -58,16 +24,9 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // Rate-Limiting prüfen
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
-
-  if (isRateLimited(ip)) {
-    return NextResponse.json(
-      { error: "Zu viele Registrierungsversuche. Bitte versuche es in 15 Minuten erneut." },
-      { status: 429 }
-    );
-  }
+  // Rate-Limiting: 5 pro 15 Minuten
+  const rl = checkRateLimit(request, "register", RATE_LIMIT_REGISTER.max, RATE_LIMIT_REGISTER.windowMs);
+  if (rl) return rl;
 
   try {
     const body = await request.json();

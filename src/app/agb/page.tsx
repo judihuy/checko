@@ -20,7 +20,7 @@ export default function AGBPage() {
               </h2>
               <p className="text-gray-700 leading-relaxed">
                 Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Dienstleistungen
-                und Angebote der Plattform Checko (checko.ch), betrieben von HuyDigital /
+                und Angebote der Plattform Checko (checko.ch), betrieben von Huy Digital /
                 Marcel Huy, Mittelstrasse 5, 3414 Oberburg, Schweiz. Mit der Registrierung und
                 Nutzung von Checko erklärst du dich mit diesen AGB einverstanden.
               </p>
@@ -182,7 +182,7 @@ export default function AGBPage() {
               </h2>
               <p className="text-gray-700 leading-relaxed">
                 Alle Inhalte, Designs, Texte, Grafiken und Software auf Checko sind
-                urheberrechtlich geschützt und Eigentum von HuyDigital / Marcel Huy. Eine
+                urheberrechtlich geschützt und Eigentum von Huy Digital / Marcel Huy. Eine
                 Vervielfältigung, Verbreitung oder anderweitige Nutzung ohne ausdrückliche
                 schriftliche Genehmigung ist nicht gestattet.
               </p>

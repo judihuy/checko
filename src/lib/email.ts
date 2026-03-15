@@ -66,7 +66,7 @@ export async function sendVerificationEmail(
       <p style="color: #6b7280; font-size: 12px; word-break: break-all;">${verifyUrl}</p>
       <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
       <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        Checko — Dein Toolkit für alles. Ein Produkt von HuyDigital.
+        Checko — Dein Toolkit für alles. Ein Produkt von Huy Digital.
       </p>
     </div>
   `;
@@ -97,7 +97,7 @@ export async function sendPasswordResetEmail(
       <p style="color: #6b7280; font-size: 12px; word-break: break-all;">Link: ${resetUrl}</p>
       <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
       <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-        Checko — Dein Toolkit für alles. Ein Produkt von HuyDigital.
+        Checko — Dein Toolkit für alles. Ein Produkt von Huy Digital.
       </p>
     </div>
   `;

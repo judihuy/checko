@@ -7,6 +7,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAdminAction } from "@/lib/audit";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 const VALID_STATUSES = ["active", "coming_soon", "beta", "maintenance"];
 
@@ -16,7 +17,10 @@ async function requireAdmin() {
   return session;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rl = checkRateLimit(request, "admin-modules", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 403 });
@@ -35,6 +39,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const rl = checkRateLimit(request, "admin-modules-patch", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
+
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 403 });

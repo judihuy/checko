@@ -4,8 +4,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { runAllActiveSearches } from "@/lib/scraper/scheduler";
+import { checkRateLimit, RATE_LIMIT_CRON } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
+  // Rate-Limiting: 5 pro Minute
+  const rl = checkRateLimit(request, "cron-preisradar", RATE_LIMIT_CRON.max, RATE_LIMIT_CRON.windowMs);
+  if (rl) return rl;
   // Sicherheit: Secret-Header prüfen
   const cronSecret = process.env.CRON_SECRET;
   const requestSecret = request.headers.get("x-cron-secret");

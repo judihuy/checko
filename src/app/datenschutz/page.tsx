@@ -15,7 +15,7 @@ export default function DatenschutzPage() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">1. Verantwortlicher</h2>
               <p className="text-gray-700 leading-relaxed">
-                Marcel Huy / HuyDigital<br />
+                Marcel Huy / Huy Digital<br />
                 Mittelstrasse 5<br />
                 3414 Oberburg, Schweiz<br />
                 E-Mail:{" "}

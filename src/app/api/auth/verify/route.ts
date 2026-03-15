@@ -5,8 +5,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/utils";
+import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
+  // Rate-Limiting: 60 pro Minute
+  const rl = checkRateLimit(request, "auth-verify", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
+  if (rl) return rl;
   try {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get("token");

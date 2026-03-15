@@ -14,11 +14,16 @@ import {
   STRIPE_PRODUCT_ID,
 } from "@/lib/stripe";
 import { getBaseUrl } from "@/lib/utils";
+import { checkRateLimit, RATE_LIMIT_STRIPE } from "@/lib/rate-limit";
 
 const MIN_CHECKOS = 10;
 const MAX_CHECKOS = 500;
 
 export async function POST(request: Request) {
+  // Rate-Limiting: 10 pro 15 Minuten
+  const rl = checkRateLimit(request, "stripe-checkout", RATE_LIMIT_STRIPE.max, RATE_LIMIT_STRIPE.windowMs);
+  if (rl) return rl;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session) {

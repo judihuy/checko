@@ -1,0 +1,66 @@
+# Checko — Docker Compose
+# IMPORTANT: This is SEPARATE from OpenClaw! Do NOT modify OpenClaw containers.
+
+services:
+  checko-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: checko-app
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    environment:
+      - DATABASE_URL=mysql://checko_user:${MYSQL_PASSWORD}@checko-mysql:3306/checko
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM=${SMTP_FROM}
+      - SCRAPER_PROXY=${SCRAPER_PROXY}
+      - CRON_SECRET=${CRON_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    depends_on:
+      checko-mysql:
+        condition: service_healthy
+    networks:
+      - checko-network
+
+  checko-mysql:
+    image: mysql:8.0
+    container_name: checko-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=checko
+      - MYSQL_USER=checko_user
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    ports:
+      - "3307:3306"
+    volumes:
+      - checko-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - checko-network
+
+volumes:
+  checko-mysql-data:
+
+networks:
+  checko-network:
+    driver: bridge

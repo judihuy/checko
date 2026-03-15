@@ -56,8 +56,6 @@ COPY --from=builder /app/node_modules/undici ./node_modules/undici
 # Puppeteer für Scraper (nutzt System-Chromium)
 COPY --from=builder /app/node_modules/puppeteer ./node_modules/puppeteer
 COPY --from=builder /app/node_modules/puppeteer-core ./node_modules/puppeteer-core
-COPY --from=builder /app/node_modules/stripe ./node_modules/stripe
-COPY --from=builder /app/node_modules/@stripe ./node_modules/@stripe
 
 # Puppeteer: System-Chromium verwenden (nicht eigenes downloaden)
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

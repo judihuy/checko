@@ -98,7 +98,7 @@ function RegisterForm() {
     <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <img src="/gecko-logo.png" alt="Checko" className="w-16 h-16 mx-auto" />
+          <img src="/gecko-logo.svg" alt="Checko" className="w-16 h-16 mx-auto" />
           <h1 className="text-2xl font-bold text-gray-900 mt-4">Konto erstellen</h1>
           <p className="text-gray-600 mt-2">
             Starte kostenlos mit Checko

@@ -8,6 +8,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: https://staging.checko.ch
     container_name: checko-staging-app
     restart: unless-stopped
     ports:

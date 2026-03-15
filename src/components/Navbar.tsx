@@ -16,7 +16,7 @@ export function Navbar() {
         <div className="flex justify-between h-16 items-center">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 text-xl font-bold text-emerald-700">
-            <img src="/gecko-logo.png" alt="Checko" className="w-8 h-8 inline-block" />
+            <img src="/gecko-logo.svg" alt="Checko" className="w-8 h-8 inline-block" />
             <span>Checko</span>
           </Link>
 

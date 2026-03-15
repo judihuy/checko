@@ -157,20 +157,7 @@ function CheckosKaufContent() {
   // Live-Preisberechnung für Slider
   const pricing = useMemo(() => calculatePrice(sliderAmount), [sliderAmount]);
 
-  if (status === "loading") {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
-      </div>
-    );
-  }
-
-  if (!session) {
-    router.push("/login");
-    return null;
-  }
-
-  // Stripe Checkout starten
+  // Stripe Checkout starten — useCallback MUSS vor allen bedingten Returns stehen (Rules of Hooks)
   const handleCheckout = useCallback(async (checkos: number, priceId?: string) => {
     if (purchasing) return;
     setPurchasing(true);
@@ -204,21 +191,22 @@ function CheckosKaufContent() {
     }
   }, [purchasing]);
 
-  const handleSliderChange = (value: number) => {
+  // Alle Handler-Funktionen vor bedingten Returns definieren
+  const handleSliderChange = useCallback((value: number) => {
     setSliderAmount(value);
     setError("");
-  };
+  }, []);
 
-  const handleInputChange = (value: string) => {
+  const handleInputChange = useCallback((value: string) => {
     const num = parseInt(value, 10);
     if (isNaN(num)) return;
     const clamped = Math.max(MIN_CHECKOS, Math.min(MAX_CHECKOS, num));
     setSliderAmount(clamped);
     setError("");
-  };
+  }, []);
 
   // Nächste Rabattstufe Info
-  const getNextTierInfo = (): string | null => {
+  const nextTierHint = useMemo((): string | null => {
     if (sliderAmount < 50) {
       const needed = 50 - sliderAmount;
       return `Noch ${needed} Checkos mehr für 10% Rabatt!`;
@@ -232,9 +220,22 @@ function CheckosKaufContent() {
       return `Noch ${needed} Checkos mehr für 20% Rabatt!`;
     }
     return null;
-  };
+  }, [sliderAmount]);
 
-  const nextTierHint = getNextTierInfo();
+  // === Bedingte Returns NACH allen Hooks ===
+
+  if (status === "loading") {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    router.push("/login");
+    return null;
+  }
 
   return (
     <main className="flex-1 py-12">

@@ -55,7 +55,10 @@ function WillkommenContent() {
   if (status === "loading" || wheelEnabled === null) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+        <div className="flex flex-col items-center gap-3">
+          <img src="/gecko-logo.png" alt="Laden..." className="w-12 h-12 animate-gecko-pulse" />
+          <span className="text-gray-400 text-sm">Laden...</span>
+        </div>
       </div>
     );
   }
@@ -65,7 +68,19 @@ function WillkommenContent() {
       <div className="max-w-2xl mx-auto px-4 text-center">
         {/* Willkommens-Header */}
         <div className="mb-8">
-          <span className="text-6xl block mb-4">🦎</span>
+          {/* Gecko-Animation (D) — Begrüssung */}
+          <div className="w-28 h-28 mx-auto mb-4 rounded-full overflow-hidden shadow-lg">
+            <video
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              className="w-full h-full object-cover"
+            >
+              <source src="/gecko-03.mp4" type="video/mp4" />
+            </video>
+          </div>
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
             Willkommen bei Checko!
           </h1>
@@ -153,7 +168,10 @@ export default function WillkommenPage() {
       <Suspense
         fallback={
           <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+            <div className="flex flex-col items-center gap-3">
+              <img src="/gecko-logo.png" alt="Laden..." className="w-12 h-12 animate-gecko-pulse" />
+              <span className="text-gray-400 text-sm">Laden...</span>
+            </div>
           </div>
         }
       >

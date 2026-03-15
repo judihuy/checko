@@ -6,6 +6,50 @@
 import { prisma } from "@/lib/prisma";
 import { getWheelSettings, getWheelEnabledSettings } from "@/lib/settings";
 
+// ==================== SEGMENTE (IDENTISCH MIT FRONTEND!) ====================
+// WICHTIG: Diese Definition MUSS mit WheelSpinner.tsx übereinstimmen!
+
+export const WHEEL_SEGMENTS = [
+  { label: "1", value: 1 },
+  { label: "5", value: 5 },
+  { label: "2", value: 2 },
+  { label: "10", value: 10 },
+  { label: "3", value: 3 },
+  { label: "20", value: 20 },
+  { label: "1", value: 1 },
+  { label: "50", value: 50 },
+  { label: "5", value: 5 },
+  { label: "15", value: 15 },
+  { label: "2", value: 2 },
+  { label: "8", value: 8 },
+];
+
+/**
+ * Berechnet den Ziel-Segment-Index für einen gegebenen Betrag.
+ * Falls mehrere Segmente den gleichen Wert haben, wird zufällig eines gewählt.
+ */
+export function calculateTargetSegment(amount: number): number {
+  const matching = WHEEL_SEGMENTS
+    .map((seg, idx) => ({ seg, idx }))
+    .filter(({ seg }) => seg.value === amount);
+
+  if (matching.length === 0) {
+    // Fallback: nächsten Wert finden
+    let closest = 0;
+    let minDiff = Infinity;
+    WHEEL_SEGMENTS.forEach((seg, idx) => {
+      const diff = Math.abs(seg.value - amount);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = idx;
+      }
+    });
+    return closest;
+  }
+
+  return matching[Math.floor(Math.random() * matching.length)].idx;
+}
+
 // ==================== USER NUMBER ====================
 
 /**

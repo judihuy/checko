@@ -134,18 +134,36 @@ export default async function HomePage() {
 
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 py-20 lg:py-28">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <GeckoLogo className="w-20 h-20 mx-auto mb-6" />
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-            Checko — Dein Toolkit
-            <br />
-            <span className="text-emerald-600">für alles.</span>
-          </h1>
-          <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto mb-10">
-            Smarte Module, die dir im Alltag Zeit und Geld sparen. Wähle nur die
-            Tools, die du wirklich brauchst.
-          </p>
-          <HeroCTA />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col lg:flex-row items-center gap-10 lg:gap-16">
+            {/* Text-Seite */}
+            <div className="flex-1 text-center lg:text-left">
+              <GeckoLogo className="w-24 h-24 mx-auto lg:mx-0 mb-6" />
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+                Checko — Dein Toolkit
+                <br />
+                <span className="text-emerald-600">für alles.</span>
+              </h1>
+              <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto lg:mx-0 mb-10">
+                Smarte Module, die dir im Alltag Zeit und Geld sparen. Wähle nur die
+                Tools, die du wirklich brauchst.
+              </p>
+              <HeroCTA />
+            </div>
+            {/* Gecko-Animation (A) */}
+            <div className="flex-shrink-0 w-64 h-64 sm:w-80 sm:h-80 lg:w-96 lg:h-96 rounded-2xl overflow-hidden shadow-xl">
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                className="w-full h-full object-cover"
+              >
+                <source src="/gecko-01.mp4" type="video/mp4" />
+              </video>
+            </div>
+          </div>
         </div>
       </section>
 

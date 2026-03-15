@@ -35,8 +35,8 @@ const ALL_PLATFORMS = [
   { id: "willhaben", name: "Willhaben.at", country: "at" as CountryCode, disabled: false },
 ];
 
-// Nur aktive Plattformen (ohne willhaben)
-const ACTIVE_PLATFORMS = ALL_PLATFORMS.filter((p) => p.country !== "at");
+// Nur aktive Plattformen: ohne AT und ohne deaktivierte (tutti, autoscout, comparis komplett ausblenden)
+const ACTIVE_PLATFORMS = ALL_PLATFORMS.filter((p) => p.country !== "at" && !("disabled" in p && p.disabled));
 
 // Basiskosten pro Dauer (Standard-Stufe = 2 Checkos)
 const DURATION_BASE_COSTS: Record<string, number> = {
@@ -85,7 +85,7 @@ const QUALITY_TIERS = [
     checkos: 2,
     interval: 30,
     intervalLabel: "Alle 30 Minuten",
-    model: "Haiku",
+    model: "Standard-KI",
   },
   {
     id: "premium",
@@ -94,7 +94,7 @@ const QUALITY_TIERS = [
     checkos: 4,
     interval: 15,
     intervalLabel: "Alle 15 Minuten",
-    model: "Sonnet",
+    model: "Premium-KI",
   },
   {
     id: "pro",
@@ -103,7 +103,7 @@ const QUALITY_TIERS = [
     checkos: 7,
     interval: 5,
     intervalLabel: "Alle 5 Minuten",
-    model: "Opus",
+    model: "Pro-KI",
   },
 ];
 
@@ -117,6 +117,11 @@ export default function PreisradarPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Checkos-Guthaben
+  const [checkosBalance, setCheckosBalance] = useState<number | null>(null);
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [requiredCheckos, setRequiredCheckos] = useState(0);
 
   // Edit-State
   const [editingSearch, setEditingSearch] = useState<Search | null>(null);
@@ -224,14 +229,28 @@ export default function PreisradarPage() {
     }
   }, []);
 
+  // Checkos-Guthaben laden
+  const loadBalance = useCallback(async () => {
+    try {
+      const res = await fetch("/api/dashboard/summary");
+      if (res.ok) {
+        const data = await res.json();
+        setCheckosBalance(data.checkosBalance ?? 0);
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     }
     if (status === "authenticated") {
       loadSearches();
+      loadBalance();
     }
-  }, [status, router, loadSearches]);
+  }, [status, router, loadSearches, loadBalance]);
 
   // Edit-Modal öffnen mit vorausgefüllten Werten
   const openEditModal = (search: Search) => {
@@ -288,8 +307,23 @@ export default function PreisradarPage() {
     );
   };
 
+  // Prüfe ob genug Checkos vorhanden sind, bevor der Modal geöffnet wird
+  const handleNewSearchClick = () => {
+    // Balance immer frisch laden
+    loadBalance();
+    setShowModal(true);
+  };
+
   const handleCreateSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Checkos-Check vor dem Erstellen
+    if (checkosBalance !== null && checkosBalance < currentCost) {
+      setRequiredCheckos(currentCost);
+      setShowInsufficientModal(true);
+      return;
+    }
+
     setCreating(true);
     setError(null);
 
@@ -407,7 +441,10 @@ export default function PreisradarPage() {
       <div className="min-h-screen flex flex-col">
         <Navbar />
         <main className="flex-1 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Laden...</div>
+          <div className="flex flex-col items-center gap-3">
+            <img src="/gecko-logo.png" alt="Laden..." className="w-12 h-12 animate-gecko-pulse" />
+            <span className="text-gray-400 text-sm">Laden...</span>
+          </div>
         </main>
         <Footer />
       </div>
@@ -448,7 +485,7 @@ export default function PreisradarPage() {
                 🔔 Treffer ansehen
               </Link>
               <button
-                onClick={() => setShowModal(true)}
+                onClick={handleNewSearchClick}
                 className="bg-emerald-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-emerald-700 transition text-sm"
               >
                 + Neue Suche
@@ -479,7 +516,7 @@ export default function PreisradarPage() {
                 Erstelle deine erste Preisradar-Suche und werde automatisch benachrichtigt, wenn es neue Angebote gibt.
               </p>
               <button
-                onClick={() => setShowModal(true)}
+                onClick={handleNewSearchClick}
                 className="bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-emerald-700 transition"
               >
                 + Erste Suche erstellen
@@ -1036,6 +1073,38 @@ export default function PreisradarPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Nicht genug Checkos */}
+      {showInsufficientModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
+            <div className="text-5xl mb-4">🦎</div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">
+              Nicht genug Checkos
+            </h2>
+            <p className="text-gray-600 mb-2">
+              Für diese Suche werden <span className="font-bold text-emerald-600">{requiredCheckos} Checkos</span> benötigt.
+            </p>
+            <p className="text-gray-500 text-sm mb-6">
+              Dein aktuelles Guthaben: <span className="font-bold">{checkosBalance ?? 0} Checkos</span>
+            </p>
+            <div className="flex flex-col gap-3">
+              <Link
+                href="/dashboard/checkos"
+                className="block w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition"
+              >
+                💰 Checkos aufladen
+              </Link>
+              <button
+                onClick={() => setShowInsufficientModal(false)}
+                className="w-full py-2 text-gray-500 hover:text-gray-700 text-sm transition"
+              >
+                Abbrechen
+              </button>
             </div>
           </div>
         </div>

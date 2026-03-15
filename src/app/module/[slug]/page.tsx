@@ -152,14 +152,29 @@ export default async function ModuleDetailPage({ params }: PageProps) {
                 Jetzt nutzen →
               </Link>
             ) : isComingSoon ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-md">
-                <h3 className="font-semibold text-gray-900 mb-2">
-                  Benachrichtige mich
-                </h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  Erhalte eine E-Mail, sobald dieses Modul verfügbar ist.
-                </p>
-                <WaitlistForm moduleId={moduleData.id} moduleName={moduleData.name} />
+              <div className="flex items-start gap-6">
+                <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-md">
+                  <h3 className="font-semibold text-gray-900 mb-2">
+                    Benachrichtige mich
+                  </h3>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Erhalte eine E-Mail, sobald dieses Modul verfügbar ist.
+                  </p>
+                  <WaitlistForm moduleId={moduleData.id} moduleName={moduleData.name} />
+                </div>
+                {/* Gecko-Animation (B) — dezent auf Coming Soon Seiten */}
+                <div className="hidden md:block w-32 h-32 rounded-xl overflow-hidden shadow-md flex-shrink-0">
+                  <video
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    className="w-full h-full object-cover"
+                  >
+                    <source src="/gecko-02.mp4" type="video/mp4" />
+                  </video>
+                </div>
               </div>
             ) : (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 max-w-md">

@@ -4,6 +4,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
 
 interface Notification {
   id: string;
@@ -253,7 +255,10 @@ export default function BenachrichtigungenPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="min-h-screen flex flex-col">
+      <Navbar />
+      <main className="flex-1 py-8">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -472,6 +477,9 @@ export default function BenachrichtigungenPage() {
           </button>
         </div>
       )}
+    </div>
+    </main>
+    <Footer />
     </div>
   );
 }

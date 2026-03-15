@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { spinDailyWheel, getDailyWheelStatus } from "@/lib/wheel";
+import { spinDailyWheel, getDailyWheelStatus, calculateTargetSegment } from "@/lib/wheel";
 import { prisma } from "@/lib/prisma";
 import { getWheelEnabledSettings, getWheelSettings } from "@/lib/settings";
 import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
@@ -81,8 +81,12 @@ export async function POST(request: Request) {
       select: { bonusSpins: true },
     });
 
+    // targetSegment berechnen — Server bestimmt, wo das Rad landen soll
+    const targetSegment = calculateTargetSegment(result.amount ?? 0);
+
     return NextResponse.json({
       amount: result.amount,
+      targetSegment,
       previousBalance,
       newBalance: previousBalance + (result.amount ?? 0),
       bonusSpin: result.bonusSpin,

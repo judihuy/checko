@@ -238,8 +238,10 @@ export function WheelSpinner({
         setNewBalance(prevBal + amount);
       }
 
-      // Segment finden und Rad dorthin drehen
-      const segIdx = findSegmentIndex(amount);
+      // Server bestimmt das Ziel-Segment — KEIN eigener RNG im Frontend!
+      const segIdx = typeof data.targetSegment === "number"
+        ? data.targetSegment
+        : findSegmentIndex(amount); // Fallback falls Server kein targetSegment liefert
       const targetRotation = getTargetRotation(segIdx, rotation);
       setRotation(targetRotation);
 
@@ -382,9 +384,22 @@ export function WheelSpinner({
       {/* Gewinn-Anzeige (gross, nach dem Landen) — kein scale-Animation! */}
       {showWinDisplay && result !== null && (
         <div className="text-center animate-fade-in">
-          <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-2xl px-8 py-5 shadow-xl">
-            <p className="text-lg font-medium">🎉 Gewonnen!</p>
-            <p className="text-4xl font-bold mt-1">
+          <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-2xl px-8 py-5 shadow-xl relative overflow-hidden">
+            {/* Gecko-Animation (C) — nach Spin als Overlay */}
+            <div className="absolute -right-2 -bottom-2 w-20 h-20 opacity-80 rounded-lg overflow-hidden">
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                className="w-full h-full object-cover"
+              >
+                <source src="/gecko-05.mp4" type="video/mp4" />
+              </video>
+            </div>
+            <p className="text-lg font-medium relative z-10">🎉 Gewonnen!</p>
+            <p className="text-4xl font-bold mt-1 relative z-10">
               {result} Checkos 🦎
             </p>
           </div>

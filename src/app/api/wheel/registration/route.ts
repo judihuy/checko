@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { spinRegistrationWheel } from "@/lib/wheel";
+import { spinRegistrationWheel, calculateTargetSegment } from "@/lib/wheel";
 import { prisma } from "@/lib/prisma";
 import { getWheelEnabledSettings } from "@/lib/settings";
 import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
@@ -79,8 +79,12 @@ export async function POST(request: Request) {
       );
     }
 
+    // targetSegment berechnen — Server bestimmt, wo das Rad landen soll
+    const targetSegment = calculateTargetSegment(result.amount ?? 0);
+
     return NextResponse.json({
       amount: result.amount,
+      targetSegment,
       previousBalance,
       newBalance: previousBalance + (result.amount ?? 0),
       userNumber: result.userNumber,

@@ -25,6 +25,78 @@ interface Search {
   lastScrapedAt: string | null;
   checkosCharged: number;
   createdAt: string;
+  // Kategorie-Felder
+  category?: string | null;
+  subcategory?: string | null;
+  condition?: string | null;
+  // Fahrzeug
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  yearFrom?: number | null;
+  yearTo?: number | null;
+  kmFrom?: number | null;
+  kmTo?: number | null;
+  fuelType?: string | null;
+  transmission?: string | null;
+  engineSizeCcm?: number | null;
+  motorcycleType?: string | null;
+  // Immobilien
+  propertyType?: string | null;
+  propertyOffer?: string | null;
+  rooms?: number | null;
+  areaM2?: number | null;
+  location?: string | null;
+  // Möbel
+  furnitureType?: string | null;
+}
+
+/** Formatiert die Kategorie-Details einer Suche als einzeiligen String */
+function formatSearchDetails(search: Search): string | null {
+  const parts: string[] = [];
+
+  if (search.category === "Fahrzeuge") {
+    if (search.vehicleMake) {
+      let vehicle = "🚗 " + search.vehicleMake;
+      if (search.vehicleModel) vehicle += " " + search.vehicleModel;
+      parts.push(vehicle);
+    }
+    if (search.yearFrom || search.yearTo) {
+      parts.push((search.yearFrom || "?") + "–" + (search.yearTo || "?"));
+    }
+    if (search.fuelType) {
+      const fuelLabels: Record<string, string> = {
+        benzin: "Benzin", diesel: "Diesel", elektro: "Elektro",
+        hybrid: "Hybrid", "plug-in-hybrid": "Plug-in-Hybrid", gas: "Gas",
+      };
+      parts.push(fuelLabels[search.fuelType] || search.fuelType);
+    }
+    if (search.transmission) {
+      parts.push(search.transmission === "automat" ? "Automatik" : "Manuell");
+    }
+    if (search.kmFrom || search.kmTo) {
+      parts.push((search.kmFrom ? search.kmFrom.toLocaleString("de-CH") : "0") + "–" + (search.kmTo ? search.kmTo.toLocaleString("de-CH") : "∞") + " km");
+    }
+    if (search.motorcycleType) parts.push(search.motorcycleType);
+    if (search.engineSizeCcm) parts.push(search.engineSizeCcm + " ccm");
+  } else if (search.category === "Immobilien") {
+    const propLabels: Record<string, string> = {
+      wohnung: "Wohnung", haus: "Haus", grundstueck: "Grundstück", gewerbe: "Gewerbe",
+    };
+    const offerLabels: Record<string, string> = { miete: "Miete", kauf: "Kauf" };
+    if (search.propertyType) parts.push("🏠 " + (propLabels[search.propertyType] || search.propertyType));
+    if (search.propertyOffer) parts.push(offerLabels[search.propertyOffer] || search.propertyOffer);
+    if (search.rooms) parts.push(search.rooms + "+ Zimmer");
+    if (search.areaM2) parts.push(search.areaM2 + " m²");
+    if (search.location) parts.push(search.location);
+  } else if (search.category === "Möbel") {
+    const furnitureLabels: Record<string, string> = {
+      sofa: "Sofa / Couch", tisch: "Tisch", stuhl: "Stuhl", schrank: "Schrank",
+      bett: "Bett", regal: "Regal", kommode: "Kommode", schreibtisch: "Schreibtisch",
+    };
+    if (search.furnitureType) parts.push("🪑 " + (furnitureLabels[search.furnitureType] || search.furnitureType));
+  }
+
+  return parts.length > 0 ? parts.join(" | ") : null;
 }
 
 const ALL_PLATFORMS = [
@@ -138,6 +210,25 @@ export default function PreisradarPage() {
   const [editMinPrice, setEditMinPrice] = useState("");
   const [editMaxPrice, setEditMaxPrice] = useState("");
   const [editPlatforms, setEditPlatforms] = useState<string[]>([]);
+  // Edit — Kategorie-Felder
+  const [editCategory, setEditCategory] = useState("");
+  const [editSubcategory, setEditSubcategory] = useState("");
+  const [editVehicleMake, setEditVehicleMake] = useState("");
+  const [editVehicleModel, setEditVehicleModel] = useState("");
+  const [editYearFrom, setEditYearFrom] = useState("");
+  const [editYearTo, setEditYearTo] = useState("");
+  const [editKmFrom, setEditKmFrom] = useState("");
+  const [editKmTo, setEditKmTo] = useState("");
+  const [editFuelType, setEditFuelType] = useState("");
+  const [editTransmission, setEditTransmission] = useState("");
+  const [editEngineSizeCcm, setEditEngineSizeCcm] = useState("");
+  const [editMotorcycleType, setEditMotorcycleType] = useState("");
+  const [editPropertyType, setEditPropertyType] = useState("");
+  const [editPropertyOffer, setEditPropertyOffer] = useState("");
+  const [editRooms, setEditRooms] = useState("");
+  const [editAreaM2, setEditAreaM2] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editFurnitureType, setEditFurnitureType] = useState("");
 
   // Formular-State (Neue Suche)
   const [query, setQuery] = useState("");
@@ -283,6 +374,25 @@ export default function PreisradarPage() {
     setEditMinPrice(search.minPrice ? String(search.minPrice / 100) : "");
     setEditMaxPrice(search.maxPrice ? String(search.maxPrice / 100) : "");
     setEditPlatforms([...search.platforms]);
+    // Kategorie-Felder vorausfüllen
+    setEditCategory(search.category || "");
+    setEditSubcategory(search.subcategory || "");
+    setEditVehicleMake(search.vehicleMake || "");
+    setEditVehicleModel(search.vehicleModel || "");
+    setEditYearFrom(search.yearFrom ? String(search.yearFrom) : "");
+    setEditYearTo(search.yearTo ? String(search.yearTo) : "");
+    setEditKmFrom(search.kmFrom ? String(search.kmFrom) : "");
+    setEditKmTo(search.kmTo ? String(search.kmTo) : "");
+    setEditFuelType(search.fuelType || "");
+    setEditTransmission(search.transmission || "");
+    setEditEngineSizeCcm(search.engineSizeCcm ? String(search.engineSizeCcm) : "");
+    setEditMotorcycleType(search.motorcycleType || "");
+    setEditPropertyType(search.propertyType || "");
+    setEditPropertyOffer(search.propertyOffer || "");
+    setEditRooms(search.rooms ? String(search.rooms) : "");
+    setEditAreaM2(search.areaM2 ? String(search.areaM2) : "");
+    setEditLocation(search.location || "");
+    setEditFurnitureType(search.furnitureType || "");
     setEditError(null);
     setShowEditModal(true);
   };
@@ -302,6 +412,25 @@ export default function PreisradarPage() {
           minPrice: editMinPrice ? parseInt(editMinPrice, 10) * 100 : null,
           maxPrice: editMaxPrice ? parseInt(editMaxPrice, 10) * 100 : null,
           platforms: editPlatforms,
+          // Kategorie-Felder
+          category: editCategory || null,
+          subcategory: editSubcategory || null,
+          vehicleMake: editVehicleMake || null,
+          vehicleModel: editVehicleModel || null,
+          yearFrom: editYearFrom ? parseInt(editYearFrom) : null,
+          yearTo: editYearTo ? parseInt(editYearTo) : null,
+          kmFrom: editKmFrom ? parseInt(editKmFrom) : null,
+          kmTo: editKmTo ? parseInt(editKmTo) : null,
+          fuelType: editFuelType || null,
+          transmission: editTransmission || null,
+          engineSizeCcm: editEngineSizeCcm ? parseInt(editEngineSizeCcm) : null,
+          motorcycleType: editMotorcycleType || null,
+          propertyType: editPropertyType || null,
+          propertyOffer: editPropertyOffer || null,
+          rooms: editRooms ? parseInt(editRooms) : null,
+          areaM2: editAreaM2 ? parseInt(editAreaM2) : null,
+          location: editLocation || null,
+          furnitureType: editFurnitureType || null,
         }),
       });
 
@@ -579,10 +708,10 @@ export default function PreisradarPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col overflow-x-hidden">
       <Navbar />
-      <main className="flex-1 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <main className="flex-1 py-8 overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden">
           {/* Header */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
             <div>
@@ -673,6 +802,13 @@ export default function PreisradarPage() {
                     </h3>
                     {getStatusBadge(search.status)}
                   </div>
+
+                  {/* Kategorie-Details */}
+                  {formatSearchDetails(search) && (
+                    <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-1.5 mb-3 truncate">
+                      {formatSearchDetails(search)}
+                    </div>
+                  )}
 
                   {/* Plattformen + Qualität */}
                   <div className="flex flex-wrap gap-1 mb-3">
@@ -1440,6 +1576,139 @@ export default function PreisradarPage() {
                     })}
                   </div>
                 </div>
+
+                {/* Kategorie-Felder im Edit-Modal */}
+                {(editCategory === "Fahrzeuge") && (
+                  <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-4 space-y-3">
+                    <p className="text-sm font-medium text-blue-800">🚗 Fahrzeug-Details</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Marke</label>
+                        <input type="text" value={editVehicleMake} onChange={(e) => setEditVehicleMake(e.target.value)}
+                          placeholder="z.B. BMW, Audi" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Modell</label>
+                        <input type="text" value={editVehicleModel} onChange={(e) => setEditVehicleModel(e.target.value)}
+                          placeholder="z.B. M3, A4" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Baujahr von</label>
+                        <input type="number" value={editYearFrom} onChange={(e) => setEditYearFrom(e.target.value)}
+                          placeholder="2015" min="1950" max="2026" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Baujahr bis</label>
+                        <input type="number" value={editYearTo} onChange={(e) => setEditYearTo(e.target.value)}
+                          placeholder="2026" min="1950" max="2026" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">km von</label>
+                        <input type="number" value={editKmFrom} onChange={(e) => setEditKmFrom(e.target.value)}
+                          placeholder="0" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">km bis</label>
+                        <input type="number" value={editKmTo} onChange={(e) => setEditKmTo(e.target.value)}
+                          placeholder="200000" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Treibstoff</label>
+                        <select value={editFuelType} onChange={(e) => setEditFuelType(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                          <option value="">Alle</option>
+                          <option value="benzin">Benzin</option>
+                          <option value="diesel">Diesel</option>
+                          <option value="elektro">Elektro</option>
+                          <option value="hybrid">Hybrid</option>
+                          <option value="plug-in-hybrid">Plug-in-Hybrid</option>
+                          <option value="gas">Gas (LPG/CNG)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Getriebe</label>
+                        <select value={editTransmission} onChange={(e) => setEditTransmission(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                          <option value="">Alle</option>
+                          <option value="automat">Automatik</option>
+                          <option value="manuell">Manuell</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {editCategory === "Immobilien" && (
+                  <div className="bg-purple-50/50 border border-purple-200 rounded-lg p-4 space-y-3">
+                    <p className="text-sm font-medium text-purple-800">🏠 Immobilien-Details</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Typ</label>
+                        <select value={editPropertyType} onChange={(e) => setEditPropertyType(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                          <option value="">Alle</option>
+                          <option value="wohnung">Wohnung</option>
+                          <option value="haus">Haus</option>
+                          <option value="grundstueck">Grundstück</option>
+                          <option value="gewerbe">Gewerbe</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Angebot</label>
+                        <select value={editPropertyOffer} onChange={(e) => setEditPropertyOffer(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                          <option value="">Miete & Kauf</option>
+                          <option value="miete">Miete</option>
+                          <option value="kauf">Kauf</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Zimmer (min)</label>
+                        <input type="number" value={editRooms} onChange={(e) => setEditRooms(e.target.value)}
+                          placeholder="2" min="1" max="20" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Fläche m² (min)</label>
+                        <input type="number" value={editAreaM2} onChange={(e) => setEditAreaM2(e.target.value)}
+                          placeholder="50" min="10" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Ort / PLZ</label>
+                        <input type="text" value={editLocation} onChange={(e) => setEditLocation(e.target.value)}
+                          placeholder="Zürich, 8000" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {editCategory === "Möbel" && (
+                  <div className="bg-amber-50/50 border border-amber-200 rounded-lg p-4 space-y-3">
+                    <p className="text-sm font-medium text-amber-800">🪑 Möbel-Details</p>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Möbelart</label>
+                      <select value={editFurnitureType} onChange={(e) => setEditFurnitureType(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="">Alle</option>
+                        <option value="sofa">Sofa / Couch</option>
+                        <option value="tisch">Tisch</option>
+                        <option value="stuhl">Stuhl</option>
+                        <option value="schrank">Schrank</option>
+                        <option value="bett">Bett</option>
+                        <option value="regal">Regal</option>
+                        <option value="kommode">Kommode</option>
+                        <option value="schreibtisch">Schreibtisch</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 {/* Info: Dauer/Qualität/Intervall nicht änderbar */}
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">

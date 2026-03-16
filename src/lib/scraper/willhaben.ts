@@ -140,39 +140,53 @@ export class WillhabenScraper extends BaseScraper {
         const title = (item.description || item.title || item.headline || "") as string;
         if (!title) continue;
 
-        // Preis: attributes Array mit Attribut "PRICE"
+        // Preis: attributes Array mit Attribut "PRICE" oder "PRICE/AMOUNT"
         let priceRaw = 0;
         if (Array.isArray(item.attributes)) {
-          const priceAttr = (item.attributes as Array<Record<string, unknown>>).find(
-            (a) => a.name === "PRICE" || a.name === "price"
-          );
-          if (priceAttr) {
-            const vals = priceAttr.values as string[] | undefined;
-            if (vals && vals.length > 0) {
-              priceRaw = parseFloat(String(vals[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+          const attrs = item.attributes as Array<Record<string, unknown>>;
+          // Willhaben speichert Preise unter verschiedenen Attributnamen
+          for (const attr of attrs) {
+            const name = String(attr.name || "").toUpperCase();
+            if (name === "PRICE" || name === "PRICE/AMOUNT" || name === "PRICE_FOR_DISPLAY") {
+              const vals = attr.values as string[] | undefined;
+              if (vals && vals.length > 0) {
+                const v = parseFloat(String(vals[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+                if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+              }
+            }
+          }
+          // Breitere Suche: alles mit "PRICE" im Namen
+          if (priceRaw <= 0) {
+            for (const attr of attrs) {
+              const name = String(attr.name || "").toUpperCase();
+              if (name.includes("PRICE") && Array.isArray(attr.values) && (attr.values as string[]).length > 0) {
+                const v = parseFloat(String((attr.values as string[])[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+                if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+              }
             }
           }
         }
 
-        // Fallback: price direkt
+        // Fallback: price direkt auf dem Objekt
         if (priceRaw <= 0 && item.price !== undefined) {
           priceRaw = typeof item.price === "number"
             ? item.price
             : parseFloat(String(item.price).replace(/[^0-9.,\-]/g, "").replace(",", "."));
         }
 
-        if (isNaN(priceRaw)) priceRaw = 0;
-        
-        // Fallback: Check more attribute names for price
-        if (priceRaw === 0 && Array.isArray(item.attributes)) {
-          for (const attr of (item.attributes as Array<Record<string, unknown>>)) {
-            const name = String(attr.name || "").toUpperCase();
-            if (name.includes("PRICE") && Array.isArray(attr.values) && (attr.values as string[]).length > 0) {
-              const v = parseFloat(String((attr.values as string[])[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+        // Fallback: teaserAttributes (neueres Willhaben-Format)
+        if ((priceRaw <= 0 || isNaN(priceRaw)) && Array.isArray(item.teaserAttributes)) {
+          for (const attr of (item.teaserAttributes as Array<Record<string, unknown>>)) {
+            const name = String(attr.prefix || attr.key || "").toUpperCase();
+            if (name.includes("PRICE") || name.includes("€")) {
+              const val = String(attr.value || attr.formattedValue || "");
+              const v = parseFloat(val.replace(/[^0-9.,\-]/g, "").replace(",", "."));
               if (!isNaN(v) && v > 0) { priceRaw = v; break; }
             }
           }
         }
+
+        if (isNaN(priceRaw)) priceRaw = 0;
 
         // EUR → CHF Rappen (1 EUR ≈ 0.96 CHF)
         const price = Math.round(priceRaw * 0.96 * 100);
@@ -183,31 +197,55 @@ export class WillhabenScraper extends BaseScraper {
         }
 
         // URL — selfLink zeigt auf API, NICHT verwenden! 
-        const adId = item.id || item.adId || "";
+        const adId = item.id || item.adId || item.advertId || "";
         let url = "";
         if (typeof item.ownUrl === "string" && item.ownUrl.includes("/iad/")) {
           url = item.ownUrl.startsWith("http") ? item.ownUrl : `${this.baseUrl}${item.ownUrl}`;
-        } else if (adId) {
-          url = `https://www.willhaben.at/iad/kaufen-und-verkaufen/d/-${adId}/`;
         } else if (typeof item.contextLinkList === "object" && Array.isArray(item.contextLinkList)) {
           const webLink = (item.contextLinkList as Array<Record<string, unknown>>).find(
             (l) => typeof l.uri === "string" && (l.uri as string).includes("/iad/")
           );
-          if (webLink) url = `https://www.willhaben.at${webLink.uri}`;
+          if (webLink) url = `https://www.willhaben.at${(webLink as Record<string, unknown>).uri}`;
         }
-        if (!url) url = `https://www.willhaben.at/iad/kaufen-und-verkaufen/d/-${adId || "unknown"}/`;
+        // Fallback: Inserat-URL aus adId konstruieren
+        if (!url && adId) {
+          url = `https://www.willhaben.at/iad/kaufen-und-verkaufen/d/-${adId}/`;
+        }
+        if (!url) url = `https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz`;
 
-        // Bild
+        // Bild — Willhaben nutzt verschiedene Bildstrukturen
         let imageUrl: string | null = null;
         if (Array.isArray(item.advertImageList)) {
           const imgs = item.advertImageList as Array<Record<string, unknown>>;
           if (imgs.length > 0) {
-            imageUrl = (imgs[0].mainImageUrl || imgs[0].referenceImageUrl || imgs[0].url || "") as string;
+            imageUrl = (imgs[0].mainImageUrl || imgs[0].referenceImageUrl || imgs[0].url || imgs[0].selfLink || "") as string;
           }
-        } else if (typeof item.imageUrl === "string") {
+        }
+        // Neueres Format: allImageUrls Array (direkte URL-Strings)
+        if (!imageUrl && Array.isArray(item.allImageUrls) && (item.allImageUrls as string[]).length > 0) {
+          imageUrl = (item.allImageUrls as string[])[0];
+        }
+        // Attribute: IMAGE oder MAIN_IMAGE_URL
+        if (!imageUrl && Array.isArray(item.attributes)) {
+          for (const attr of (item.attributes as Array<Record<string, unknown>>)) {
+            const name = String(attr.name || "").toUpperCase();
+            if ((name === "ALL_IMAGE_URLS" || name === "IMAGE_URLS" || name === "MAIN_IMAGE_URL") && Array.isArray(attr.values) && (attr.values as string[]).length > 0) {
+              const val = (attr.values as string[])[0];
+              if (val && val.startsWith("http")) { imageUrl = val; break; }
+            }
+          }
+        }
+        // Direkte Felder
+        if (!imageUrl && typeof item.imageUrl === "string" && item.imageUrl.startsWith("http")) {
           imageUrl = item.imageUrl;
-        } else if (typeof item.thumbnailUrl === "string") {
+        }
+        if (!imageUrl && typeof item.thumbnailUrl === "string" && item.thumbnailUrl.startsWith("http")) {
           imageUrl = item.thumbnailUrl;
+        }
+        // advertImage (einzelnes Objekt)
+        if (!imageUrl && item.advertImage && typeof item.advertImage === "object") {
+          const img = item.advertImage as Record<string, unknown>;
+          imageUrl = (img.mainImageUrl || img.referenceImageUrl || img.url || "") as string;
         }
 
         if (imageUrl && !imageUrl.startsWith("http")) imageUrl = null;

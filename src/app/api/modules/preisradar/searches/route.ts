@@ -284,6 +284,29 @@ export async function GET(request: NextRequest) {
         lastScrapedAt: s.lastScrapedAt,
         checkosCharged: s.checkosCharged,
         createdAt: s.createdAt,
+        // Kategorie-Felder
+        category: s.category,
+        subcategory: s.subcategory,
+        condition: s.condition,
+        // Fahrzeug
+        vehicleMake: s.vehicleMake,
+        vehicleModel: s.vehicleModel,
+        yearFrom: s.yearFrom,
+        yearTo: s.yearTo,
+        kmFrom: s.kmFrom,
+        kmTo: s.kmTo,
+        fuelType: s.fuelType,
+        transmission: s.transmission,
+        engineSizeCcm: s.engineSizeCcm,
+        motorcycleType: s.motorcycleType,
+        // Immobilien
+        propertyType: s.propertyType,
+        propertyOffer: s.propertyOffer,
+        rooms: s.rooms,
+        areaM2: s.areaM2,
+        location: s.location,
+        // Möbel
+        furnitureType: s.furnitureType,
       };
     });
 

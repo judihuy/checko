@@ -29,6 +29,19 @@ export class AutoScoutScraper extends BaseScraper {
         // Fallback: free-text search
         searchUrl = `${this.baseUrl}/de/s?q=${encodeURIComponent(query)}`;
       }
+
+      // yearFrom/yearTo als URL-Parameter anhängen
+      const urlParams = new URLSearchParams();
+      if (options?.yearFrom) urlParams.set("yearFrom", String(options.yearFrom));
+      if (options?.yearTo) urlParams.set("yearTo", String(options.yearTo));
+      if (options?.kmFrom) urlParams.set("kmFrom", String(options.kmFrom));
+      if (options?.kmTo) urlParams.set("kmTo", String(options.kmTo));
+
+      const paramStr = urlParams.toString();
+      if (paramStr) {
+        searchUrl += (searchUrl.includes("?") ? "&" : "?") + paramStr;
+      }
+
       console.log(`[AutoScout] Search URL: ${searchUrl}`);
 
       // Use Puppeteer to render the page (RSC requires full browser)

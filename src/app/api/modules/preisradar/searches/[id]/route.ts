@@ -23,6 +23,25 @@ const updateSearchSchema = z.object({
     .array(z.enum(["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"]))
     .min(1, "Mindestens eine Plattform auswählen")
     .optional(),
+  // Kategorie-Felder
+  category: z.string().max(100).nullable().optional(),
+  subcategory: z.string().max(100).nullable().optional(),
+  vehicleMake: z.string().max(100).nullable().optional(),
+  vehicleModel: z.string().max(100).nullable().optional(),
+  yearFrom: z.number().int().min(1950).max(2030).nullable().optional(),
+  yearTo: z.number().int().min(1950).max(2030).nullable().optional(),
+  kmFrom: z.number().int().min(0).nullable().optional(),
+  kmTo: z.number().int().min(0).nullable().optional(),
+  fuelType: z.string().max(50).nullable().optional(),
+  transmission: z.string().max(50).nullable().optional(),
+  engineSizeCcm: z.number().int().min(0).nullable().optional(),
+  motorcycleType: z.string().max(50).nullable().optional(),
+  propertyType: z.string().max(50).nullable().optional(),
+  propertyOffer: z.string().max(50).nullable().optional(),
+  rooms: z.number().int().min(1).max(50).nullable().optional(),
+  areaM2: z.number().int().min(1).nullable().optional(),
+  location: z.string().max(200).nullable().optional(),
+  furnitureType: z.string().max(100).nullable().optional(),
 });
 
 // PUT: Suche bearbeiten
@@ -133,6 +152,18 @@ export async function PUT(
     if (parsed.data.platforms !== undefined) {
       // DB speichert Plattformen komma-getrennt
       updateData.platforms = parsed.data.platforms.join(",");
+    }
+    // Kategorie-Felder aktualisieren
+    const categoryFields = [
+      "category", "subcategory", "vehicleMake", "vehicleModel",
+      "yearFrom", "yearTo", "kmFrom", "kmTo", "fuelType", "transmission",
+      "engineSizeCcm", "motorcycleType", "propertyType", "propertyOffer",
+      "rooms", "areaM2", "location", "furnitureType",
+    ] as const;
+    for (const field of categoryFields) {
+      if (parsed.data[field] !== undefined) {
+        updateData[field] = parsed.data[field];
+      }
     }
 
     const updated = await prisma.preisradarSearch.update({

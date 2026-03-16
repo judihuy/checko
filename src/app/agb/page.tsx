@@ -124,7 +124,7 @@ export default function AGBPage() {
               </h2>
               <p className="text-gray-700 leading-relaxed">
                 Checko stellt verschiedene digitale Module zur Verfügung, die unter anderem
-                Marktplatz-Überwachung, KI-gestützte Analysen und automatisierte
+                Marktplatz-Überwachung, automatisierte Analysen und
                 Benachrichtigungen umfassen. Die genaue Leistungsbeschreibung jedes Moduls ist
                 auf der jeweiligen Modulseite einsehbar. Wir bemühen uns um eine hohe
                 Verfügbarkeit, garantieren jedoch keine unterbrechungsfreie Bereitstellung.
@@ -139,7 +139,7 @@ export default function AGBPage() {
               <ul className="list-disc list-inside text-gray-700 space-y-2">
                 <li>Die Nutzung von Checko erfolgt auf eigenes Risiko.</li>
                 <li>
-                  KI-generierte Analysen und Empfehlungen stellen keine rechtsverbindliche
+                  Automatisch generierte Analysen und Empfehlungen stellen keine rechtsverbindliche
                   Beratung dar.
                 </li>
                 <li>

@@ -74,7 +74,7 @@ const PRICING_TIERS = [
     checkos: 7,
     description: "Maximale Qualität mit dem besten verfügbaren Modell",
     features: [
-      "Beste verfügbare KI",
+      "Höchste Qualitätsstufe",
       "Höchste Genauigkeit",
       "Umfassende Analyse",
       "Prioritätsverarbeitung",
@@ -83,6 +83,16 @@ const PRICING_TIERS = [
     highlight: false,
   },
 ];
+
+/**
+ * Gecko-Video-Index basierend auf sortOrder.
+ * Es gibt gecko-01.mp4 bis gecko-21.mp4.
+ * Falls sortOrder > 21: Modulo-Berechnung.
+ */
+function getGeckoVideoIndex(sortOrder: number): string {
+  const index = sortOrder <= 0 ? 1 : sortOrder > 21 ? ((sortOrder - 1) % 21) + 1 : sortOrder;
+  return String(index).padStart(2, "0");
+}
 
 export default async function ModuleDetailPage({ params }: PageProps) {
   const { slug } = await params;
@@ -162,7 +172,7 @@ export default async function ModuleDetailPage({ params }: PageProps) {
                   </p>
                   <WaitlistForm moduleId={moduleData.id} moduleName={moduleData.name} />
                 </div>
-                {/* Gecko-Animation (B) — dezent auf Coming Soon Seiten */}
+                {/* Gecko-Animation — jedes Modul bekommt ein eigenes Video basierend auf sortOrder */}
                 <div className="hidden md:block w-32 h-32 rounded-xl overflow-hidden shadow-md flex-shrink-0">
                   <video
                     autoPlay
@@ -171,9 +181,8 @@ export default async function ModuleDetailPage({ params }: PageProps) {
                     playsInline
                     preload="metadata"
                     className="w-full h-full object-cover"
-                  >
-                    <source src="/gecko-02.mp4" type="video/mp4" />
-                  </video>
+                    src={`/gecko-${getGeckoVideoIndex(moduleData.sortOrder)}.mp4`}
+                  />
                 </div>
               </div>
             ) : (

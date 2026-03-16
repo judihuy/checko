@@ -8,6 +8,9 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   "autoscout": "AutoScout24.ch",
   "comparis": "Comparis.ch",
   "willhaben": "Willhaben.at",
+  "anibis": "Anibis.ch",
+  "google-shopping": "Google Shopping",
+  "amazon": "Amazon.de",
 };
 
 export function getPlatformDisplayName(slug: string): string {
@@ -15,7 +18,7 @@ export function getPlatformDisplayName(slug: string): string {
 }
 
 // Länder-Gruppen für die Suche
-export type CountryCode = "ch" | "de" | "at";
+export type CountryCode = "ch" | "de" | "at" | "int";
 
 interface CountryConfig {
   label: string;
@@ -28,19 +31,25 @@ export const COUNTRY_PLATFORMS: Record<CountryCode, CountryConfig> = {
   ch: {
     label: "Schweiz",
     flag: "🇨🇭",
-    platforms: ["tutti", "ricardo", "autoscout", "comparis"],
+    platforms: ["tutti", "ricardo", "autoscout", "comparis", "anibis"],
     enabled: true,
   },
   de: {
     label: "Deutschland",
     flag: "🇩🇪",
-    platforms: ["ebay-ka"],
+    platforms: ["ebay-ka", "amazon"],
     enabled: true,
   },
   at: {
     label: "Österreich",
     flag: "🇦🇹",
     platforms: ["willhaben"],
-    enabled: false, // Coming soon
+    enabled: true,
+  },
+  int: {
+    label: "International",
+    flag: "🌍",
+    platforms: ["google-shopping"],
+    enabled: true,
   },
 };

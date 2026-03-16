@@ -7,6 +7,10 @@ import { RicardoScraper } from "./ricardo";
 import { EbayKleinanzeigenScraper } from "./ebay-ka";
 import { AutoScoutScraper } from "./autoscout";
 import { ComparisScraper } from "./comparis";
+import { AnibisScraper } from "./anibis";
+import { GoogleShoppingScraper } from "./google-shopping";
+import { AmazonScraper } from "./amazon";
+import { WillhabenScraper } from "./willhaben";
 
 // Alle verfügbaren Scraper
 const scraperRegistry: Map<string, BaseScraper> = new Map();
@@ -17,12 +21,20 @@ const ricardoScraper = new RicardoScraper();
 const ebayKaScraper = new EbayKleinanzeigenScraper();
 const autoScoutScraper = new AutoScoutScraper();
 const comparisScraper = new ComparisScraper();
+const anibisScraper = new AnibisScraper();
+const googleShoppingScraper = new GoogleShoppingScraper();
+const amazonScraper = new AmazonScraper();
+const willhabenScraper = new WillhabenScraper();
 
 scraperRegistry.set(tuttiScraper.platform, tuttiScraper);
 scraperRegistry.set(ricardoScraper.platform, ricardoScraper);
 scraperRegistry.set(ebayKaScraper.platform, ebayKaScraper);
 scraperRegistry.set(autoScoutScraper.platform, autoScoutScraper);
 scraperRegistry.set(comparisScraper.platform, comparisScraper);
+scraperRegistry.set(anibisScraper.platform, anibisScraper);
+scraperRegistry.set(googleShoppingScraper.platform, googleShoppingScraper);
+scraperRegistry.set(amazonScraper.platform, amazonScraper);
+scraperRegistry.set(willhabenScraper.platform, willhabenScraper);
 
 /**
  * Alle registrierten Scraper zurückgeben

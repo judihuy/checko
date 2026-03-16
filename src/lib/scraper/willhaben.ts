@@ -1,0 +1,353 @@
+// Willhaben.at Scraper (Österreich)
+// Nutzt Puppeteer (headless Browser) mit Proxy
+// Parse-Methoden: JSON-LD, __NEXT_DATA__, HTML-Pattern-Matching
+
+import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
+
+export class WillhabenScraper extends BaseScraper {
+  readonly platform = "willhaben";
+  readonly displayName = "Willhaben.at";
+  readonly baseUrl = "https://www.willhaben.at";
+  isWorking = true;
+
+  async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
+    const results: ScraperResult[] = [];
+
+    try {
+      const encodedQuery = encodeURIComponent(query);
+      let searchUrl = `${this.baseUrl}/iad/kaufen-und-verkaufen/marktplatz?keyword=${encodedQuery}`;
+
+      // Preisfilter
+      if (options?.minPrice) {
+        // EUR Rappen → EUR: unsere Preise sind in CHF-Rappen
+        const minEUR = Math.round((options.minPrice / 100) / 0.96);
+        searchUrl += `&PRICE_FROM=${minEUR}`;
+      }
+      if (options?.maxPrice) {
+        const maxEUR = Math.round((options.maxPrice / 100) / 0.96);
+        searchUrl += `&PRICE_TO=${maxEUR}`;
+      }
+
+      console.log(`[Willhaben] Search URL: ${searchUrl}`);
+
+      let html: string;
+      try {
+        html = await this.fetchWithBrowser(searchUrl);
+      } catch (browserError) {
+        console.warn(`[Willhaben] Browser failed, trying without proxy:`, browserError);
+        try {
+          html = await this.fetchWithBrowserNoProxy(searchUrl);
+        } catch (noProxyError) {
+          console.warn(`[Willhaben] Browser without proxy also failed, falling back to HTTP:`, noProxyError);
+          const response = await this.fetchWithHeaders(searchUrl);
+          if (!response.ok) {
+            console.error(`Willhaben.at: HTTP ${response.status} für "${query}"`);
+            return results;
+          }
+          html = await response.text();
+        }
+      }
+
+      console.log(`[Willhaben] HTML length: ${html.length}`);
+
+      // Prüfe ob blockiert
+      if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
+        console.warn("[Willhaben] ⚠️ Cloudflare-Challenge erkannt — Scraping blockiert.");
+        return results;
+      }
+
+      if (html.length < 1000) {
+        console.warn(`[Willhaben] ⚠️ Sehr kurze Antwort (${html.length} Bytes)`);
+        return results;
+      }
+
+      // Methode 1: __NEXT_DATA__ JSON (Willhaben nutzt Next.js)
+      const nextDataResults = this.parseNextData(html, options);
+      if (nextDataResults.length > 0) {
+        console.log(`[Willhaben] ✅ __NEXT_DATA__ parsed: ${nextDataResults.length} results`);
+        return nextDataResults;
+      }
+
+      // Methode 2: JSON-LD
+      const jsonLdResults = this.parseJsonLd(html, options);
+      if (jsonLdResults.length > 0) {
+        console.log(`[Willhaben] JSON-LD parsed: ${jsonLdResults.length} results`);
+        return jsonLdResults;
+      }
+
+      // Methode 3: HTML-Pattern-Matching
+      const htmlResults = this.parseHtmlListings(html, options);
+      if (htmlResults.length > 0) {
+        console.log(`[Willhaben] HTML parsing: ${htmlResults.length} results`);
+        return htmlResults;
+      }
+
+      console.warn(`[Willhaben] ⚠️ Keine Ergebnisse aus allen Parse-Methoden.`);
+      return results;
+    } catch (error) {
+      const reason = error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+      console.error(`[Willhaben] ❌ Scraper-Fehler: ${reason}`);
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse __NEXT_DATA__ JSON (Willhaben nutzt Next.js)
+   */
+  private parseNextData(html: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    const nextDataMatch = html.match(
+      /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i
+    );
+
+    if (!nextDataMatch) return results;
+
+    try {
+      const nextData = JSON.parse(nextDataMatch[1]);
+      const pageProps = nextData?.props?.pageProps;
+      if (!pageProps) return results;
+
+      // Willhaben Struktur: searchResult.advertSummaryList.advertSummary[]
+      const adverts: unknown[] =
+        pageProps.searchResult?.advertSummaryList?.advertSummary ||
+        pageProps.advertSummaryList?.advertSummary ||
+        pageProps.listings ||
+        pageProps.results ||
+        [];
+
+      if (!Array.isArray(adverts) || adverts.length === 0) return results;
+
+      console.log(`[Willhaben] ${adverts.length} Adverts in __NEXT_DATA__`);
+
+      for (const advert of adverts) {
+        if (!advert || typeof advert !== "object") continue;
+        const item = advert as Record<string, unknown>;
+
+        // Titel
+        const title = (item.description || item.title || item.headline || "") as string;
+        if (!title) continue;
+
+        // Preis: attributes Array mit Attribut "PRICE"
+        let priceRaw = 0;
+        if (Array.isArray(item.attributes)) {
+          const priceAttr = (item.attributes as Array<Record<string, unknown>>).find(
+            (a) => a.name === "PRICE" || a.name === "price"
+          );
+          if (priceAttr) {
+            const vals = priceAttr.values as string[] | undefined;
+            if (vals && vals.length > 0) {
+              priceRaw = parseFloat(String(vals[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+            }
+          }
+        }
+
+        // Fallback: price direkt
+        if (priceRaw <= 0 && item.price !== undefined) {
+          priceRaw = typeof item.price === "number"
+            ? item.price
+            : parseFloat(String(item.price).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+        }
+
+        if (isNaN(priceRaw)) priceRaw = 0;
+
+        // EUR → CHF Rappen (1 EUR ≈ 0.96 CHF)
+        const price = Math.round(priceRaw * 0.96 * 100);
+
+        if (price > 0) {
+          if (options?.minPrice && price < options.minPrice) continue;
+          if (options?.maxPrice && price > options.maxPrice) continue;
+        }
+
+        // URL
+        const adId = item.id || item.adId || "";
+        let url = "";
+        if (typeof item.ownUrl === "string") {
+          url = item.ownUrl.startsWith("http") ? item.ownUrl : `${this.baseUrl}${item.ownUrl}`;
+        } else if (typeof item.selfLink === "string") {
+          url = item.selfLink.startsWith("http") ? item.selfLink : `${this.baseUrl}${item.selfLink}`;
+        } else if (adId) {
+          url = `${this.baseUrl}/iad/kaufen-und-verkaufen/d/-${adId}`;
+        } else {
+          url = this.baseUrl;
+        }
+
+        // Bild
+        let imageUrl: string | null = null;
+        if (Array.isArray(item.advertImageList)) {
+          const imgs = item.advertImageList as Array<Record<string, unknown>>;
+          if (imgs.length > 0) {
+            imageUrl = (imgs[0].mainImageUrl || imgs[0].referenceImageUrl || imgs[0].url || "") as string;
+          }
+        } else if (typeof item.imageUrl === "string") {
+          imageUrl = item.imageUrl;
+        } else if (typeof item.thumbnailUrl === "string") {
+          imageUrl = item.thumbnailUrl;
+        }
+
+        if (imageUrl && !imageUrl.startsWith("http")) imageUrl = null;
+
+        results.push({
+          title,
+          price,
+          url,
+          imageUrl,
+          platform: this.platform,
+          scrapedAt: new Date(),
+        });
+
+        if (options?.limit && results.length >= options.limit) break;
+      }
+    } catch (error) {
+      console.error("[Willhaben] __NEXT_DATA__ Parse-Fehler:", error);
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse JSON-LD schema.org
+   */
+  private parseJsonLd(html: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    const jsonLdMatches = html.matchAll(
+      /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi
+    );
+
+    for (const match of jsonLdMatches) {
+      try {
+        const jsonData = JSON.parse(match[1]);
+        const graphs = jsonData?.["@graph"] || [jsonData];
+
+        for (const graph of graphs) {
+          if (graph?.["@type"] !== "ItemList" || !Array.isArray(graph?.itemListElement)) {
+            continue;
+          }
+
+          for (const entry of graph.itemListElement) {
+            const item = entry?.item || entry;
+            if (!item) continue;
+
+            const title = (item.name as string) || "";
+            if (!title) continue;
+
+            let priceRaw = 0;
+            if (item.offers) {
+              const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+              if (offers) {
+                const val = offers.price || offers.lowPrice;
+                priceRaw = typeof val === "number" ? val : parseFloat(String(val || "0"));
+              }
+            }
+            if (isNaN(priceRaw)) priceRaw = 0;
+
+            // EUR → CHF Rappen
+            const price = Math.round(priceRaw * 0.96 * 100);
+
+            if (price > 0) {
+              if (options?.minPrice && price < options.minPrice) continue;
+              if (options?.maxPrice && price > options.maxPrice) continue;
+            }
+
+            const url = (item.url as string) || "";
+            const fullUrl = url.startsWith("http") ? url : url ? `${this.baseUrl}${url}` : this.baseUrl;
+
+            let imageUrl: string | null = null;
+            if (typeof item.image === "string") imageUrl = item.image;
+            else if (Array.isArray(item.image) && typeof item.image[0] === "string") imageUrl = item.image[0];
+
+            results.push({
+              title,
+              price,
+              url: fullUrl,
+              imageUrl,
+              platform: this.platform,
+              scrapedAt: new Date(),
+            });
+
+            if (options?.limit && results.length >= options.limit) break;
+          }
+          if (results.length > 0) break;
+        }
+        if (results.length > 0) break;
+      } catch {
+        // JSON parse error
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * HTML-Pattern-Matching: Links zu Inseraten mit EUR-Preisen
+   */
+  private parseHtmlListings(html: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+    const seenUrls = new Set<string>();
+
+    // Willhaben Inserat-Links
+    const linkRegex = /href="(\/iad\/kaufen-und-verkaufen\/d\/[^"]+)"/g;
+    let linkMatch;
+
+    while ((linkMatch = linkRegex.exec(html)) !== null) {
+      const href = linkMatch[1];
+      const normalized = href.replace(/\/$/, "");
+      if (seenUrls.has(normalized)) continue;
+      seenUrls.add(normalized);
+
+      // Kontext
+      const start = Math.max(0, linkMatch.index - 500);
+      const end = Math.min(html.length, linkMatch.index + 500);
+      const context = html.substring(start, end);
+
+      // Preis (EUR Format)
+      const priceMatch =
+        context.match(/€\s*([\d.,]+)/i) ||
+        context.match(/([\d.,]+)\s*€/i) ||
+        context.match(/EUR\s*([\d.,]+)/i);
+
+      let price = 0;
+      if (priceMatch) {
+        const priceStr = priceMatch[1].replace(/\./g, "").replace(",", ".");
+        const priceEUR = parseFloat(priceStr);
+        if (!isNaN(priceEUR)) {
+          price = Math.round(priceEUR * 0.96 * 100); // EUR → CHF Rappen
+        }
+      }
+
+      if (price > 0) {
+        if (options?.minPrice && price < options.minPrice) continue;
+        if (options?.maxPrice && price > options.maxPrice) continue;
+      }
+
+      // Titel
+      const titleMatch = context.match(/>([^<]{5,100})<\/(?:a|h[1-6]|span|div)/);
+      const slugMatch = href.match(/\/d\/([^/]+?)(?:-\d+)?\/?$/);
+      const title = titleMatch
+        ? titleMatch[1].trim()
+        : slugMatch
+          ? slugMatch[1].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+          : "Inserat";
+
+      // Bild
+      const imgMatch = context.match(/src="(https:\/\/[^"]*(?:willhaben|cache)[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"/i);
+
+      results.push({
+        title,
+        price,
+        url: `${this.baseUrl}${href}`,
+        imageUrl: imgMatch ? imgMatch[1] : null,
+        platform: this.platform,
+        scrapedAt: new Date(),
+      });
+
+      if (options?.limit && results.length >= options.limit) break;
+    }
+
+    return results;
+  }
+}

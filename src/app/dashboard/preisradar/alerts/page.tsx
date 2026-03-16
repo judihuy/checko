@@ -503,14 +503,14 @@ export default function PreisradarAlertsPage() {
                         </div>
                       </div>
 
-                      {/* KI-Bewertung */}
+                      {/* Bewertung */}
                       {alert.bewertung && (
                         <div className={`text-xs px-2 py-1.5 rounded-lg mt-3 ${getScoreColor(alert.priceScore)}`}>
-                          <span className="font-medium">KI-Bewertung:</span> {alert.bewertung}
+                          <span className="font-medium">Bewertung:</span> {alert.bewertung}
                         </div>
                       )}
 
-                      {/* KI-Details */}
+                      {/* Details */}
                       {alert.details && (
                         <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1.5 rounded-lg mt-2">
                           💡 {alert.details}

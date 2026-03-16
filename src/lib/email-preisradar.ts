@@ -51,7 +51,7 @@ export async function sendPreisradarAlertEmail(
         </a>
       </div>
       <p style="color: #6b7280; font-size: 14px;">
-        Schau dir die Treffer an und entdecke die besten Angebote. Jeder Treffer wurde von unserer KI auf Preis-Leistung analysiert.
+        Schau dir die Treffer an und entdecke die besten Angebote. Jeder Treffer wurde automatisch auf Preis-Leistung analysiert.
       </p>
       <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
       <p style="color: #9ca3af; font-size: 12px; text-align: center;">

@@ -30,14 +30,17 @@ interface Search {
 const ALL_PLATFORMS = [
   { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode, disabled: false },
   { id: "ricardo", name: "Ricardo.ch", country: "ch" as CountryCode, disabled: false },
+  { id: "anibis", name: "Anibis.ch", country: "ch" as CountryCode, disabled: false },
   { id: "autoscout", name: "AutoScout24.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "Bot-Schutz" },
   { id: "comparis", name: "Comparis.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "DataDome-Schutz" },
   { id: "ebay-ka", name: "Kleinanzeigen.de", country: "de" as CountryCode, disabled: false },
+  { id: "amazon", name: "Amazon.de", country: "de" as CountryCode, disabled: false },
   { id: "willhaben", name: "Willhaben.at", country: "at" as CountryCode, disabled: false },
+  { id: "google-shopping", name: "Google Shopping", country: "int" as CountryCode, disabled: false },
 ];
 
-// Nur aktive Plattformen: ohne AT und ohne deaktivierte (autoscout, comparis komplett ausblenden)
-const ACTIVE_PLATFORMS = ALL_PLATFORMS.filter((p) => p.country !== "at" && !("disabled" in p && p.disabled));
+// Nur aktive Plattformen: ohne deaktivierte (autoscout, comparis komplett ausblenden)
+const ACTIVE_PLATFORMS = ALL_PLATFORMS.filter((p) => !("disabled" in p && p.disabled));
 
 // Basiskosten pro Dauer (Standard-Stufe = 2 Checkos)
 const DURATION_BASE_COSTS: Record<string, number> = {
@@ -86,7 +89,7 @@ const QUALITY_TIERS = [
     checkos: 2,
     interval: 30,
     intervalLabel: "Alle 30 Minuten",
-    model: "Standard-KI",
+    model: "Standard",
   },
   {
     id: "premium",
@@ -95,7 +98,7 @@ const QUALITY_TIERS = [
     checkos: 4,
     interval: 15,
     intervalLabel: "Alle 15 Minuten",
-    model: "Premium-KI",
+    model: "Premium",
   },
   {
     id: "pro",
@@ -104,7 +107,7 @@ const QUALITY_TIERS = [
     checkos: 7,
     interval: 5,
     intervalLabel: "Alle 5 Minuten",
-    model: "Pro-KI",
+    model: "Pro",
   },
 ];
 
@@ -140,7 +143,7 @@ export default function PreisradarPage() {
   const [query, setQuery] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo", "ebay-ka"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo", "anibis", "ebay-ka"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
   const [category, setCategory] = useState("");
@@ -358,7 +361,7 @@ export default function PreisradarPage() {
       setQuery("");
       setMinPrice("");
       setMaxPrice("");
-      setSelectedPlatforms(["ricardo", "ebay-ka"]);
+      setSelectedPlatforms(["tutti", "ricardo", "anibis", "ebay-ka"]);
       setSelectedCountries(new Set(["ch"]));
       setDuration("1d");
       setQualityTier("standard");
@@ -504,9 +507,23 @@ export default function PreisradarPage() {
                 <span className="text-gray-300">/</span>
                 <span className="text-gray-900 font-medium text-sm">Preisradar</span>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                📡 Preisradar
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  📡 Preisradar
+                </h1>
+                {/* Dezentes Gecko-Video */}
+                <div className="w-[120px] h-[120px] rounded-xl overflow-hidden shadow-md flex-shrink-0 hidden sm:block">
+                  <video
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    className="w-full h-full object-cover"
+                    src="/gecko-06.mp4"
+                  />
+                </div>
+              </div>
               <p className="text-gray-600 mt-1">Überwache Marktplätze und finde die besten Angebote.</p>
             </div>
             <div className="flex gap-3">
@@ -840,7 +857,7 @@ export default function PreisradarPage() {
                 {/* Qualitätsstufe — mit Intervall-Info */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    KI-Qualitätsstufe & Scan-Intervall
+                    Qualitätsstufe & Scan-Intervall
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {QUALITY_TIERS.map((tier) => (
@@ -1146,7 +1163,7 @@ export default function PreisradarPage() {
                 {/* Info: Dauer/Qualität/Intervall nicht änderbar */}
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                   <p className="text-xs text-gray-500">
-                    ℹ️ Dauer, KI-Qualitätsstufe und Scan-Intervall können nach der Erstellung nicht mehr geändert werden, da die Checkos bereits berechnet wurden.
+                    ℹ️ Dauer, Qualitätsstufe und Scan-Intervall können nach der Erstellung nicht mehr geändert werden, da die Checkos bereits berechnet wurden.
                   </p>
                   <div className="flex gap-3 mt-2 text-sm text-gray-700">
                     <span>⏱ {DURATIONS.find((d) => d.id === editingSearch.duration)?.name || editingSearch.duration}</span>

@@ -8,7 +8,7 @@ export function OrganizationJsonLd() {
     name: "Checko",
     url: "https://checko.ch",
     description:
-      "Checko bietet smarte Module für Preisüberwachung, Vertragscheck, Betrugsschutz und mehr. Dein AI-Toolkit für den Alltag.",
+      "Checko bietet smarte Module für Preisüberwachung, Vertragscheck, Betrugsschutz und mehr. Dein smartes Toolkit für den Alltag.",
     logo: "https://checko.ch/favicon.ico",
   };
 

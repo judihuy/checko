@@ -47,7 +47,7 @@ export default function DatenschutzPage() {
                 <li>Benutzerkontenverwaltung und Authentifizierung</li>
                 <li>Abwicklung von Abonnements und Zahlungen</li>
                 <li>Versand von transaktionalen E-Mails (Bestätigungen, Passwort-Reset)</li>
-                <li>KI-basierte Analysen im Rahmen der gebuchten Module</li>
+                <li>Automatisierte Analysen im Rahmen der gebuchten Module</li>
                 <li>Sicherstellung der Plattform-Sicherheit (Rate-Limiting, Betrugs-Prävention)</li>
               </ul>
             </section>
@@ -79,7 +79,7 @@ export default function DatenschutzPage() {
                   </a>
                 </li>
                 <li>
-                  <strong>Anthropic</strong> (Anthropic, PBC, USA) — KI-gestützte Analysen (z.B. Preis-Bewertungen, Betrugs-Erkennung).{" "}
+                  <strong>Anthropic</strong> (Anthropic, PBC, USA) — Automatisierte Analysen (z.B. Preis-Bewertungen, Betrugs-Erkennung).{" "}
                   <a href="https://www.anthropic.com/privacy" className="text-emerald-600 hover:text-emerald-700" target="_blank" rel="noopener noreferrer">
                     Datenschutzerklärung von Anthropic
                   </a>

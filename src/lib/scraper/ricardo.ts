@@ -106,7 +106,8 @@ export class RicardoScraper extends BaseScraper {
       const val = o[field];
       if (val === undefined || val === null || val === "") continue;
 
-      const parsed = typeof val === "number" ? val : parseFloat(String(val).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+      // Apostroph als Tausendertrenner entfernen: "6'000.00" → "6000.00"
+      const parsed = typeof val === "number" ? val : parseFloat(String(val).replace(/'/g, "").replace(/[^0-9.\-]/g, ""));
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
 
@@ -195,7 +196,7 @@ export class RicardoScraper extends BaseScraper {
             if (priceRaw <= 0 && item.price !== undefined) {
               const directPrice = typeof item.price === "number"
                 ? item.price
-                : parseFloat(String(item.price).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+                : parseFloat(String(item.price).replace(/'/g, "").replace(/[^0-9.\-]/g, ""));
               if (!isNaN(directPrice) && directPrice > 0) {
                 priceRaw = directPrice;
               }
@@ -271,14 +272,15 @@ export class RicardoScraper extends BaseScraper {
       const end = Math.min(html.length, linkMatch.index + 400);
       const context = html.substring(start, end);
 
-      // Preis suchen im Kontext
+      // Preis suchen im Kontext (Schweizer Format: 6'000.00)
       const priceMatch =
-        context.match(/(?:CHF|Fr\.?)\s*([\d',.]+)/i) ||
-        context.match(/([\d',.]+)\s*(?:CHF|Fr\.?)/i);
+        context.match(/(?:CHF|Fr\.?)\s*([\d'.,]+)/i) ||
+        context.match(/([\d'.,]+)\s*(?:CHF|Fr\.?)/i);
 
       let price = 0;
       if (priceMatch) {
-        const priceStr = priceMatch[1].replace(/[',]/g, "");
+        // Apostroph als Tausendertrenner entfernen: "6'000.00" → "6000.00"
+        const priceStr = priceMatch[1].replace(/'/g, "").replace(/,/g, "");
         price = Math.round(parseFloat(priceStr) * 100);
         if (isNaN(price)) price = 0;
       }

@@ -89,6 +89,7 @@ model User {
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
   savedAlerts             SavedAlert[]
+  pushSubscriptions       PushSubscription[]
 }
 
 model Module {
@@ -325,4 +326,18 @@ model SavedAlert {
   @@unique([userId, alertId])
   @@index([userId])
   @@index([alertId])
+}
+
+// ==================== PUSH SUBSCRIPTIONS ====================
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique @db.Text
+  keys      String   @db.Text // JSON: { p256dh, auth }
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

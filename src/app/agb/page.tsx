@@ -1,6 +1,7 @@
 // Allgemeine Geschäftsbedingungen (AGB)
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { ObfuscatedEmail } from "@/components/ObfuscatedEmail";
 
 export default function AGBPage() {
   return (
@@ -217,12 +218,7 @@ export default function AGBPage() {
               <h2 className="text-xl font-semibold text-gray-900 mb-3">11. Kontakt</h2>
               <p className="text-gray-700 leading-relaxed">
                 Bei Fragen zu diesen AGB kontaktiere uns unter:{" "}
-                <a
-                  href="mailto:info@checko.ch"
-                  className="text-emerald-600 hover:text-emerald-700"
-                >
-                  info@checko.ch
-                </a>
+                <ObfuscatedEmail user="info" domain="checko.ch" />
               </p>
               <p className="text-gray-500 text-sm mt-4">Stand: März 2026</p>
             </section>

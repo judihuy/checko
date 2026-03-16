@@ -1,6 +1,7 @@
 // Datenschutzerklärung — DSGVO-konforme Datenschutzseite
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { ObfuscatedEmail } from "@/components/ObfuscatedEmail";
 
 export default function DatenschutzPage() {
   return (
@@ -19,9 +20,7 @@ export default function DatenschutzPage() {
                 Mittelstrasse 5<br />
                 3414 Oberburg, Schweiz<br />
                 E-Mail:{" "}
-                <a href="mailto:datenschutz [at] checko [dot] ch" className="text-emerald-600 hover:text-emerald-700">
-                  datenschutz [at] checko [dot] ch
-                </a>
+                <ObfuscatedEmail user="datenschutz" domain="checko.ch" />
               </p>
             </section>
 
@@ -112,9 +111,7 @@ export default function DatenschutzPage() {
               </ul>
               <p className="text-gray-700 leading-relaxed mt-3">
                 Kontakt für Datenschutz-Anfragen:{" "}
-                <a href="mailto:datenschutz [at] checko [dot] ch" className="text-emerald-600 hover:text-emerald-700">
-                  datenschutz [at] checko [dot] ch
-                </a>
+                <ObfuscatedEmail user="datenschutz" domain="checko.ch" />
               </p>
             </section>
 

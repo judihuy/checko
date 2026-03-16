@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   await prisma.preisradarSearch.update({
     where: { id: search.id },
-    data: { isDraft: false, isActive: true, expiresAt },
+    data: { isDraft: false, isActive: true, expiresAt, checkosCharged: cost },
   });
 
   runSearchJob(search.id).catch(() => {});

@@ -1,5 +1,6 @@
 // Footer component with legal links
 import Link from "next/link";
+import { ObfuscatedEmail } from "@/components/ObfuscatedEmail";
 
 export function Footer() {
   return (
@@ -59,9 +60,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="mailto:kontakt@checko.ch" className="hover:text-white transition">
-                  Kontakt
-                </a>
+                <ObfuscatedEmail
+                  user="kontakt"
+                  domain="checko.ch"
+                  className="text-gray-400 hover:text-white transition"
+                />
               </li>
             </ul>
           </div>

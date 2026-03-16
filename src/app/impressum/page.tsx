@@ -1,6 +1,7 @@
 // Impressum — Pflichtangaben gemäss Schweizer Recht
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { ObfuscatedEmail } from "@/components/ObfuscatedEmail";
 
 export default function ImpressumPage() {
   return (
@@ -25,9 +26,7 @@ export default function ImpressumPage() {
               <h2 className="text-xl font-semibold text-gray-900 mb-3">Kontakt</h2>
               <p className="text-gray-700 leading-relaxed">
                 E-Mail:{" "}
-                <a href="mailto:info@checko.ch" className="text-emerald-600 hover:text-emerald-700">
-                  info@checko.ch
-                </a>
+                <ObfuscatedEmail user="info" domain="checko.ch" />
               </p>
             </section>
 

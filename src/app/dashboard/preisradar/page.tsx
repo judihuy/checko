@@ -367,6 +367,28 @@ export default function PreisradarPage() {
     }
   }, [status, router, loadSearches, loadBalance]);
 
+  // Auto-Polling: Wenn eine Suche lastScrapedAt===null hat, alle 10s refreshen
+  useEffect(() => {
+    const hasPendingSearch = searches.some(
+      (s) => s.status === "aktiv" && !s.lastScrapedAt
+    );
+    if (!hasPendingSearch) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await fetch("/api/modules/preisradar/searches");
+        if (res.ok) {
+          const data = await res.json();
+          setSearches(data.searches);
+        }
+      } catch {
+        // Netzwerkfehler ignorieren, nächster Poll versucht es erneut
+      }
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [searches]);
+
   // Edit-Modal öffnen mit vorausgefüllten Werten
   const openEditModal = (search: Search) => {
     setEditingSearch(search);
@@ -486,8 +508,8 @@ export default function PreisradarPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query,
-          minPrice: minPrice ? parseInt(minPrice, 10) * 100 : undefined, // CHF → Rappen
-          maxPrice: maxPrice ? parseInt(maxPrice, 10) * 100 : undefined,
+          minPrice: minPrice && parseInt(minPrice, 10) > 0 ? parseInt(minPrice, 10) * 100 : undefined, // CHF → Rappen
+          maxPrice: maxPrice && parseInt(maxPrice, 10) > 0 ? parseInt(maxPrice, 10) * 100 : undefined,
           platforms: selectedPlatforms,
           duration,
           qualityTier,
@@ -520,7 +542,12 @@ export default function PreisradarPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Fehler beim Erstellen der Suche");
+        if (data.details) {
+          const fieldErrors = Object.entries(data.details).map(([k,v]) => `${k}: ${(v as string[]).join(", ")}`).join("; ");
+          setError(`${data.error}: ${fieldErrors}`);
+        } else {
+          setError(data.error || "Fehler beim Erstellen der Suche");
+        }
         return;
       }
 
@@ -596,7 +623,12 @@ export default function PreisradarPage() {
       });
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Fehler beim Speichern");
+        if (data.details) {
+          const fieldErrors = Object.entries(data.details).map(([k,v]) => `${k}: ${(v as string[]).join(", ")}`).join("; ");
+          setError(`${data.error}: ${fieldErrors}`);
+        } else {
+          setError(data.error || "Fehler beim Speichern");
+        }
         return;
       }
       setShowModal(false);

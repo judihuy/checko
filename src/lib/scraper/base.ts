@@ -2,7 +2,16 @@
 // Alle Plattform-Scraper erben von BaseScraper
 
 import { ProxyAgent, fetch as undiciFetch } from "undici";
-import puppeteer from "puppeteer";
+
+// puppeteer-extra + stealth-plugin via require() für Bundler-Kompatibilität
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const puppeteerExtra = require("puppeteer-extra");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+puppeteerExtra.use(StealthPlugin());
+
+// Typisierung: puppeteer-extra hat das gleiche Interface wie puppeteer
+const puppeteer = puppeteerExtra as typeof import("puppeteer");
 
 export interface ScraperResult {
   title: string;
@@ -139,18 +148,35 @@ export abstract class BaseScraper {
   private static lastRequestTime: Map<string, number> = new Map();
   private static readonly MIN_DELAY_MS = 5000; // 5 Sekunden zwischen Requests
 
-  // User-Agent Rotation
+  // User-Agent Rotation — echte aktuelle Chrome User-Agents
   private static readonly USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+  ];
+
+  // Viewport-Randomisierung
+  private static readonly VIEWPORTS = [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 1536, height: 864 },
+    { width: 1440, height: 900 },
+    { width: 1280, height: 720 },
   ];
 
   protected getRandomUserAgent(): string {
     const idx = Math.floor(Math.random() * BaseScraper.USER_AGENTS.length);
     return BaseScraper.USER_AGENTS[idx];
+  }
+
+  protected getRandomViewport(): { width: number; height: number } {
+    const idx = Math.floor(Math.random() * BaseScraper.VIEWPORTS.length);
+    return BaseScraper.VIEWPORTS[idx];
   }
 
   protected async enforceRateLimit(): Promise<void> {
@@ -187,8 +213,9 @@ export abstract class BaseScraper {
 
       const proxy = getRandomProxyCredentials();
       const userAgent = this.getRandomUserAgent();
+      const viewport = this.getRandomViewport();
 
-      console.log(`[Scraper/${this.platform}] Launching browser with proxy user ${proxy.username}`);
+      console.log(`[Scraper/${this.platform}] Launching stealth browser with proxy user ${proxy.username}, viewport ${viewport.width}x${viewport.height}`);
 
       // Chromium-Pfad: ENV überschreibt Puppeteer-Default
       const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
@@ -204,6 +231,7 @@ export abstract class BaseScraper {
           "--no-zygote",
           "--single-process",
           `--proxy-server=http://${PROXY_HOST}:${PROXY_PORT}`,
+          `--window-size=${viewport.width},${viewport.height}`,
         ],
       });
 
@@ -216,8 +244,8 @@ export abstract class BaseScraper {
           password: proxy.password,
         });
 
-        // Viewport setzen
-        await page.setViewport({ width: 1920, height: 1080 });
+        // Viewport setzen (randomisiert)
+        await page.setViewport(viewport);
 
         // User-Agent setzen
         await page.setUserAgent(userAgent);
@@ -297,9 +325,10 @@ export abstract class BaseScraper {
       }
 
       const userAgent = this.getRandomUserAgent();
+      const viewport = this.getRandomViewport();
       const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
 
-      console.log(`[Scraper/${this.platform}] Launching browser WITHOUT proxy`);
+      console.log(`[Scraper/${this.platform}] Launching stealth browser WITHOUT proxy, viewport ${viewport.width}x${viewport.height}`);
 
       const browser = await puppeteer.launch({
         headless: true,
@@ -311,12 +340,13 @@ export abstract class BaseScraper {
           "--disable-gpu",
           "--no-zygote",
           "--single-process",
+          `--window-size=${viewport.width},${viewport.height}`,
         ],
       });
 
       try {
         const page = await browser.newPage();
-        await page.setViewport({ width: 1920, height: 1080 });
+        await page.setViewport(viewport);
         await page.setUserAgent(userAgent);
         await page.setExtraHTTPHeaders({
           "Accept-Language": "de-CH,de;q=0.9,en;q=0.8",

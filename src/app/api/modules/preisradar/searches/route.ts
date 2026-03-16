@@ -20,7 +20,7 @@ const TIER_INTERVALS: Record<string, number> = {
 // Zod-Schema für neue Suche
 const createSearchSchema = z.object({
   query: z.string().max(200).default(""),
-  maxPrice: z.number().int().positive().optional(),
+  maxPrice: z.number().int().nonnegative().optional(),
   minPrice: z.number().int().nonnegative().optional(),
   platforms: z.array(z.enum(["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"])).min(1, "Mindestens 1 Plattform wählen"),
   duration: z.enum(["1d", "1w", "1m"]).default("1d"),

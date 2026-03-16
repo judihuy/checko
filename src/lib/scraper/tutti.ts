@@ -14,8 +14,18 @@ export class TuttiScraper extends BaseScraper {
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
     const results: ScraperResult[] = [];
 
+    // Enrich query with vehicle make/model if available
+    let enrichedQuery = query;
+    if (options?.vehicleMake) {
+      enrichedQuery = options.vehicleMake;
+      if (options.vehicleModel) enrichedQuery += " " + options.vehicleModel;
+      if (query && query !== enrichedQuery && !enrichedQuery.toLowerCase().includes(query.toLowerCase())) {
+        enrichedQuery += " " + query;
+      }
+    }
+
     try {
-      const encodedQuery = encodeURIComponent(query);
+      const encodedQuery = encodeURIComponent(enrichedQuery);
       const searchUrl = `${this.baseUrl}/de/q/${encodedQuery}`;
 
       console.log(`[Tutti] Search URL: ${searchUrl}`);

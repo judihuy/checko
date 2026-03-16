@@ -81,6 +81,25 @@ export async function runSearchJob(searchId: string): Promise<{
         minPrice: search.minPrice || undefined,
         maxPrice: search.maxPrice || undefined,
         limit: 20,
+        // Kategorie-spezifische Felder durchreichen
+        category: search.category || undefined,
+        subcategory: search.subcategory || undefined,
+        vehicleMake: search.vehicleMake || undefined,
+        vehicleModel: search.vehicleModel || undefined,
+        yearFrom: search.yearFrom || undefined,
+        yearTo: search.yearTo || undefined,
+        kmFrom: search.kmFrom || undefined,
+        kmTo: search.kmTo || undefined,
+        fuelType: search.fuelType || undefined,
+        transmission: search.transmission || undefined,
+        engineSizeCcm: search.engineSizeCcm || undefined,
+        motorcycleType: search.motorcycleType || undefined,
+        propertyType: search.propertyType || undefined,
+        propertyOffer: search.propertyOffer || undefined,
+        rooms: search.rooms || undefined,
+        areaM2: search.areaM2 || undefined,
+        location: search.location || undefined,
+        furnitureType: search.furnitureType || undefined,
       });
       const durationMs = Date.now() - scraperStart;
       return { scraper, results, durationMs };

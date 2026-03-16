@@ -268,14 +268,38 @@ model PreisradarSearch {
   maxPrice       Int?
   minPrice       Int?
   platforms      String // Komma-getrennt: "tutti,ricardo,ebay-ka"
-  category       String?           // Hauptkategorie: Fahrzeuge, Elektronik, etc.
-  subcategory    String?           // Unterkategorie: Autos, Smartphones, etc.
+  category       String?           // Hauptkategorie: Fahrzeuge, Elektronik, Immobilien, etc.
+  subcategory    String?           // Unterkategorie: Autos, Motorräder, Smartphones, etc.
   condition      String?           // Zustand: Alle, Neu, Gebraucht
+
+  // === Fahrzeug-Felder (Auto + Motorrad) ===
+  vehicleMake        String?       // Marke: BMW, Audi, Honda, etc.
+  vehicleModel       String?       // Modell: M3, A4, CBR600, etc.
+  yearFrom           Int?          // Baujahr von
+  yearTo             Int?          // Baujahr bis
+  kmFrom             Int?          // Kilometer von
+  kmTo               Int?          // Kilometer bis
+  fuelType           String?       // Treibstoff: benzin, diesel, elektro, hybrid
+  transmission       String?       // Getriebe: manuell, automat
+  // Motorrad-spezifisch
+  engineSizeCcm      Int?          // Hubraum in ccm
+  motorcycleType     String?       // Typ: naked, sport, chopper, enduro, touring, scooter
+
+  // === Immobilien-Felder ===
+  propertyType       String?       // Typ: wohnung, haus, grundstueck, gewerbe
+  propertyOffer      String?       // Angebot: miete, kauf
+  rooms              Int?          // Zimmer (min)
+  areaM2             Int?          // Fläche m² (min)
+  location           String?       // Ort / PLZ
+
+  // === Möbel-Felder ===
+  furnitureType      String?       // Typ: sofa, tisch, schrank, bett, etc.
+
   isActive       Boolean           @default(true)
-  isDraft        Boolean           @default(false) // Draft: isActive=false, isDraft=true
+  isDraft        Boolean           @default(false)
   duration       String            @default("1d") // "1d" | "1w" | "1m"
   qualityTier    String            @default("standard") // "standard" | "premium" | "pro"
-  interval       Int               @default(30) // Minuten: 30=Standard, 15=Premium, 5=Pro
+  interval       Int               @default(30) // Minuten: 1440=Standard(24h), 720=Premium(12h), 5=Pro
   expiresAt      DateTime?
   checkosCharged Int               @default(0)
   lastScrapedAt  DateTime?
@@ -333,7 +357,7 @@ model SavedAlert {
 model PushSubscription {
   id        String   @id @default(cuid())
   userId    String
-  endpoint  String   @unique @db.Text
+  endpoint  String   @unique @db.VarChar(512)
   keys      String   @db.Text // JSON: { p256dh, auth }
   createdAt DateTime @default(now())
 

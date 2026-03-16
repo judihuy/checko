@@ -14,7 +14,16 @@ export class WillhabenScraper extends BaseScraper {
     const results: ScraperResult[] = [];
 
     try {
-      const encodedQuery = encodeURIComponent(query);
+      // Enrich query with vehicle make/model if available
+      let enrichedQuery = query;
+      if (options?.vehicleMake) {
+        enrichedQuery = options.vehicleMake;
+        if (options.vehicleModel) enrichedQuery += " " + options.vehicleModel;
+        if (query && !enrichedQuery.toLowerCase().includes(query.toLowerCase())) {
+          enrichedQuery += " " + query;
+        }
+      }
+      const encodedQuery = encodeURIComponent(enrichedQuery);
       let searchUrl = `${this.baseUrl}/iad/kaufen-und-verkaufen/marktplatz?keyword=${encodedQuery}`;
 
       // Preisfilter
@@ -153,6 +162,17 @@ export class WillhabenScraper extends BaseScraper {
         }
 
         if (isNaN(priceRaw)) priceRaw = 0;
+        
+        // Fallback: Check more attribute names for price
+        if (priceRaw === 0 && Array.isArray(item.attributes)) {
+          for (const attr of (item.attributes as Array<Record<string, unknown>>)) {
+            const name = String(attr.name || "").toUpperCase();
+            if (name.includes("PRICE") && Array.isArray(attr.values) && (attr.values as string[]).length > 0) {
+              const v = parseFloat(String((attr.values as string[])[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+              if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+            }
+          }
+        }
 
         // EUR → CHF Rappen (1 EUR ≈ 0.96 CHF)
         const price = Math.round(priceRaw * 0.96 * 100);
@@ -162,18 +182,20 @@ export class WillhabenScraper extends BaseScraper {
           if (options?.maxPrice && price > options.maxPrice) continue;
         }
 
-        // URL
+        // URL — selfLink zeigt auf API, NICHT verwenden! 
         const adId = item.id || item.adId || "";
         let url = "";
-        if (typeof item.ownUrl === "string") {
+        if (typeof item.ownUrl === "string" && item.ownUrl.includes("/iad/")) {
           url = item.ownUrl.startsWith("http") ? item.ownUrl : `${this.baseUrl}${item.ownUrl}`;
-        } else if (typeof item.selfLink === "string") {
-          url = item.selfLink.startsWith("http") ? item.selfLink : `${this.baseUrl}${item.selfLink}`;
         } else if (adId) {
-          url = `${this.baseUrl}/iad/kaufen-und-verkaufen/d/-${adId}`;
-        } else {
-          url = this.baseUrl;
+          url = `https://www.willhaben.at/iad/kaufen-und-verkaufen/d/-${adId}/`;
+        } else if (typeof item.contextLinkList === "object" && Array.isArray(item.contextLinkList)) {
+          const webLink = (item.contextLinkList as Array<Record<string, unknown>>).find(
+            (l) => typeof l.uri === "string" && (l.uri as string).includes("/iad/")
+          );
+          if (webLink) url = `https://www.willhaben.at${webLink.uri}`;
         }
+        if (!url) url = `https://www.willhaben.at/iad/kaufen-und-verkaufen/d/-${adId || "unknown"}/`;
 
         // Bild
         let imageUrl: string | null = null;
@@ -244,6 +266,17 @@ export class WillhabenScraper extends BaseScraper {
               }
             }
             if (isNaN(priceRaw)) priceRaw = 0;
+        
+        // Fallback: Check more attribute names for price
+        if (priceRaw === 0 && Array.isArray(item.attributes)) {
+          for (const attr of (item.attributes as Array<Record<string, unknown>>)) {
+            const name = String(attr.name || "").toUpperCase();
+            if (name.includes("PRICE") && Array.isArray(attr.values) && (attr.values as string[]).length > 0) {
+              const v = parseFloat(String((attr.values as string[])[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+              if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+            }
+          }
+        }
 
             // EUR → CHF Rappen
             const price = Math.round(priceRaw * 0.96 * 100);

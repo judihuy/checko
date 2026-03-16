@@ -12,24 +12,43 @@ import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 
 // Intervall-Optionen nach Qualitätsstufe
 const TIER_INTERVALS: Record<string, number> = {
-  standard: 30, // Alle 30 Minuten
-  premium: 15,  // Alle 15 Minuten
-  pro: 5,       // Alle 5 Minuten
+  standard: 1440, // Alle 24 Stunden
+  premium: 720,   // Alle 12 Stunden
+  pro: 5,         // Alle 5 Minuten
 };
 
 // Zod-Schema für neue Suche
 const createSearchSchema = z.object({
-  query: z.string().min(2, "Suchbegriff muss mindestens 2 Zeichen haben").max(200),
+  query: z.string().max(200).default(""),
   maxPrice: z.number().int().positive().optional(),
   minPrice: z.number().int().nonnegative().optional(),
   platforms: z.array(z.enum(["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"])).min(1, "Mindestens 1 Plattform wählen"),
   duration: z.enum(["1d", "1w", "1m"]).default("1d"),
   qualityTier: z.enum(["standard", "premium", "pro"]).default("standard"),
-  interval: z.number().int().min(5).max(60).optional(),
+  interval: z.number().int().min(5).max(1440).optional(),
   category: z.string().max(100).optional(),
   subcategory: z.string().max(100).optional(),
   condition: z.string().max(50).optional(),
   isDraft: z.boolean().default(false),
+  // Fahrzeug-Felder
+  vehicleMake: z.string().max(100).optional(),
+  vehicleModel: z.string().max(100).optional(),
+  yearFrom: z.number().int().min(1950).max(2030).optional(),
+  yearTo: z.number().int().min(1950).max(2030).optional(),
+  kmFrom: z.number().int().min(0).optional(),
+  kmTo: z.number().int().min(0).optional(),
+  fuelType: z.string().max(50).optional(),
+  transmission: z.string().max(50).optional(),
+  engineSizeCcm: z.number().int().min(0).optional(),
+  motorcycleType: z.string().max(50).optional(),
+  // Immobilien-Felder
+  propertyType: z.string().max(50).optional(),
+  propertyOffer: z.string().max(50).optional(),
+  rooms: z.number().int().min(1).max(50).optional(),
+  areaM2: z.number().int().min(1).optional(),
+  location: z.string().max(200).optional(),
+  // Möbel-Felder
+  furnitureType: z.string().max(100).optional(),
 });
 
 // POST: Neue Suche erstellen
@@ -53,7 +72,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { query, maxPrice, minPrice, platforms, duration, qualityTier, isDraft, category: searchCategory, subcategory: searchSubcategory, condition: searchCondition } = parsed.data;
+    const { 
+      query, maxPrice, minPrice, platforms, duration, qualityTier, isDraft,
+      category: searchCategory, subcategory: searchSubcategory, condition: searchCondition,
+      vehicleMake, vehicleModel, yearFrom, yearTo, kmFrom, kmTo, fuelType, transmission,
+      engineSizeCcm, motorcycleType,
+      propertyType, propertyOffer, rooms, areaM2, location: searchLocation,
+      furnitureType,
+    } = parsed.data;
+
+    // Auto-fill query from vehicleMake + vehicleModel if empty
+    let finalQuery = query.trim();
+    if (!finalQuery && vehicleMake) {
+      finalQuery = vehicleMake;
+      if (vehicleModel) finalQuery += ' ' + vehicleModel;
+    }
+    if (!finalQuery || finalQuery.length < 2) {
+      return NextResponse.json(
+        { error: "Suchbegriff oder Fahrzeug-Marke muss angegeben werden" },
+        { status: 400 }
+      );
+    }
 
     // Intervall: Entweder explizit gesetzt oder vom Tier abgeleitet
     const interval = parsed.data.interval || TIER_INTERVALS[qualityTier] || 30;
@@ -74,13 +113,29 @@ export async function POST(request: NextRequest) {
       const search = await prisma.preisradarSearch.create({
         data: {
           userId: session.user.id,
-          query,
+          query: finalQuery,
           maxPrice: maxPrice || null,
           minPrice: minPrice || null,
           platforms: platforms.join(","),
           category: searchCategory || null,
           subcategory: searchSubcategory || null,
           condition: searchCondition || null,
+          vehicleMake: vehicleMake || null,
+          vehicleModel: vehicleModel || null,
+          yearFrom: yearFrom || null,
+          yearTo: yearTo || null,
+          kmFrom: kmFrom || null,
+          kmTo: kmTo || null,
+          fuelType: fuelType || null,
+          transmission: transmission || null,
+          engineSizeCcm: engineSizeCcm || null,
+          motorcycleType: motorcycleType || null,
+          propertyType: propertyType || null,
+          propertyOffer: propertyOffer || null,
+          rooms: rooms || null,
+          areaM2: areaM2 || null,
+          location: searchLocation || null,
+          furnitureType: furnitureType || null,
           duration,
           qualityTier,
           interval,
@@ -124,13 +179,29 @@ export async function POST(request: NextRequest) {
     const search = await prisma.preisradarSearch.create({
       data: {
         userId: session.user.id,
-        query,
+        query: finalQuery,
         maxPrice: maxPrice || null,
         minPrice: minPrice || null,
         platforms: platforms.join(","),
         category: searchCategory || null,
         subcategory: searchSubcategory || null,
         condition: searchCondition || null,
+        vehicleMake: vehicleMake || null,
+        vehicleModel: vehicleModel || null,
+        yearFrom: yearFrom || null,
+        yearTo: yearTo || null,
+        kmFrom: kmFrom || null,
+        kmTo: kmTo || null,
+        fuelType: fuelType || null,
+        transmission: transmission || null,
+        engineSizeCcm: engineSizeCcm || null,
+        motorcycleType: motorcycleType || null,
+        propertyType: propertyType || null,
+        propertyOffer: propertyOffer || null,
+        rooms: rooms || null,
+        areaM2: areaM2 || null,
+        location: searchLocation || null,
+        furnitureType: furnitureType || null,
         duration,
         qualityTier,
         interval,

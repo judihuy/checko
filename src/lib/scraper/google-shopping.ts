@@ -8,7 +8,7 @@ export class GoogleShoppingScraper extends BaseScraper {
   readonly platform = "google-shopping";
   readonly displayName = "Google Shopping";
   readonly baseUrl = "https://www.google.ch";
-  isWorking = true;
+  isWorking = false; // CAPTCHA blocks scraping
 
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
     const results: ScraperResult[] = [];

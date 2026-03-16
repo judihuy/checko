@@ -17,6 +17,25 @@ export interface ScraperOptions {
   maxPrice?: number;   // in Rappen
   minPrice?: number;   // in Rappen
   limit?: number;      // max Ergebnisse
+  // Kategorie-spezifische Felder
+  category?: string;
+  subcategory?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  yearFrom?: number;
+  yearTo?: number;
+  kmFrom?: number;
+  kmTo?: number;
+  fuelType?: string;
+  transmission?: string;
+  engineSizeCcm?: number;
+  motorcycleType?: string;
+  propertyType?: string;
+  propertyOffer?: string;
+  rooms?: number;
+  areaM2?: number;
+  location?: string;
+  furnitureType?: string;
 }
 
 // Proxy-Pool: 10 deutsche Webshare-Proxies

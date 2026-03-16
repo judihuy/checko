@@ -375,6 +375,43 @@ export default function PreisradarPage() {
     }
   };
 
+  // Draft speichern (ohne Checkos abzuziehen)
+  const handleSaveDraft = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/modules/preisradar/searches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          minPrice: minPrice ? parseInt(minPrice, 10) * 100 : undefined,
+          maxPrice: maxPrice ? parseInt(maxPrice, 10) * 100 : undefined,
+          platforms: selectedPlatforms,
+          duration,
+          qualityTier,
+          category: category || undefined,
+          subcategory: subcategory || undefined,
+          condition: condition || undefined,
+          isDraft: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Fehler beim Speichern");
+        return;
+      }
+      setShowModal(false);
+      setSuccessMessage("💾 Suche als Entwurf gespeichert!");
+      setTimeout(() => setSuccessMessage(null), 5000);
+      await loadSearches();
+    } catch {
+      setError("Netzwerkfehler");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const handleToggleSearch = async (searchId: string, currentActive: boolean) => {
     try {
       const res = await fetch(`/api/modules/preisradar/searches/${searchId}`, {

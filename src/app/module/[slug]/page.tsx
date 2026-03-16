@@ -173,7 +173,7 @@ export default async function ModuleDetailPage({ params }: PageProps) {
                   <WaitlistForm moduleId={moduleData.id} moduleName={moduleData.name} />
                 </div>
                 {/* Gecko-Animation — jedes Modul bekommt ein eigenes Video basierend auf sortOrder */}
-                <div className="hidden md:block w-32 h-32 rounded-xl overflow-hidden shadow-md flex-shrink-0">
+                <div className="w-32 h-32 rounded-xl overflow-hidden shadow-md flex-shrink-0">
                   <video
                     autoPlay
                     muted

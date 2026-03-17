@@ -1,9 +1,8 @@
-// AutoScout24.ch Scraper — NUR HTTP-basiert (kein Puppeteer/Browser!)
-// Nutzt curl-L-äquivalentes HTTP-Fetch mit Redirect-Following.
-// AutoScout24 liefert serverseitig gerendertes HTML mit eingebetteten
-// React Server Components (RSC flight data), die Listing-Daten enthalten.
-// Fallback-Kette: RSC flight data → HTML listing links → JSON-LD.
-// Kein Browser-Automation — wenn HTTP nichts liefert, lieber 0 Treffer.
+// AutoScout24.ch Scraper — Puppeteer + Stealth + CH Residential Proxy
+// Browser-Scraping mit puppeteer-extra-plugin-stealth.
+// Proxy: Residential CH über p.webshare.io (Ländercode -ch).
+// Parsing-Kette: RSC flight data → HTML listing links → JSON-LD.
+// Fallback auf HTTP wenn Browser fehlschlägt.
 //
 // URL-Format:
 // - Make/Model: /de/s/mo-{model}/mk-{make}
@@ -66,52 +65,80 @@ export class AutoScoutScraper extends BaseScraper {
   readonly baseUrl = "https://www.autoscout24.ch";
   isWorking = true;
 
+  /**
+   * Build search URL from query and options
+   */
+  private buildSearchUrl(query: string, options?: ScraperOptions): string {
+    let searchUrl: string;
+    if (options?.vehicleMake) {
+      const make = options.vehicleMake.toLowerCase().replace(/\s+/g, "-");
+      if (options.vehicleModel) {
+        const model = options.vehicleModel.toLowerCase().replace(/\s+/g, "-");
+        searchUrl = `${this.baseUrl}/de/s/mo-${encodeURIComponent(model)}/mk-${encodeURIComponent(make)}`;
+      } else {
+        searchUrl = `${this.baseUrl}/de/s/mk-${encodeURIComponent(make)}`;
+      }
+    } else {
+      searchUrl = `${this.baseUrl}/de/s?q=${encodeURIComponent(query)}`;
+    }
+
+    // URL parameters
+    const urlParams = new URLSearchParams();
+    if (options?.yearFrom) urlParams.set("fregfrom", String(options.yearFrom));
+    if (options?.yearTo) urlParams.set("fregto", String(options.yearTo));
+    if (options?.kmFrom) urlParams.set("kmfrom", String(options.kmFrom));
+    if (options?.kmTo) urlParams.set("kmto", String(options.kmTo));
+    if (options?.minPrice) urlParams.set("pricefrom", String(Math.round(options.minPrice / 100)));
+    if (options?.maxPrice) urlParams.set("priceto", String(Math.round(options.maxPrice / 100)));
+    if (options?.fuelType) {
+      const fuelCode = FUEL_TYPE_MAP[options.fuelType.toLowerCase()];
+      if (fuelCode) urlParams.set("fuel", fuelCode);
+    }
+    if (options?.transmission) {
+      const gearCode = TRANSMISSION_MAP[options.transmission.toLowerCase()];
+      if (gearCode) urlParams.set("gear", gearCode);
+    }
+    urlParams.set("cy", "CH");
+
+    const paramStr = urlParams.toString();
+    if (paramStr) {
+      searchUrl += (searchUrl.includes("?") ? "&" : "?") + paramStr;
+    }
+
+    return searchUrl;
+  }
+
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
     try {
-      // Build search URL
-      let searchUrl: string;
-      if (options?.vehicleMake) {
-        const make = options.vehicleMake.toLowerCase().replace(/\s+/g, "-");
-        if (options.vehicleModel) {
-          const model = options.vehicleModel.toLowerCase().replace(/\s+/g, "-");
-          searchUrl = `${this.baseUrl}/de/s/mo-${encodeURIComponent(model)}/mk-${encodeURIComponent(make)}`;
-        } else {
-          searchUrl = `${this.baseUrl}/de/s/mk-${encodeURIComponent(make)}`;
-        }
-      } else {
-        searchUrl = `${this.baseUrl}/de/s?q=${encodeURIComponent(query)}`;
-      }
-
-      // URL parameters
-      const urlParams = new URLSearchParams();
-      if (options?.yearFrom) urlParams.set("fregfrom", String(options.yearFrom));
-      if (options?.yearTo) urlParams.set("fregto", String(options.yearTo));
-      if (options?.kmFrom) urlParams.set("kmfrom", String(options.kmFrom));
-      if (options?.kmTo) urlParams.set("kmto", String(options.kmTo));
-      if (options?.minPrice) urlParams.set("pricefrom", String(Math.round(options.minPrice / 100)));
-      if (options?.maxPrice) urlParams.set("priceto", String(Math.round(options.maxPrice / 100)));
-      if (options?.fuelType) {
-        const fuelCode = FUEL_TYPE_MAP[options.fuelType.toLowerCase()];
-        if (fuelCode) urlParams.set("fuel", fuelCode);
-      }
-      if (options?.transmission) {
-        const gearCode = TRANSMISSION_MAP[options.transmission.toLowerCase()];
-        if (gearCode) urlParams.set("gear", gearCode);
-      }
-      urlParams.set("cy", "CH");
-
-      const paramStr = urlParams.toString();
-      if (paramStr) {
-        searchUrl += (searchUrl.includes("?") ? "&" : "?") + paramStr;
-      }
-
+      const searchUrl = this.buildSearchUrl(query, options);
       console.log(`[AutoScout] Search URL: ${searchUrl}`);
 
-      // HTTP fetch mit Redirect-Following (kein Browser-Fallback!)
-      const httpResults = await this.scrapeViaHttp(searchUrl, options);
-      if (httpResults.length > 0) {
-        console.log(`[AutoScout] ✅ HTTP: ${httpResults.length} Ergebnisse`);
-        return httpResults;
+      // Methode 1 (PRIMÄR): Puppeteer + Stealth + CH Proxy
+      try {
+        const browserResults = await this.scrapeViaBrowser(searchUrl, options);
+        if (browserResults.length > 0) {
+          console.log(`[AutoScout] ✅ Browser: ${browserResults.length} Ergebnisse`);
+          return browserResults;
+        }
+      } catch (error) {
+        console.warn(
+          `[AutoScout] Browser-Methode fehlgeschlagen:`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+
+      // Methode 2 (FALLBACK): HTTP fetch
+      try {
+        const httpResults = await this.scrapeViaHttp(searchUrl, options);
+        if (httpResults.length > 0) {
+          console.log(`[AutoScout] ✅ HTTP-Fallback: ${httpResults.length} Ergebnisse`);
+          return httpResults;
+        }
+      } catch (error) {
+        console.warn(
+          `[AutoScout] HTTP-Fallback fehlgeschlagen:`,
+          error instanceof Error ? error.message : String(error)
+        );
       }
 
       console.warn(`[AutoScout] ⚠️ Keine Ergebnisse`);
@@ -124,9 +151,30 @@ export class AutoScoutScraper extends BaseScraper {
   }
 
   /**
-   * AutoScout24 Seite per HTTP laden.
-   * Folgt Redirects (307 → 200). Die Antwort enthält SSR HTML mit
-   * eingebettetem RSC flight data in self.__next_f.push() Blöcken.
+   * AutoScout24 per Puppeteer + Stealth + CH Residential Proxy scrapen.
+   * Der Browser geht über den Residential Proxy mit Schweizer IP.
+   */
+  private async scrapeViaBrowser(searchUrl: string, options?: ScraperOptions): Promise<ScraperResult[]> {
+    console.log(`[AutoScout] Browser URL: ${searchUrl}`);
+
+    // fetchWithBrowserCountry nutzt CH-Proxy (Residential, Schweizer IP)
+    const html = await this.fetchWithBrowserCountry(searchUrl, "ch");
+
+    if (html.length < 5000) {
+      console.warn(`[AutoScout] ⚠️ Sehr kurze Browser-Antwort (${html.length} bytes)`);
+      return [];
+    }
+
+    if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
+      console.warn("[AutoScout] ⚠️ Cloudflare-Challenge trotz Stealth-Browser");
+      return [];
+    }
+
+    return this.parseAllFormats(html, options);
+  }
+
+  /**
+   * HTTP-Fallback: Seite per HTTP laden.
    */
   private async scrapeViaHttp(searchUrl: string, options?: ScraperOptions): Promise<ScraperResult[]> {
     await this.enforceRateLimit();
@@ -145,14 +193,11 @@ export class AutoScoutScraper extends BaseScraper {
       "Cache-Control": "max-age=0",
     };
 
-    // AutoScout24 may give 307 redirect → follow it
-    // Node fetch follows redirects by default
     let response: Response;
     try {
       response = await fetch(searchUrl, { headers, redirect: "follow" });
     } catch (fetchError) {
       console.warn(`[AutoScout] Direct fetch failed:`, fetchError);
-      // Fallback: try via proxy
       const { response: proxyResp } = await (await import("./proxy-manager")).fetchWithProxy(
         searchUrl, this.platform, { headers, maxRetries: 2, preferredCountry: "ch" }
       );
@@ -177,6 +222,13 @@ export class AutoScoutScraper extends BaseScraper {
       return [];
     }
 
+    return this.parseAllFormats(html, options);
+  }
+
+  /**
+   * Parse all formats: RSC → HTML → JSON-LD
+   */
+  private parseAllFormats(html: string, options?: ScraperOptions): ScraperResult[] {
     // Parse listings from RSC flight data
     const rscResults = this.parseRscFlightData(html, options);
     if (rscResults.length > 0) return rscResults;
@@ -217,13 +269,11 @@ export class AutoScoutScraper extends BaseScraper {
     }
 
     // Find listing objects by pattern: objects with "make", "price", "mileage"
-    // These are embedded as JSON in the flight data
     const listingPattern = /"conditionType":"(?:used|new)","consumption"/g;
     const listingStarts: number[] = [];
 
     let lm;
     while ((lm = listingPattern.exec(fullData)) !== null) {
-      // Go backwards to find the { start
       let searchStart = Math.max(0, lm.index - 500);
       const substr = fullData.substring(searchStart, lm.index);
       const braceIdx = substr.lastIndexOf("{");
@@ -249,7 +299,6 @@ export class AutoScoutScraper extends BaseScraper {
     const seenIds = new Set<number>();
 
     for (const start of listingStarts) {
-      // Find matching closing brace
       let depth = 0;
       let pos = start;
       while (pos < Math.min(fullData.length, start + 5000)) {
@@ -271,7 +320,6 @@ export class AutoScoutScraper extends BaseScraper {
 
         const priceRappen = Math.round(listing.price * 100);
 
-        // Price filter
         if (options?.minPrice && priceRappen < options.minPrice) continue;
         if (options?.maxPrice && priceRappen > options.maxPrice) continue;
 
@@ -321,7 +369,7 @@ export class AutoScoutScraper extends BaseScraper {
 
         if (options?.limit && results.length >= options.limit) break;
       } catch {
-        // JSON parse error — skip this listing
+        // JSON parse error — skip
       }
     }
 
@@ -335,7 +383,6 @@ export class AutoScoutScraper extends BaseScraper {
     const results: ScraperResult[] = [];
     const seenUrls = new Set<string>();
 
-    // Find links to detail pages /de/d/
     const linkRegex = /href="(\/de\/d\/[^"]+)"/g;
     let linkMatch;
 
@@ -345,12 +392,10 @@ export class AutoScoutScraper extends BaseScraper {
       if (seenUrls.has(normalized)) continue;
       seenUrls.add(normalized);
 
-      // Context around the link
       const start = Math.max(0, linkMatch.index - 500);
       const end = Math.min(html.length, linkMatch.index + 500);
       const context = html.substring(start, end);
 
-      // Price: CHF XX'XXX
       const priceMatch = context.match(/CHF\s*([\d''.,-]+)/);
       let price = 0;
       if (priceMatch) {
@@ -365,13 +410,11 @@ export class AutoScoutScraper extends BaseScraper {
         if (options?.maxPrice && price > options.maxPrice) continue;
       }
 
-      // Title from URL slug
       const slugMatch = href.match(/\/de\/d\/(.+?)-(\d+)$/);
       const title = slugMatch
         ? slugMatch[1].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
         : "Fahrzeug";
 
-      // Image
       const imgMatch = context.match(/src="(https:\/\/listing-images\.autoscout24\.ch[^"]+)"/i);
 
       if (price > 0 || title !== "Fahrzeug") {

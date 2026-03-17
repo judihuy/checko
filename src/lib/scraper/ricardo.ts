@@ -1,31 +1,16 @@
-// Ricardo.ch Scraper — API-basiert (kein Puppeteer!)
-// Nutzt die interne JSON-API: /api/mfa/search
-// Liefert strukturierte Daten inkl. Preis, Bilder, Titel direkt als JSON.
-// Fallback: fetchWithHeaders + JSON-LD Parsing
+// Ricardo.ch Scraper — Puppeteer + Stealth + CH Residential Proxy
+// Die /api/mfa/search API liefert generischen Müll und ignoriert Suchparameter.
+// Daher: Browser-Scraping der Suchseite mit Puppeteer-Extra-Stealth.
+// Proxy: Residential CH über p.webshare.io (Ländercode -ch).
+// Fallback-Kette: Puppeteer → HTML/JSON-LD fetch
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
-import { fetchWithProxy } from "./proxy-manager";
 
 export class RicardoScraper extends BaseScraper {
   readonly platform = "ricardo";
   readonly displayName = "Ricardo.ch";
   readonly baseUrl = "https://www.ricardo.ch";
   isWorking = true;
-
-  // Rate limiting: 8s between requests to avoid 429
-  private static apiLastRequestTime = 0;
-  private static readonly API_MIN_DELAY_MS = 8000;
-
-  private async enforceApiRateLimit(): Promise<void> {
-    const now = Date.now();
-    const elapsed = now - RicardoScraper.apiLastRequestTime;
-    if (elapsed < RicardoScraper.API_MIN_DELAY_MS) {
-      const waitMs = RicardoScraper.API_MIN_DELAY_MS - elapsed;
-      console.log(`[Ricardo] Rate-limit: waiting ${waitMs}ms`);
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-    }
-    RicardoScraper.apiLastRequestTime = Date.now();
-  }
 
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
     // Enrich query with vehicle make/model if available
@@ -38,23 +23,28 @@ export class RicardoScraper extends BaseScraper {
       }
     }
 
-    // Methode 1 (PRIMÄR): Interne JSON-API
+    // Detect vehicle searches for post-filtering
+    const isVehicleSearch = options?.category === "Fahrzeuge" ||
+      options?.category === "Motorräder" ||
+      !!(options?.vehicleMake || options?.vehicleModel);
+
+    // Methode 1 (PRIMÄR): Puppeteer + Stealth + CH Proxy
     try {
-      const apiResults = await this.scrapeViaApi(enrichedQuery, options);
-      if (apiResults.length > 0) {
-        console.log(`[Ricardo] ✅ API: ${apiResults.length} Ergebnisse`);
-        return apiResults;
+      const browserResults = await this.scrapeViaBrowser(enrichedQuery, options, isVehicleSearch);
+      if (browserResults.length > 0) {
+        console.log(`[Ricardo] ✅ Browser: ${browserResults.length} Ergebnisse`);
+        return browserResults;
       }
     } catch (error) {
       console.warn(
-        `[Ricardo] API-Methode fehlgeschlagen:`,
+        `[Ricardo] Browser-Methode fehlgeschlagen:`,
         error instanceof Error ? error.message : String(error)
       );
     }
 
     // Methode 2 (FALLBACK): HTTP fetch + HTML/JSON-LD Parsing
     try {
-      const htmlResults = await this.scrapeViaHtml(enrichedQuery, options);
+      const htmlResults = await this.scrapeViaHtml(enrichedQuery, options, isVehicleSearch);
       if (htmlResults.length > 0) {
         console.log(`[Ricardo] HTML-Fallback: ${htmlResults.length} Ergebnisse`);
         return htmlResults;
@@ -71,199 +61,12 @@ export class RicardoScraper extends BaseScraper {
   }
 
   /**
-   * Ricardo interne JSON-API aufrufen
-   * Endpoint: GET /api/mfa/search?q={query}&sort=newest&...
-   * Liefert: { articles: [...], totalArticlesCount, config, filters, ... }
+   * Build Ricardo search URL with filters
    */
-  private async scrapeViaApi(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
-    await this.enforceApiRateLimit();
-
-    const results: ScraperResult[] = [];
+  private buildSearchUrl(query: string, options?: ScraperOptions): string {
     const encodedQuery = encodeURIComponent(query);
-
-    // Build API URL with filters
-    const params = new URLSearchParams();
-    params.set("q", query);
-    params.set("sort", "newest");
-
-    // Price filter: Ricardo API uses range_filters.price with min/max in CHF
-    if (options?.minPrice) {
-      params.set("range_filters.price.min", String(Math.round(options.minPrice / 100)));
-    }
-    if (options?.maxPrice) {
-      params.set("range_filters.price.max", String(Math.round(options.maxPrice / 100)));
-    }
-
-    // Detect vehicle searches for post-filtering
-    // Note: Ricardo API ignores category_id param, so we post-filter instead
-    const isVehicleSearch = options?.category === "Fahrzeuge" ||
-      options?.category === "Motorräder" ||
-      !!(options?.vehicleMake || options?.vehicleModel);
-
-    const apiUrl = `${this.baseUrl}/api/mfa/search?${params.toString()}`;
-    console.log(`[Ricardo] API URL: ${apiUrl}`);
-
-    // API-Anfrage — direkt ohne Proxy (Ricardo API blockiert nicht so aggressiv)
-    const headers: Record<string, string> = {
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "de-CH,de;q=0.9,en;q=0.8",
-      "Referer": `${this.baseUrl}/de/s/${encodedQuery}`,
-      "Sec-Fetch-Dest": "empty",
-      "Sec-Fetch-Mode": "cors",
-      "Sec-Fetch-Site": "same-origin",
-    };
-
-    let responseText: string;
-
-    try {
-      // Zuerst direkt ohne Proxy versuchen
-      const { response } = await fetchWithProxy(apiUrl, this.platform, {
-        headers,
-        maxRetries: 2,
-        preferredCountry: "ch",
-      });
-
-      if (!response.ok) {
-        // Bei 429 (Rate Limit): warten und nochmal direkt versuchen
-        if (response.status === 429) {
-          console.log(`[Ricardo] 429 Rate Limited — warte 15s und versuche direkt...`);
-          await new Promise((r) => setTimeout(r, 15000));
-          const directResp = await fetch(apiUrl, {
-            headers: {
-              ...headers,
-              "User-Agent": this.getRandomUserAgent(),
-            },
-          });
-          if (!directResp.ok) {
-            console.error(`[Ricardo] API HTTP ${directResp.status} nach Retry`);
-            return results;
-          }
-          responseText = await directResp.text();
-        } else {
-          console.error(`[Ricardo] API HTTP ${response.status}`);
-          return results;
-        }
-      } else {
-        responseText = await response.text();
-      }
-    } catch (fetchError) {
-      // Direct fallback
-      console.warn(`[Ricardo] Proxy fetch failed, trying direct:`, fetchError);
-      const directResp = await fetch(apiUrl, {
-        headers: {
-          ...headers,
-          "User-Agent": this.getRandomUserAgent(),
-        },
-      });
-      if (!directResp.ok) {
-        console.error(`[Ricardo] Direct API HTTP ${directResp.status}`);
-        return results;
-      }
-      responseText = await directResp.text();
-    }
-
-    // Parse JSON response
-    let data: {
-      articles?: Array<{
-        id: string;
-        title: string;
-        bidPrice: number | null;
-        buyNowPrice: number | null;
-        image: string | null;
-        hasAuction: boolean;
-        hasBuyNow: boolean;
-        endDate: string;
-        categoryId: number;
-      }>;
-      totalArticlesCount?: number;
-    };
-
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      console.error(`[Ricardo] API JSON Parse-Fehler (response length: ${responseText.length})`);
-      return results;
-    }
-
-    if (!data.articles || !Array.isArray(data.articles)) {
-      console.warn(`[Ricardo] API: Keine 'articles' im Response`);
-      return results;
-    }
-
-    console.log(`[Ricardo] API: ${data.articles.length} Artikel (total: ${data.totalArticlesCount})`);
-
-    for (const article of data.articles) {
-      // Vehicle search: nur offensichtlichen Müll rausfiltern.
-      // KEIN harter Titel-Match! Die KI-Relevanzprüfung (ai-filter) übernimmt
-      // die eigentliche Filterung. Hier nur klar erkennbare Nicht-Fahrzeuge entfernen,
-      // damit keine echten Treffer verloren gehen.
-      if (isVehicleSearch) {
-        const NON_VEHICLE_KEYWORDS = [
-          /modellauto/i, /spielzeug/i, /poster/i, /prospekt/i, /katalog/i,
-          /schlüsselanhänger/i, /aufkleber/i, /t-shirt/i, /tasse\b/i,
-          /hülle/i, /cover\b/i, /case\b/i, /sticker/i, /buch\b/i,
-          /lego/i, /playmobil/i, /hot\s*wheels/i, /matchbox/i, /diecast/i,
-          /1[:/]\s*\d{2}\b/i, /miniatur/i, /pokemon/i, /karte\b/i, /card\b/i,
-          /lamini/i, /laminier/i,
-        ];
-        if (NON_VEHICLE_KEYWORDS.some(pattern => pattern.test(article.title))) {
-          console.log(`[Ricardo] Skipping non-vehicle: "${article.title.substring(0, 60)}"`);
-          continue;
-        }
-      }
-
-      // Preis: buyNowPrice hat Priorität, dann bidPrice
-      const priceCHF = article.buyNowPrice ?? article.bidPrice ?? 0;
-      const priceRappen = Math.round(priceCHF * 100);
-
-      // Preisfilter
-      if (priceRappen > 0) {
-        if (options?.minPrice && priceRappen < options.minPrice) continue;
-        if (options?.maxPrice && priceRappen > options.maxPrice) continue;
-      }
-
-      // URL: Ricardo article URL format
-      const articleUrl = `${this.baseUrl}/de/a/${article.id}`;
-
-      // Image: Full URL aus dem image field
-      // Ricardo images: https://img.ricardostatic.ch/images/{uuid}/t_265x200/{slug}
-      const imageUrl = article.image || null;
-
-      // Description: Auktionsinfo
-      const descParts: string[] = [];
-      if (article.hasAuction && article.bidPrice) {
-        descParts.push(`Auktion: CHF ${article.bidPrice}`);
-      }
-      if (article.hasBuyNow && article.buyNowPrice) {
-        descParts.push(`Sofortkauf: CHF ${article.buyNowPrice}`);
-      }
-      if (article.endDate) {
-        descParts.push(`Endet: ${new Date(article.endDate).toLocaleDateString("de-CH")}`);
-      }
-
-      results.push({
-        title: article.title,
-        price: priceRappen,
-        url: articleUrl,
-        imageUrl,
-        description: descParts.length > 0 ? descParts.join(" | ") : undefined,
-        platform: this.platform,
-        scrapedAt: new Date(),
-      });
-
-      if (options?.limit && results.length >= options.limit) break;
-    }
-
-    return results;
-  }
-
-  /**
-   * HTML-Fallback: Seite per HTTP laden und JSON-LD parsen
-   */
-  private async scrapeViaHtml(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
-    const encodedQuery = encodeURIComponent(query);
-
     let searchUrl = `${this.baseUrl}/de/s/${encodedQuery}`;
+
     const urlParams = new URLSearchParams();
     if (options?.minPrice) urlParams.set("price_min", String(Math.round(options.minPrice / 100)));
     if (options?.maxPrice) urlParams.set("price_max", String(Math.round(options.maxPrice / 100)));
@@ -272,6 +75,57 @@ export class RicardoScraper extends BaseScraper {
     const paramStr = urlParams.toString();
     if (paramStr) searchUrl += "?" + paramStr;
 
+    return searchUrl;
+  }
+
+  /**
+   * Ricardo per Puppeteer + Stealth + CH Residential Proxy scrapen.
+   * Der Browser geht über den Residential Proxy mit Schweizer IP.
+   */
+  private async scrapeViaBrowser(
+    query: string,
+    options?: ScraperOptions,
+    isVehicleSearch?: boolean
+  ): Promise<ScraperResult[]> {
+    const searchUrl = this.buildSearchUrl(query, options);
+    console.log(`[Ricardo] Browser URL: ${searchUrl}`);
+
+    // fetchWithBrowserCountry nutzt CH-Proxy (Residential, Schweizer IP)
+    const html = await this.fetchWithBrowserCountry(searchUrl, "ch");
+
+    if (html.length < 1000) {
+      console.warn("[Ricardo] ⚠️ Sehr kurze Browser-Antwort");
+      return [];
+    }
+
+    if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
+      console.warn("[Ricardo] ⚠️ Cloudflare-Challenge trotz Stealth-Browser");
+      return [];
+    }
+
+    // Parse: zuerst JSON-LD versuchen, dann HTML-Elemente
+    let results = this.parseJsonLd(html, options, isVehicleSearch);
+    if (results.length === 0) {
+      results = this.parseHtmlListings(html, options, isVehicleSearch);
+    }
+
+    // Fallback: __NEXT_DATA__ (Next.js SSR data)
+    if (results.length === 0) {
+      results = this.parseNextData(html, options, isVehicleSearch);
+    }
+
+    return results;
+  }
+
+  /**
+   * HTML-Fallback: Seite per HTTP laden und parsen
+   */
+  private async scrapeViaHtml(
+    query: string,
+    options?: ScraperOptions,
+    isVehicleSearch?: boolean
+  ): Promise<ScraperResult[]> {
+    const searchUrl = this.buildSearchUrl(query, options);
     console.log(`[Ricardo] HTML Fallback URL: ${searchUrl}`);
 
     const response = await this.fetchWithHeaders(searchUrl);
@@ -286,13 +140,40 @@ export class RicardoScraper extends BaseScraper {
       return [];
     }
 
-    return this.parseJsonLd(html, options);
+    let results = this.parseJsonLd(html, options, isVehicleSearch);
+    if (results.length === 0) {
+      results = this.parseHtmlListings(html, options, isVehicleSearch);
+    }
+    if (results.length === 0) {
+      results = this.parseNextData(html, options, isVehicleSearch);
+    }
+
+    return results;
+  }
+
+  /**
+   * Non-vehicle keyword filter for vehicle searches
+   */
+  private isNonVehicleItem(title: string): boolean {
+    const NON_VEHICLE_KEYWORDS = [
+      /modellauto/i, /spielzeug/i, /poster/i, /prospekt/i, /katalog/i,
+      /schlüsselanhänger/i, /aufkleber/i, /t-shirt/i, /tasse\b/i,
+      /hülle/i, /cover\b/i, /case\b/i, /sticker/i, /buch\b/i,
+      /lego/i, /playmobil/i, /hot\s*wheels/i, /matchbox/i, /diecast/i,
+      /1[:/]\s*\d{2}\b/i, /miniatur/i, /pokemon/i, /karte\b/i, /card\b/i,
+      /lamini/i, /laminier/i,
+    ];
+    return NON_VEHICLE_KEYWORDS.some(pattern => pattern.test(title));
   }
 
   /**
    * Parse JSON-LD schema.org ItemList aus HTML
    */
-  private parseJsonLd(html: string, options?: ScraperOptions): ScraperResult[] {
+  private parseJsonLd(
+    html: string,
+    options?: ScraperOptions,
+    isVehicleSearch?: boolean
+  ): ScraperResult[] {
     const results: ScraperResult[] = [];
 
     const jsonLdMatches = html.matchAll(
@@ -315,6 +196,12 @@ export class RicardoScraper extends BaseScraper {
 
             const title = (item.name as string) || "";
             if (!title) continue;
+
+            // Vehicle filter
+            if (isVehicleSearch && this.isNonVehicleItem(title)) {
+              console.log(`[Ricardo] Skipping non-vehicle: "${title.substring(0, 60)}"`);
+              continue;
+            }
 
             // Preis aus offers
             let priceRaw = 0;
@@ -362,6 +249,180 @@ export class RicardoScraper extends BaseScraper {
       } catch {
         // JSON parse error — try next block
       }
+    }
+
+    if (results.length > 0) {
+      console.log(`[Ricardo] JSON-LD: ${results.length} Ergebnisse`);
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse listing links and prices from HTML structure
+   */
+  private parseHtmlListings(
+    html: string,
+    options?: ScraperOptions,
+    isVehicleSearch?: boolean
+  ): ScraperResult[] {
+    const results: ScraperResult[] = [];
+    const seenUrls = new Set<string>();
+
+    // Ricardo article links: /de/a/{id} or /de/a/{slug}-{id}
+    const linkRegex = /href="(\/de\/a\/[^"]+)"/g;
+    let linkMatch;
+
+    while ((linkMatch = linkRegex.exec(html)) !== null) {
+      const href = linkMatch[1];
+      if (seenUrls.has(href)) continue;
+      seenUrls.add(href);
+
+      // Context around the link for title/price extraction
+      const start = Math.max(0, linkMatch.index - 500);
+      const end = Math.min(html.length, linkMatch.index + 500);
+      const context = html.substring(start, end);
+
+      // Title: text inside the link or nearby heading
+      const titleMatch = context.match(/(?:aria-label|title)="([^"]+)"/);
+      let title = titleMatch ? titleMatch[1] : "";
+
+      // If no title from attributes, try to extract from tag content
+      if (!title) {
+        const textMatch = context.match(/>([^<]{5,100})</);
+        if (textMatch) title = textMatch[1].trim();
+      }
+
+      if (!title) continue;
+
+      // Vehicle filter
+      if (isVehicleSearch && this.isNonVehicleItem(title)) continue;
+
+      // Price: CHF XX or XX.XX CHF
+      const priceMatch = context.match(/(?:CHF|Fr\.?)\s*([\d''.,-]+)|(\d[\d'.,-]+)\s*(?:CHF|Fr\.?)/);
+      let price = 0;
+      if (priceMatch) {
+        const priceStr = (priceMatch[1] || priceMatch[2] || "0");
+        price = Math.round(
+          parseFloat(priceStr.replace(/['']/g, "").replace(".–", "").replace(",", ".")) * 100
+        );
+        if (isNaN(price)) price = 0;
+      }
+
+      if (price > 0) {
+        if (options?.minPrice && price < options.minPrice) continue;
+        if (options?.maxPrice && price > options.maxPrice) continue;
+      }
+
+      // Image
+      const imgMatch = context.match(/src="(https:\/\/img\.ricardostatic\.ch[^"]+)"/i);
+
+      const fullUrl = `${this.baseUrl}${href}`;
+
+      results.push({
+        title: title.substring(0, 200),
+        price,
+        url: fullUrl,
+        imageUrl: imgMatch ? imgMatch[1] : null,
+        platform: this.platform,
+        scrapedAt: new Date(),
+      });
+
+      if (options?.limit && results.length >= options.limit) break;
+    }
+
+    if (results.length > 0) {
+      console.log(`[Ricardo] HTML-Listings: ${results.length} Ergebnisse`);
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse __NEXT_DATA__ JSON from Ricardo's Next.js SSR
+   */
+  private parseNextData(
+    html: string,
+    options?: ScraperOptions,
+    isVehicleSearch?: boolean
+  ): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    const nextDataMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+    if (!nextDataMatch) return results;
+
+    try {
+      const nextData = JSON.parse(nextDataMatch[1]);
+
+      // Navigate through various possible paths for search results
+      const pageProps = nextData?.props?.pageProps;
+      if (!pageProps) return results;
+
+      // Try common patterns for search result data
+      const articles = pageProps?.articles ||
+        pageProps?.searchResults?.articles ||
+        pageProps?.initialData?.articles ||
+        pageProps?.data?.articles;
+
+      if (!Array.isArray(articles)) return results;
+
+      console.log(`[Ricardo] __NEXT_DATA__: ${articles.length} Artikel gefunden`);
+
+      for (const article of articles) {
+        const title = article.title || article.name || "";
+        if (!title) continue;
+
+        if (isVehicleSearch && this.isNonVehicleItem(title)) continue;
+
+        const priceCHF = article.buyNowPrice ?? article.bidPrice ?? article.price ?? 0;
+        const priceRappen = Math.round(priceCHF * 100);
+
+        if (priceRappen > 0) {
+          if (options?.minPrice && priceRappen < options.minPrice) continue;
+          if (options?.maxPrice && priceRappen > options.maxPrice) continue;
+        }
+
+        const articleId = article.id || article.articleId || "";
+        const articleUrl = articleId ? `${this.baseUrl}/de/a/${articleId}` : this.baseUrl;
+
+        let imageUrl: string | null = null;
+        if (typeof article.image === "string") {
+          imageUrl = article.image;
+        } else if (article.imageUrl) {
+          imageUrl = article.imageUrl;
+        } else if (article.images?.[0]) {
+          imageUrl = typeof article.images[0] === "string" ? article.images[0] : article.images[0].url;
+        }
+
+        const descParts: string[] = [];
+        if (article.hasAuction && article.bidPrice) {
+          descParts.push(`Auktion: CHF ${article.bidPrice}`);
+        }
+        if (article.hasBuyNow && article.buyNowPrice) {
+          descParts.push(`Sofortkauf: CHF ${article.buyNowPrice}`);
+        }
+        if (article.endDate) {
+          descParts.push(`Endet: ${new Date(article.endDate).toLocaleDateString("de-CH")}`);
+        }
+
+        results.push({
+          title: title.substring(0, 200),
+          price: priceRappen,
+          url: articleUrl,
+          imageUrl,
+          description: descParts.length > 0 ? descParts.join(" | ") : undefined,
+          platform: this.platform,
+          scrapedAt: new Date(),
+        });
+
+        if (options?.limit && results.length >= options.limit) break;
+      }
+    } catch {
+      // JSON parse error
+    }
+
+    if (results.length > 0) {
+      console.log(`[Ricardo] __NEXT_DATA__: ${results.length} Ergebnisse`);
     }
 
     return results;

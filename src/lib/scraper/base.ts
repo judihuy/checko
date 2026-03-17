@@ -49,8 +49,21 @@ export interface ScraperOptions {
 }
 
 // Proxy-Pool: built from ENV (PROXY_USERNAME, PROXY_PASSWORD, PROXY_HOST, PROXY_PORT)
-const PROXY_USERNAME_BASE = process.env.PROXY_USERNAME || "";
-const PROXY_PASSWORD_BASE = process.env.PROXY_PASSWORD || "";
+// Falls PROXY_USERNAME nicht gesetzt, aus SCRAPER_PROXY extrahieren
+function extractProxyCredentials(): { username: string; password: string } {
+  if (process.env.PROXY_USERNAME && process.env.PROXY_PASSWORD) {
+    return { username: process.env.PROXY_USERNAME, password: process.env.PROXY_PASSWORD };
+  }
+  // Fallback: aus SCRAPER_PROXY extrahieren (Format: http://user-country-N:pass@host:port)
+  const scraperProxy = process.env.SCRAPER_PROXY || "";
+  const match = scraperProxy.match(/\/\/([^-]+)-[a-z]+-\d+:([^@]+)@/);
+  if (match) {
+    return { username: match[1], password: match[2] };
+  }
+  return { username: "", password: "" };
+}
+
+const { username: PROXY_USERNAME_BASE, password: PROXY_PASSWORD_BASE } = extractProxyCredentials();
 const PROXY_HOST = process.env.PROXY_HOST || "p.webshare.io";
 const PROXY_PORT = parseInt(process.env.PROXY_PORT || "80", 10);
 
@@ -299,6 +312,112 @@ export abstract class BaseScraper {
       }
     } finally {
       // Lock IMMER freigeben
+      release();
+    }
+  }
+
+  /**
+   * Fetcht HTML mit echtem Headless-Browser (Puppeteer) + Proxy mit spezifischem Land.
+   * Verwendet Residential Proxy mit Ländercode (z.B. "ch" für Schweiz).
+   * Ansonsten identisch zu fetchWithBrowser.
+   */
+  protected async fetchWithBrowserCountry(url: string, country: string): Promise<string> {
+    const release = await acquireBrowserLock();
+
+    try {
+      const now = Date.now();
+      const elapsed = now - lastBrowserRequestTime;
+      if (elapsed < BROWSER_MIN_DELAY_MS) {
+        const waitMs = BROWSER_MIN_DELAY_MS - elapsed;
+        console.log(`[Scraper/${this.platform}] Browser rate-limit: waiting ${waitMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+
+      // Build country-specific proxy credentials
+      const proxyIdx = Math.floor(Math.random() * 5) + 1;
+      const proxyUsername = `${PROXY_USERNAME_BASE}-${country}-${proxyIdx}`;
+      const proxyPassword = PROXY_PASSWORD_BASE;
+      const userAgent = this.getRandomUserAgent();
+      const viewport = this.getRandomViewport();
+
+      console.log(`[Scraper/${this.platform}] Launching stealth browser with ${country.toUpperCase()} proxy user ${proxyUsername}, viewport ${viewport.width}x${viewport.height}`);
+
+      const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+
+      const browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--no-zygote",
+          "--single-process",
+          `--proxy-server=http://${PROXY_HOST}:${PROXY_PORT}`,
+          `--window-size=${viewport.width},${viewport.height}`,
+        ],
+      });
+
+      try {
+        const page = await browser.newPage();
+
+        // Proxy-Authentifizierung mit länderspezifischem User
+        await page.authenticate({
+          username: proxyUsername,
+          password: proxyPassword,
+        });
+
+        await page.setViewport(viewport);
+        await page.setUserAgent(userAgent);
+        await page.setExtraHTTPHeaders({
+          "Accept-Language": "de-CH,de;q=0.9,en;q=0.8",
+        });
+
+        const response = await page.goto(url, {
+          waitUntil: "networkidle2",
+          timeout: 30000,
+        });
+
+        if (response && !response.ok()) {
+          console.warn(`[Scraper/${this.platform}] Browser fetch HTTP ${response.status()} ${response.statusText()}`);
+        }
+
+        // 3 Sekunden warten für JS-Rendering
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        // Cookie-Banner automatisch akzeptieren
+        try {
+          const buttons = await page.$$("button");
+          for (const btn of buttons) {
+            const text = await page.evaluate((el) => el.textContent || "", btn);
+            if (
+              text.includes("Akzeptieren") ||
+              text.includes("akzeptieren") ||
+              text.includes("Accept") ||
+              text.includes("Alle akzeptieren") ||
+              text.includes("Zustimmen") ||
+              text.includes("Einverstanden")
+            ) {
+              await btn.click();
+              console.log(`[Scraper/${this.platform}] Cookie-Banner geklickt: "${text.trim().substring(0, 40)}"`);
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+              break;
+            }
+          }
+        } catch {
+          // Cookie-Banner Fehler — ignorieren
+        }
+
+        const html = await page.content();
+        lastBrowserRequestTime = Date.now();
+
+        console.log(`[Scraper/${this.platform}] Browser (${country.toUpperCase()} proxy) fetch OK, HTML length: ${html.length}`);
+        return html;
+      } finally {
+        await browser.close();
+      }
+    } finally {
       release();
     }
   }

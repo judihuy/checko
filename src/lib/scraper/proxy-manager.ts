@@ -7,8 +7,20 @@ import { ProxyAgent, fetch as undiciFetch } from "undici";
 
 // === Configuration (from ENV) ===
 
-const PROXY_USERNAME_BASE = process.env.PROXY_USERNAME || "";
-const PROXY_PASSWORD = process.env.PROXY_PASSWORD || "";
+// Falls PROXY_USERNAME nicht gesetzt, aus SCRAPER_PROXY extrahieren
+function extractProxyCredentials(): { username: string; password: string } {
+  if (process.env.PROXY_USERNAME && process.env.PROXY_PASSWORD) {
+    return { username: process.env.PROXY_USERNAME, password: process.env.PROXY_PASSWORD };
+  }
+  const scraperProxy = process.env.SCRAPER_PROXY || "";
+  const match = scraperProxy.match(/\/\/([^-]+)-[a-z]+-\d+:([^@]+)@/);
+  if (match) {
+    return { username: match[1], password: match[2] };
+  }
+  return { username: "", password: "" };
+}
+
+const { username: PROXY_USERNAME_BASE, password: PROXY_PASSWORD } = extractProxyCredentials();
 const PROXY_HOST = process.env.PROXY_HOST || "p.webshare.io";
 const PROXY_PORT = parseInt(process.env.PROXY_PORT || "80", 10);
 

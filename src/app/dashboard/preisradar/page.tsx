@@ -801,15 +801,15 @@ export default function PreisradarPage() {
             <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
               <Link
                 href="/dashboard/preisradar/saved"
-                className="bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
+                className="bg-white border border-gray-200 text-gray-700 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium hover:bg-gray-50 transition text-xs sm:text-sm"
               >
                 🔖 Gespeichert
               </Link>
               <Link
                 href="/dashboard/preisradar/alerts"
-                className="bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
+                className="bg-white border border-gray-200 text-gray-700 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium hover:bg-gray-50 transition text-xs sm:text-sm"
               >
-                🔔 Treffer ansehen
+                🔔 Treffer
               </Link>
               <button
                 onClick={handleNewSearchClick}
@@ -905,30 +905,30 @@ export default function PreisradarPage() {
                   </div>
 
                   {/* Aktionen */}
-                  <div className="flex gap-2 pt-3 border-t border-gray-100">
+                  <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
                     {search.status !== "abgelaufen" && (
                       <>
                         <button
                           onClick={() => openEditModal(search)}
-                          className="flex-1 text-xs py-2 rounded-lg font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
+                          className="flex-1 min-w-0 text-xs py-2 px-2 rounded-lg font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition truncate"
                         >
                           ✏️ Bearbeiten
                         </button>
                         <button
                           onClick={() => handleToggleSearch(search.id, search.status === "aktiv", search.isDraft)}
-                          className={`flex-1 text-xs py-2 rounded-lg font-medium transition ${
+                          className={`flex-1 min-w-0 text-xs py-2 px-2 rounded-lg font-medium transition truncate ${
                             search.status === "aktiv"
                               ? "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
                               : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                           }`}
                         >
-                          {search.status === "aktiv" ? "⏸ Pausieren" : "▶ Aktivieren"}
+                          {search.status === "aktiv" ? "⏸ Pause" : "▶ Start"}
                         </button>
                       </>
                     )}
                     <button
                       onClick={() => handleDeleteSearch(search.id)}
-                      className="flex-1 text-xs py-2 rounded-lg font-medium bg-red-50 text-red-700 hover:bg-red-100 transition"
+                      className="flex-1 min-w-0 text-xs py-2 px-2 rounded-lg font-medium bg-red-50 text-red-700 hover:bg-red-100 transition truncate"
                     >
                       🗑 Löschen
                     </button>

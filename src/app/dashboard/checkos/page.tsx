@@ -180,7 +180,8 @@ function CheckosKaufContent() {
       }
 
       if (data.url) {
-        window.open(data.url, '_blank');
+        // Direkt weiterleiten statt neuen Tab (Popup-Blocker verhindern window.open)
+        window.location.href = data.url;
       } else {
         setError("Keine Checkout-URL erhalten");
       }
@@ -282,7 +283,7 @@ function CheckosKaufContent() {
         )}
 
         {/* ==================== 4 PAKET-CARDS ==================== */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-10">
           {FIXED_PACKAGES.map((pkg) => (
             <button
               key={pkg.checkos}
@@ -392,7 +393,7 @@ function CheckosKaufContent() {
           </div>
 
           {/* Rabatt-Staffeln */}
-          <div className="grid grid-cols-4 gap-1 mb-6 mt-8">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mb-6 mt-8">
             {PRICE_TIERS.map((tier) => {
               const isActive = sliderAmount >= tier.min && sliderAmount <= tier.max;
               return (
@@ -529,7 +530,7 @@ function CheckosKaufContent() {
 
 export default function CheckosKaufSeite() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col overflow-x-hidden">
       <Navbar />
       <Suspense
         fallback={

@@ -89,24 +89,33 @@ export async function assignRegistrationNumber(userId: string): Promise<number> 
 /**
  * Berechnet den Gewinn basierend auf der User-Nummer
  * Staffelung (mit dynamischen Min/Max aus Settings):
- * User 1-100: fix = regMax
- * User 101-200: Random regMin - regMax
- * User 201+: Random regMin - floor(regMax/2) (mindestens regMin)
+ * User 1-100: fix = regMax (nächster Rad-Wert)
+ * User 101-200: Random regMin - regMax (nur Rad-Werte)
+ * User 201+: Random regMin - floor(regMax/2) (nur Rad-Werte)
+ * Gibt NUR Werte zurück die auf dem Rad existieren!
  */
 export function calculateRegistrationPrize(
   userNumber: number,
   regMin: number,
   regMax: number
 ): number {
+  // Nächsten Rad-Wert zu einem Zielwert finden
+  const closestWheelValue = (target: number) => 
+    WHEEL_VALUES.reduce((prev, curr) =>
+      Math.abs(curr - target) < Math.abs(prev - target) ? curr : prev
+    );
+
   if (userNumber <= 100) {
-    return regMax;
+    return closestWheelValue(regMax);
   } else if (userNumber <= 200) {
-    const range = regMax - regMin;
-    return Math.floor(Math.random() * (range + 1)) + regMin;
+    const validValues = WHEEL_VALUES.filter(v => v >= regMin && v <= regMax);
+    if (validValues.length === 0) return closestWheelValue(regMin);
+    return validValues[Math.floor(Math.random() * validValues.length)];
   } else {
     const halfMax = Math.max(Math.floor(regMax / 2), regMin);
-    const range = halfMax - regMin;
-    return Math.floor(Math.random() * (range + 1)) + regMin;
+    const validValues = WHEEL_VALUES.filter(v => v >= regMin && v <= halfMax);
+    if (validValues.length === 0) return closestWheelValue(regMin);
+    return validValues[Math.floor(Math.random() * validValues.length)];
   }
 }
 
@@ -207,11 +216,38 @@ export async function spinRegistrationWheel(
 // ==================== DAILY WHEEL ====================
 
 /**
- * Berechnet den täglichen Gewinn (dynamisch aus Settings)
+ * Alle einzigartigen Werte die auf dem Rad vorkommen (aufsteigend sortiert)
+ */
+const WHEEL_VALUES = [...new Set(WHEEL_SEGMENTS.map(s => s.value))].sort((a, b) => a - b);
+
+/**
+ * Berechnet den täglichen Gewinn (dynamisch aus Settings).
+ * Wählt NUR Werte die auf dem Rad existieren, damit Animation und Text übereinstimmen.
  */
 function calculateDailyPrize(dailyMin: number, dailyMax: number): number {
-  const range = dailyMax - dailyMin;
-  return Math.floor(Math.random() * (range + 1)) + dailyMin;
+  // Nur Werte aus dem Rad verwenden die im erlaubten Bereich liegen
+  const validValues = WHEEL_VALUES.filter(v => v >= dailyMin && v <= dailyMax);
+  
+  if (validValues.length === 0) {
+    // Fallback: Nächsten Rad-Wert zu dailyMin finden
+    const closest = WHEEL_VALUES.reduce((prev, curr) =>
+      Math.abs(curr - dailyMin) < Math.abs(prev - dailyMin) ? curr : prev
+    );
+    return closest;
+  }
+  
+  // Gewichtete Auswahl: Kleinere Werte wahrscheinlicher
+  // Gewicht = 1/value (normalisiert)
+  const weights = validValues.map(v => 1 / v);
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  
+  let random = Math.random() * totalWeight;
+  for (let i = 0; i < validValues.length; i++) {
+    random -= weights[i];
+    if (random <= 0) return validValues[i];
+  }
+  
+  return validValues[validValues.length - 1];
 }
 
 /**

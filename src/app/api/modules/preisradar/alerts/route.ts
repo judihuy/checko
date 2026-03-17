@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
+import { repairSearchQuery } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   const rl = checkRateLimit(request, "preisradar-alerts", RATE_LIMIT_DEFAULT.max, RATE_LIMIT_DEFAULT.windowMs);
@@ -91,15 +92,11 @@ export async function GET(request: NextRequest) {
       }
 
       // Query-Reparatur: Falls Leerzeichen fehlen, aus vehicleMake/Model rekonstruieren
-      let searchQuery = alert.search.query;
-      if (alert.search.vehicleMake && alert.search.vehicleModel) {
-        const expected = alert.search.vehicleMake + " " + alert.search.vehicleModel;
-        const normStored = alert.search.query.toLowerCase().replace(/[\s-]+/g, "");
-        const normExpected = expected.toLowerCase().replace(/[\s-]+/g, "");
-        if (normStored === normExpected && !alert.search.query.includes(" ")) {
-          searchQuery = expected;
-        }
-      }
+      const searchQuery = repairSearchQuery(
+        alert.search.query,
+        alert.search.vehicleMake,
+        alert.search.vehicleModel,
+      );
 
       return {
         id: alert.id,

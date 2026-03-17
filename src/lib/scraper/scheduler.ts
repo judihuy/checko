@@ -9,6 +9,7 @@ import { deductCheckos } from "@/lib/checkos";
 import { sendPreisradarAlertEmail } from "@/lib/email-preisradar";
 import { createNotification } from "@/lib/notifications";
 import { getPlatformDisplayName } from "@/lib/platform-names";
+import { repairSearchQuery } from "@/lib/utils";
 import { getSetting } from "@/lib/settings";
 import { filterWithAI } from "@/lib/scraper/ai-filter";
 import {
@@ -306,7 +307,7 @@ export async function runSearchJob(searchId: string): Promise<{
         await sendPreisradarAlertEmail(
           search.user.email,
           search.user.name || "Benutzer",
-          search.query,
+          repairSearchQuery(search.query, search.vehicleMake, search.vehicleModel),
           newAlerts
         );
       } catch (emailError) {

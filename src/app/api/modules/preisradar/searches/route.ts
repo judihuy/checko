@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { chargeForSearch, calculateExpiresAt, getSearchCost, runSearchJob } from "@/lib/scraper/scheduler";
 import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
+import { repairSearchQuery } from "@/lib/utils";
 
 // Intervall-Optionen nach Qualitätsstufe
 const TIER_INTERVALS: Record<string, number> = {
@@ -273,19 +274,8 @@ export async function GET(request: NextRequest) {
       else if (!s.isActive) status = "pausiert";
       if (!s.isDraft && s.expiresAt && new Date() > s.expiresAt) status = "abgelaufen";
 
-      // Query-Reparatur: Falls der gespeicherte Query keine Leerzeichen enthält
-      // aber vehicleMake + vehicleModel gesetzt sind, aus den Einzelfeldern rekonstruieren.
-      // Behebt Altdaten wo "seattoledo" statt "Seat Toledo" gespeichert wurde.
-      let displayQuery = s.query;
-      if (s.vehicleMake && s.vehicleModel) {
-        const expectedQuery = s.vehicleMake + " " + s.vehicleModel;
-        const normalizedStored = s.query.toLowerCase().replace(/[\s-]+/g, "");
-        const normalizedExpected = expectedQuery.toLowerCase().replace(/[\s-]+/g, "");
-        // Wenn der gespeicherte Query die gleichen Buchstaben hat aber Leerzeichen fehlen
-        if (normalizedStored === normalizedExpected && !s.query.includes(" ")) {
-          displayQuery = expectedQuery;
-        }
-      }
+      // Query-Reparatur: Altdaten wo z.B. "seattoledo" statt "Seat Toledo" gespeichert wurde
+      const displayQuery = repairSearchQuery(s.query, s.vehicleMake, s.vehicleModel);
 
       return {
         id: s.id,

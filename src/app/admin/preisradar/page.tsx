@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAllScrapers } from "@/lib/scraper";
 import Link from "next/link";
 import { getPlatformDisplayName } from "@/lib/platform-names";
+import { repairSearchQuery } from "@/lib/utils";
 
 async function getPreisradarStats() {
   try {
@@ -31,7 +32,7 @@ async function getPreisradarStats() {
           isScam: true,
           createdAt: true,
           search: {
-            select: { query: true, user: { select: { name: true, email: true } } },
+            select: { query: true, vehicleMake: true, vehicleModel: true, user: { select: { name: true, email: true } } },
           },
         },
       }),
@@ -44,6 +45,8 @@ async function getPreisradarStats() {
       take: 5,
       select: {
         query: true,
+        vehicleMake: true,
+        vehicleModel: true,
         platforms: true,
         lastScrapedAt: true,
         user: { select: { name: true } },
@@ -157,7 +160,7 @@ export default async function AdminPreisradarPage() {
                     : "–"}
                 </span>
                 <span className="font-medium text-gray-700">
-                  &ldquo;{run.query}&rdquo;
+                  &ldquo;{repairSearchQuery(run.query, run.vehicleMake, run.vehicleModel)}&rdquo;
                 </span>
                 <span className="text-gray-400">
                   ({run.platforms.split(",").map((p) => getPlatformDisplayName(p)).join(", ")})
@@ -207,7 +210,7 @@ export default async function AdminPreisradarPage() {
                       {alert.priceScore || "–"}
                     </td>
                     <td className="py-2 px-3 text-gray-500">
-                      &ldquo;{alert.search.query}&rdquo;
+                      &ldquo;{repairSearchQuery(alert.search.query, alert.search.vehicleMake, alert.search.vehicleModel)}&rdquo;
                     </td>
                     <td className="py-2 px-3 text-gray-500">
                       {alert.search.user.name || alert.search.user.email}

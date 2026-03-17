@@ -442,7 +442,7 @@ export default function PreisradarAlertsPage() {
                       <div className="flex gap-4">
                         {/* Thumbnail */}
                         {alert.imageUrl ? (
-                          <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative">
+                          <a href={alert.url} target="_blank" rel="noopener noreferrer" className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative block">
                             <img
                               src={alert.imageUrl}
                               alt={alert.title}
@@ -467,7 +467,7 @@ export default function PreisradarAlertsPage() {
                                 {getScoreLabel(alert.priceScore)}
                               </div>
                             )}
-                          </div>
+                          </a>
                         ) : (
                           <CameraPlaceholder platform={alert.platform} />
                         )}
@@ -493,7 +493,9 @@ export default function PreisradarAlertsPage() {
 
                           {/* Titel */}
                           <h3 className="font-semibold text-gray-900 text-sm line-clamp-1">
-                            {alert.title}
+                            <a href={alert.url} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-700 transition">
+                              {alert.title}
+                            </a>
                           </h3>
 
                           {/* Preis */}

@@ -277,7 +277,7 @@ export default function SavedAlertsPage() {
                     <div className="flex gap-4">
                       {/* Thumbnail */}
                       {item.alert.imageUrl ? (
-                        <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative">
+                        <a href={item.alert.url} target="_blank" rel="noopener noreferrer" className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 relative block">
                           <img
                             src={item.alert.imageUrl}
                             alt={item.alert.title}
@@ -307,7 +307,7 @@ export default function SavedAlertsPage() {
                               ⭐
                             </div>
                           )}
-                        </div>
+                        </a>
                       ) : (
                         <div className="relative">
                           <CameraPlaceholder platform={item.alert.platform} />
@@ -335,7 +335,9 @@ export default function SavedAlertsPage() {
 
                         {/* Titel */}
                         <h3 className="font-semibold text-gray-900 text-sm line-clamp-1">
-                          {item.alert.title}
+                          <a href={item.alert.url} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-700 transition">
+                            {item.alert.title}
+                          </a>
                         </h3>
 
                         {/* Preis */}

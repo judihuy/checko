@@ -71,7 +71,9 @@ function formatSearchDetails(search: Search): string | null {
       parts.push(fuelLabels[search.fuelType] || search.fuelType);
     }
     if (search.transmission) {
-      parts.push(search.transmission === "automat" ? "Automatik" : "Manuell");
+      const t = search.transmission.toLowerCase();
+      const isAutomatic = ["automat", "automatik", "automatic"].includes(t);
+      parts.push(isAutomatic ? "Automatik" : "Manuell");
     }
     if (search.kmFrom || search.kmTo) {
       parts.push((search.kmFrom ? search.kmFrom.toLocaleString("de-CH") : "0") + "–" + (search.kmTo ? search.kmTo.toLocaleString("de-CH") : "∞") + " km");

@@ -545,19 +545,20 @@ export abstract class BaseScraper {
         const response = await undiciFetch(url, {
           headers,
           dispatcher,
+          redirect: "follow",    // Explicitly follow redirects (e.g. Autolina 302)
         });
         // undici Response in Web-Standard Response konvertieren
         return response as unknown as Response;
       } catch (proxyError) {
         console.warn(`[Scraper/${this.platform}] Proxy failed, falling back to direct fetch:`, proxyError);
         // Fallback: direkter Fetch ohne Proxy
-        return fetch(url, { headers });
+        return fetch(url, { headers, redirect: "follow" });
       }
     }
 
     // Kein Proxy konfiguriert → normales fetch
     console.log(`[Scraper/${this.platform}] Fetching directly (no proxy configured)`);
-    return fetch(url, { headers });
+    return fetch(url, { headers, redirect: "follow" });
   }
 
   /**

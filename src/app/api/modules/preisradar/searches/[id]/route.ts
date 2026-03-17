@@ -20,7 +20,7 @@ const updateSearchSchema = z.object({
   maxPrice: z.number().int().min(0).nullable().optional(),
   minPrice: z.number().int().min(0).nullable().optional(),
   platforms: z
-    .array(z.enum(["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"]))
+    .array(z.enum(["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben", "autolina"]))
     .min(1, "Mindestens eine Plattform auswählen")
     .optional(),
   // Kategorie-Felder

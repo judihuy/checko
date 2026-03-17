@@ -2,7 +2,7 @@
 // Führt Suchjobs aus: Scrape → Filter → KI-Bewertung → DB → E-Mail
 
 import { prisma } from "@/lib/prisma";
-import { getScrapersByPlatformList } from "@/lib/scraper";
+import { getWorkingScrapers } from "@/lib/scraper";
 import type { ScraperResult } from "@/lib/scraper";
 import { analyzePrice } from "@/lib/ai/price-analyzer";
 import { deductCheckos } from "@/lib/checkos";
@@ -55,15 +55,11 @@ export async function runSearchJob(searchId: string): Promise<{
       return { success: false, newAlerts: 0, errors: ["Suche abgelaufen"] };
     }
 
-    // Scraper für gewählte Plattformen holen
-    // CarForYou entfernt (Domain tot) — Ricardo übernimmt alle Kategorien inkl. Fahrzeuge
-    let platformString = search.platforms;
-
-    // Legacy-Bereinigung: "carforyou" aus alten Suchen entfernen
-    const platformList = platformString.split(",").map((p) => p.trim()).filter((p) => p !== "carforyou");
-    platformString = platformList.join(",");
-
-    const scrapers = getScrapersByPlatformList(platformString);
+    // Scraper holen: ALLE verfügbaren (isWorking=true) Plattformen nutzen,
+    // nicht nur die historisch gespeicherten DB-Plattformen.
+    // Damit werden neue Plattformen (z.B. Autolina, eBay KA) automatisch
+    // für alle Suchen genutzt, auch wenn sie bei Erstellung noch nicht existierten.
+    const scrapers = getWorkingScrapers();
 
     if (scrapers.length === 0) {
       errors.push("Keine Scraper für die gewählten Plattformen verfügbar");
@@ -421,6 +417,23 @@ export async function runAllActiveSearches(): Promise<{
     });
 
     console.log(`[Scheduler] ${activeSearches.length} aktive Suchen gefunden, prüfe Intervalle...`);
+
+    // === Fix: Alte Intervalle < 15min auf 15min korrigieren ===
+    // Historisch gab es Pro-Suchen mit 5min-Intervall. Minimum ist jetzt 15min.
+    const tooFastSearches = activeSearches.filter((s) => s.interval && s.interval < 15);
+    if (tooFastSearches.length > 0) {
+      console.log(`[Scheduler] ⚠️ ${tooFastSearches.length} Suchen mit Intervall < 15min gefunden — korrigiere auf 15min`);
+      await prisma.preisradarSearch.updateMany({
+        where: {
+          id: { in: tooFastSearches.map((s) => s.id) },
+        },
+        data: { interval: 15 },
+      });
+      // Lokales Array auch updaten
+      for (const s of tooFastSearches) {
+        s.interval = 15;
+      }
+    }
 
     const now = Date.now();
 

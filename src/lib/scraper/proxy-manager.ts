@@ -292,6 +292,7 @@ export async function fetchWithProxy(
           dispatcher,
           method: options?.method,
           body: options?.body,
+          redirect: "follow",    // Follow redirects (e.g. Autolina 302)
         });
         response = undiciResp as unknown as Response;
       } else {
@@ -300,6 +301,7 @@ export async function fetchWithProxy(
           headers,
           method: options?.method,
           body: options?.body,
+          redirect: "follow",
         });
       }
 
@@ -342,7 +344,7 @@ export async function fetchWithProxy(
       "Accept-Language": "de-CH,de;q=0.9,en;q=0.8",
       ...options?.headers,
     };
-    const response = await fetch(url, { headers, method: options?.method, body: options?.body });
+    const response = await fetch(url, { headers, method: options?.method, body: options?.body, redirect: "follow" });
     return { response, proxy: null };
   } catch (directError) {
     throw lastError || directError;

@@ -47,17 +47,20 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-# ⚠️ nodemailer muss explizit kopiert werden (Standalone enthält es nicht!)
+# Alle node_modules kopieren (inkl. transitive deps für puppeteer-extra-plugin-stealth)
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/node_modules/nodemailer ./node_modules/nodemailer
-# undici für Proxy-Support
 COPY --from=builder /app/node_modules/undici ./node_modules/undici
-# Puppeteer für Scraper (nutzt System-Chromium)
 COPY --from=builder /app/node_modules/puppeteer ./node_modules/puppeteer
 COPY --from=builder /app/node_modules/puppeteer-core ./node_modules/puppeteer-core
 COPY --from=builder /app/node_modules/stripe ./node_modules/stripe
 COPY --from=builder /app/node_modules/@stripe ./node_modules/@stripe
+COPY --from=builder /app/node_modules/puppeteer-extra ./node_modules/puppeteer-extra
+COPY --from=builder /app/node_modules/puppeteer-extra-plugin-stealth ./node_modules/puppeteer-extra-plugin-stealth
+COPY --from=builder /app/node_modules/is-plain-object ./node_modules/is-plain-object
+COPY --from=builder /app/node_modules/deepmerge ./node_modules/deepmerge
+COPY --from=builder /app/node_modules/puppeteer-extra-plugin-user-preferences ./node_modules/puppeteer-extra-plugin-user-preferences
+COPY --from=builder /app/node_modules/puppeteer-extra-plugin-user-data-dir ./node_modules/puppeteer-extra-plugin-user-data-dir
 
 # Puppeteer: System-Chromium verwenden (nicht eigenes downloaden)
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

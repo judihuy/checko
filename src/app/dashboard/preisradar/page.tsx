@@ -771,9 +771,9 @@ export default function PreisradarPage() {
                   />
                 </div>
               </div>
-              <p className="text-gray-600 mt-1">Überwache Marktplätze und finde die besten Angebote.</p>
+              <p className="text-gray-600 mt-1 text-sm sm:text-base">Überwache Marktplätze und finde die besten Angebote.</p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
               <Link
                 href="/dashboard/preisradar/saved"
                 className="bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
@@ -788,7 +788,7 @@ export default function PreisradarPage() {
               </Link>
               <button
                 onClick={handleNewSearchClick}
-                className="bg-emerald-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-emerald-700 transition text-sm"
+                className="bg-emerald-600 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium hover:bg-emerald-700 transition text-xs sm:text-sm whitespace-nowrap"
               >
                 + Neue Suche
               </button>
@@ -827,7 +827,7 @@ export default function PreisradarPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {searches.map((search) => (
-                <div key={search.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition">
+                <div key={search.id} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:shadow-md transition overflow-hidden">
                   <div className="flex items-start justify-between mb-3">
                     <h3 className="font-semibold text-gray-900 text-lg truncate flex-1 mr-2">
                       &ldquo;{search.query}&rdquo;

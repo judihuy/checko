@@ -34,12 +34,17 @@ export class WillhabenScraper extends BaseScraper {
       if (options?.category === "Fahrzeuge") {
         basePath = "/iad/gebrauchtwagen/auto/gebraucht";
       } else if (options?.category === "Immobilien") {
-        if (options?.propertyOffer === "miete") {
+        if (options?.propertyOffer === "miete" && options?.propertyType === "wohnung") {
           basePath = "/iad/immobilien/mietwohnungen/mietwohnung-angebote";
-        } else if (options?.propertyOffer === "kauf") {
+        } else if (options?.propertyOffer === "kauf" && options?.propertyType === "wohnung") {
           basePath = "/iad/immobilien/eigentumswohnungen/eigentumswohnung-angebote";
-        } else {
+        } else if (options?.propertyOffer === "kauf" && options?.propertyType === "haus") {
           basePath = "/iad/immobilien/haus-kaufen/haus-angebote";
+        } else if (options?.propertyOffer === "miete" && options?.propertyType === "haus") {
+          basePath = "/iad/immobilien/haus-mieten/haus-angebote";
+        } else {
+          // Neutraler Immobilien-Pfad wenn Typ/Offer nicht sicher gesetzt
+          basePath = "/iad/immobilien";
         }
       }
       
@@ -161,9 +166,23 @@ export class WillhabenScraper extends BaseScraper {
         if (!advert || typeof advert !== "object") continue;
         const item = advert as Record<string, unknown>;
 
-        // Titel
+        // Titel — Willhaben nutzt "description" als Titelfeld
         const title = (item.description || item.title || item.headline || "") as string;
         if (!title) continue;
+
+        // Beschreibung aus body oder attributes (BODY-Feld)
+        let description: string | undefined;
+        if (typeof item.body === "string" && item.body) {
+          description = item.body.substring(0, 500);
+        } else if (Array.isArray(item.attributes)) {
+          for (const attr of (item.attributes as Array<Record<string, unknown>>)) {
+            const name = String(attr.name || "").toUpperCase();
+            if ((name === "BODY" || name === "DESCRIPTION") && Array.isArray(attr.values) && (attr.values as string[]).length > 0) {
+              description = String((attr.values as string[])[0]).substring(0, 500);
+              break;
+            }
+          }
+        }
 
         // Preis: attributes Array mit Attribut "PRICE" oder "PRICE/AMOUNT"
         let priceRaw = 0;
@@ -280,6 +299,7 @@ export class WillhabenScraper extends BaseScraper {
           price,
           url,
           imageUrl,
+          description,
           platform: this.platform,
           scrapedAt: new Date(),
         });

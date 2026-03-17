@@ -32,14 +32,10 @@ export class TuttiScraper extends BaseScraper {
       // Preis: ?pr=MIN-MAX (CHF)
       // Kategorie: /de/c/fahrzeuge/ oder /de/c/immobilien/ etc.
       // Hinweis: Tutti hat Cloudflare-Schutz, Ergebnisse können eingeschränkt sein
-      let searchUrl: string;
-      if (options?.category === "Fahrzeuge") {
-        searchUrl = `${this.baseUrl}/de/q/${encodedQuery}?o=autos`;
-      } else if (options?.category === "Immobilien") {
-        searchUrl = `${this.baseUrl}/de/q/${encodedQuery}?o=immobilien`;
-      } else {
-        searchUrl = `${this.baseUrl}/de/q/${encodedQuery}`;
-      }
+      // Tutti.ch URL-Struktur: /de/q/{suchbegriff}
+      // Kategorie-Filter sind nicht sicher belegbar via URL-Parameter.
+      // Konservativ: nur Freitextsuche + Preis-Filter (bestätigt: ?pr=MIN-MAX)
+      let searchUrl = `${this.baseUrl}/de/q/${encodedQuery}`;
 
       const urlParams = new URLSearchParams();
 
@@ -179,9 +175,10 @@ export class TuttiScraper extends BaseScraper {
         if (!listing || typeof listing !== "object") continue;
         const item = listing as Record<string, unknown>;
 
-        // Titel extrahieren
+        // Titel und Beschreibung extrahieren
         const title = (item.subject || item.title || item.name || "") as string;
         if (!title) continue;
+        const description = ((item.body || item.description || item.text || "") as string).substring(0, 500) || undefined;
 
         // Preis extrahieren (verschiedene Strukturen)
         let priceRaw = 0;
@@ -269,6 +266,7 @@ export class TuttiScraper extends BaseScraper {
           price,
           url,
           imageUrl,
+          description: description || undefined,
           platform: this.platform,
           scrapedAt: new Date(),
         });

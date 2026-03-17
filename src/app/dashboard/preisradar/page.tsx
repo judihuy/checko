@@ -973,25 +973,22 @@ export default function PreisradarPage() {
                         onClick={() => {
                           setCategory(cat);
                           setSubcategory("");
-                          // Reset category-specific fields when changing category
-                          if (cat !== "Fahrzeuge") {
-                            setVehicleMake(""); setVehicleModel("");
-                            setYearFrom(""); setYearTo("");
-                            setKmFrom(""); setKmTo("");
-                            setFuelType(""); setTransmission("");
-                            setEngineSizeCcm(""); setMotorcycleType("");
-                          }
-                          if (cat !== "Immobilien") {
-                            setPropertyType(""); setPropertyOffer("");
-                            setRooms(""); setAreaM2(""); setLocation("");
-                          }
-                          if (cat !== "Möbel") {
-                            setFurnitureType("");
-                          }
-                          // Clear query for structured categories
-                          if (cat === "Fahrzeuge" || cat === "Immobilien") {
-                            setQuery("");
-                          }
+                          // IMMER alle kategorie-spezifischen Felder zurücksetzen
+                          // um Altwerte aus unpassender Kategorie zu verhindern
+                          setVehicleMake(""); setVehicleModel("");
+                          setYearFrom(""); setYearTo("");
+                          setKmFrom(""); setKmTo("");
+                          setFuelType(""); setTransmission("");
+                          setEngineSizeCcm(""); setMotorcycleType("");
+                          setPropertyType(""); setPropertyOffer("");
+                          setRooms(""); setAreaM2(""); setLocation("");
+                          setFurnitureType("");
+                          setCondition("");
+                          // Query zurücksetzen beim Kategoriewechsel —
+                          // Fahrzeuge/Immobilien nutzen kein Freitextfeld,
+                          // andere Kategorien starten mit leerem Suchfeld
+                          setQuery("");
+                          // Preis behalten: ist kategorie-übergreifend sinnvoll
                         }}
                         className={`flex flex-col items-center gap-1 py-3 px-2 rounded-lg border text-center transition ${
                           category === cat

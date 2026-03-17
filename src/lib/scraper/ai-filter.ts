@@ -49,15 +49,18 @@ function buildFilterPrompt(result: ScraperResult, options: ScraperOptions, query
 
   const criteriaStr = criteria.length > 0 ? criteria.join(", ") : query;
   const priceStr = result.price > 0 ? `${(result.price / 100).toFixed(0)} CHF` : "kein Preis";
+  const descriptionStr = result.description
+    ? `\nBeschreibung: "${result.description.substring(0, 500)}"`
+    : "";
 
   return `Du bist ein Relevanz-Filter für Marktplatz-Inserate.
 
 Suchkriterien: ${criteriaStr}
 
-Inserat: "${result.title}" — ${priceStr} — Plattform: ${result.platform}
+Inserat: "${result.title}" — ${priceStr} — Plattform: ${result.platform}${descriptionStr}
 
 Ist dieses Inserat relevant für die Suchkriterien? Beachte:
-- Titel muss zur gesuchten Marke/Modell/Kategorie passen
+- Titel und Beschreibung müssen zur gesuchten Marke/Modell/Kategorie passen
 - Zubehör, Ersatzteile oder Werbung sind IRRELEVANT (es sei denn explizit gesucht)
 - Modellautos, Spielzeug etc. sind IRRELEVANT wenn echte Fahrzeuge gesucht werden
 

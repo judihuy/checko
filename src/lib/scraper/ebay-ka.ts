@@ -47,7 +47,9 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
           categoryPrefix = "immobilien/";
         }
       } else if (options?.category === "Möbel" || options?.category === "Haushalt") {
-        categoryPrefix = "zu-verschenken-tauschen/";
+        // Normale Möbel/Haushalt-Suche — Suchbegriff + Preisfilter reichen
+        // Keine spezielle Kategorie-Prefix, Kleinanzeigen findet Möbel über den Suchbegriff
+        categoryPrefix = "";
       }
 
       let searchUrl: string;
@@ -167,11 +169,18 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
 
         const imageUrl = jsonLd.contentUrl || null;
 
+        // Beschreibung aus dem article-HTML extrahieren
+        const descMatch = articleHtml.match(
+          /class="aditem-main--middle--description"[^>]*>\s*([^<]+)/i
+        );
+        const description = descMatch ? descMatch[1].trim() : undefined;
+
         results.push({
           title,
           price,
           url,
           imageUrl,
+          description,
           platform: this.platform,
           scrapedAt: new Date(),
         });
@@ -227,11 +236,18 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
       const imgMatch = articleHtml.match(/src="(https:\/\/img\.kleinanzeigen\.de[^"]+)"/i);
       const imageUrl = imgMatch ? imgMatch[1] : null;
 
+      // Beschreibung
+      const descMatch = articleHtml.match(
+        /class="aditem-main--middle--description"[^>]*>\s*([^<]+)/i
+      );
+      const description = descMatch ? descMatch[1].trim() : undefined;
+
       results.push({
         title,
         price,
         url,
         imageUrl,
+        description,
         platform: this.platform,
         scrapedAt: new Date(),
       });

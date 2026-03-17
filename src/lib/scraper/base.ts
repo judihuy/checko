@@ -18,6 +18,7 @@ export interface ScraperResult {
   price: number;       // Preis in Rappen (Cent)
   url: string;
   imageUrl: string | null;
+  description?: string; // Beschreibung des Inserats (für KI-Filter)
   platform: string;
   scrapedAt: Date;
 }

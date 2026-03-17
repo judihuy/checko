@@ -21,9 +21,15 @@ const FUEL_TYPE_MAP: Record<string, string> = {
 };
 
 // Transmission mapping: internal → AutoScout24 URL code
+// Robust: alle gängigen Varianten abfangen (UI zeigt "Automatik", intern evtl. "automat" etc.)
 const TRANSMISSION_MAP: Record<string, string> = {
   manuell: "M",
+  manual: "M",
+  schaltgetriebe: "M",
   automat: "A",
+  automatik: "A",
+  automatisch: "A",
+  automatic: "A",
 };
 
 export class AutoScoutScraper extends BaseScraper {
@@ -73,14 +79,16 @@ export class AutoScoutScraper extends BaseScraper {
       if (options?.minPrice) urlParams.set("pricefrom", String(Math.round(options.minPrice / 100)));
       if (options?.maxPrice) urlParams.set("priceto", String(Math.round(options.maxPrice / 100)));
 
-      // Treibstoff-Filter
-      if (options?.fuelType && FUEL_TYPE_MAP[options.fuelType]) {
-        urlParams.set("fuel", FUEL_TYPE_MAP[options.fuelType]);
+      // Treibstoff-Filter (case-insensitive lookup)
+      if (options?.fuelType) {
+        const fuelCode = FUEL_TYPE_MAP[options.fuelType.toLowerCase()];
+        if (fuelCode) urlParams.set("fuel", fuelCode);
       }
 
-      // Getriebe-Filter
-      if (options?.transmission && TRANSMISSION_MAP[options.transmission]) {
-        urlParams.set("gear", TRANSMISSION_MAP[options.transmission]);
+      // Getriebe-Filter (case-insensitive lookup)
+      if (options?.transmission) {
+        const gearCode = TRANSMISSION_MAP[options.transmission.toLowerCase()];
+        if (gearCode) urlParams.set("gear", gearCode);
       }
 
       // Zielland Schweiz

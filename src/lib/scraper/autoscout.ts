@@ -66,6 +66,33 @@ export class AutoScoutScraper extends BaseScraper {
   isWorking = true;
 
   /**
+   * Formatiert einen Error-Wert zu einem lesbaren String.
+   * Verhindert [object Object] in Logs.
+   */
+  private formatError(error: unknown): string {
+    if (error instanceof Error) {
+      return `${error.name}: ${error.message}`;
+    }
+    if (typeof error === "string") {
+      return error;
+    }
+    if (error && typeof error === "object") {
+      // Response-like Objekte (status, statusText)
+      const obj = error as Record<string, unknown>;
+      if ("status" in obj && "statusText" in obj) {
+        return `HTTP ${obj.status} ${obj.statusText}`;
+      }
+      // Allgemeines Objekt: JSON-Serialisierung mit Fallback
+      try {
+        return JSON.stringify(error).substring(0, 500);
+      } catch {
+        return `[Objekt: ${Object.keys(obj).join(", ")}]`;
+      }
+    }
+    return String(error);
+  }
+
+  /**
    * Build search URL from query and options
    */
   private buildSearchUrl(query: string, options?: ScraperOptions): string {
@@ -121,10 +148,8 @@ export class AutoScoutScraper extends BaseScraper {
           return browserResults;
         }
       } catch (error) {
-        console.warn(
-          `[AutoScout] Browser-Methode fehlgeschlagen:`,
-          error instanceof Error ? error.message : String(error)
-        );
+        const detail = this.formatError(error);
+        console.warn(`[AutoScout] Browser-Methode fehlgeschlagen: ${detail}`);
       }
 
       // Methode 2 (FALLBACK): HTTP fetch
@@ -135,17 +160,15 @@ export class AutoScoutScraper extends BaseScraper {
           return httpResults;
         }
       } catch (error) {
-        console.warn(
-          `[AutoScout] HTTP-Fallback fehlgeschlagen:`,
-          error instanceof Error ? error.message : String(error)
-        );
+        const detail = this.formatError(error);
+        console.warn(`[AutoScout] HTTP-Fallback fehlgeschlagen: ${detail}`);
       }
 
       console.warn(`[AutoScout] ⚠️ Keine Ergebnisse`);
       return [];
     } catch (error) {
-      const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-      console.error(`[AutoScout] Scraper-Fehler: ${reason}`);
+      const detail = this.formatError(error);
+      console.error(`[AutoScout] Scraper-Fehler: ${detail}`);
       return [];
     }
   }
@@ -197,7 +220,8 @@ export class AutoScoutScraper extends BaseScraper {
     try {
       response = await fetch(searchUrl, { headers, redirect: "follow" });
     } catch (fetchError) {
-      console.warn(`[AutoScout] Direct fetch failed:`, fetchError);
+      const detail = this.formatError(fetchError);
+      console.warn(`[AutoScout] Direct fetch failed: ${detail}`);
       const { response: proxyResp } = await (await import("./proxy-manager")).fetchWithProxy(
         searchUrl, this.platform, { headers, maxRetries: 2, preferredCountry: "ch" }
       );
@@ -205,7 +229,15 @@ export class AutoScoutScraper extends BaseScraper {
     }
 
     if (!response.ok) {
-      console.error(`[AutoScout] HTTP ${response.status}`);
+      let bodySnippet = "";
+      try {
+        const text = await response.text();
+        bodySnippet = text.substring(0, 200).replace(/\s+/g, " ").trim();
+      } catch { /* body nicht lesbar */ }
+      console.error(
+        `[AutoScout] HTTP ${response.status} ${response.statusText || ""}` +
+        (bodySnippet ? ` — Body: ${bodySnippet}` : "")
+      );
       return [];
     }
 

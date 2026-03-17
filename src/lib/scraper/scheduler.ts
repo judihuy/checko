@@ -56,7 +56,27 @@ export async function runSearchJob(searchId: string): Promise<{
     }
 
     // Scraper für gewählte Plattformen holen
-    const scrapers = getScrapersByPlatformList(search.platforms);
+    // Für Fahrzeug-Suchen: CarForYou automatisch hinzufügen wenn nicht vorhanden
+    // (Ricardo delegiert Fahrzeuge an CarForYou, aber alte Suchen haben carforyou evtl. nicht in der Plattformliste)
+    let platformString = search.platforms;
+    const isVehicleSearch = search.category === "Fahrzeuge" ||
+      search.category === "Motorräder" ||
+      search.subcategory === "Autos" ||
+      search.subcategory === "Motorräder" ||
+      search.subcategory === "Wohnmobile" ||
+      !!search.vehicleMake ||
+      !!search.vehicleModel;
+
+    if (isVehicleSearch) {
+      const platformList = platformString.split(",").map((p) => p.trim());
+      if (!platformList.includes("carforyou")) {
+        platformList.push("carforyou");
+        platformString = platformList.join(",");
+        console.log(`[Scheduler] Fahrzeug-Suche: CarForYou automatisch hinzugefügt → Plattformen: ${platformString}`);
+      }
+    }
+
+    const scrapers = getScrapersByPlatformList(platformString);
 
     if (scrapers.length === 0) {
       errors.push("Keine Scraper für die gewählten Plattformen verfügbar");
@@ -66,7 +86,7 @@ export async function runSearchJob(searchId: string): Promise<{
     // Alle Plattformen PARALLEL scrapen (Promise.allSettled)
     const allResults: ScraperResult[] = [];
 
-    console.log(`[Scheduler] Starte parallelen Scrape für ${scrapers.length} Plattformen: "${search.query}"...`);
+    console.log(`[Scheduler] Starte parallelen Scrape für ${scrapers.length} Plattformen (${scrapers.map(s => s.platform).join(", ")}): "${search.query}"...`);
     const scrapePromises = scrapers.map(async (scraper) => {
       const scraperStart = Date.now();
       const results = await scraper.scrape(search.query, {
@@ -111,9 +131,21 @@ export async function runSearchJob(searchId: string): Promise<{
         }
         allResults.push(...results);
       } else {
-        const errorDetail = result.reason instanceof Error
-          ? `${result.reason.message}${result.reason.stack ? `\n${result.reason.stack.split("\n").slice(0, 3).join("\n")}` : ""}`
-          : String(result.reason);
+        let errorDetail: string;
+        if (result.reason instanceof Error) {
+          errorDetail = `${result.reason.message}${result.reason.stack ? `\n${result.reason.stack.split("\n").slice(0, 3).join("\n")}` : ""}`;
+        } else if (typeof result.reason === "string") {
+          errorDetail = result.reason;
+        } else if (result.reason && typeof result.reason === "object") {
+          // Verhindert [object Object] — JSON-Serialisierung mit Limit
+          try {
+            errorDetail = JSON.stringify(result.reason).substring(0, 500);
+          } catch {
+            errorDetail = `[Objekt: ${Object.keys(result.reason as Record<string, unknown>).join(", ")}]`;
+          }
+        } else {
+          errorDetail = String(result.reason);
+        }
         const msg = `[Scheduler] Scraper FEHLER: ${errorDetail}`;
         errors.push(msg);
         console.error(msg);
@@ -130,10 +162,18 @@ export async function runSearchJob(searchId: string): Promise<{
           resultsCount: scraperResults.length,
         });
       } else {
+        let errMsg: string;
+        if (result.reason instanceof Error) {
+          errMsg = result.reason.message;
+        } else if (typeof result.reason === "string") {
+          errMsg = result.reason;
+        } else {
+          try { errMsg = JSON.stringify(result.reason).substring(0, 300); } catch { errMsg = "[unbekannter Fehler]"; }
+        }
         healthReportData.push({
           platform: "unknown",
           resultsCount: 0,
-          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+          error: errMsg,
         });
       }
     }

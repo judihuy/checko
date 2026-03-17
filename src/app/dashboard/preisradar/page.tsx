@@ -8,6 +8,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import Link from "next/link";
 import { getPlatformDisplayName, COUNTRY_PLATFORMS, type CountryCode } from "@/lib/platform-names";
+import { DURATION_BASE_COSTS, QUALITY_MULTIPLIERS, DURATIONS, getSearchCost } from "@/lib/pricing";
 
 interface Search {
   id: string;
@@ -116,25 +117,7 @@ const ALL_PLATFORMS = [
 // Nur aktive Plattformen: ohne deaktivierte (autoscout, comparis komplett ausblenden)
 const ACTIVE_PLATFORMS = ALL_PLATFORMS.filter((p) => !("disabled" in p && p.disabled));
 
-// Basiskosten pro Dauer (Standard-Stufe) — MUSS mit scheduler.ts DURATION_BASE_COSTS übereinstimmen!
-const DURATION_BASE_COSTS: Record<string, number> = {
-  "1d": 1,
-  "1w": 5,
-  "1m": 15,
-};
-
-// Qualitäts-Multiplikatoren — MUSS mit scheduler.ts QUALITY_MULTIPLIERS übereinstimmen!
-const QUALITY_MULTIPLIERS: Record<string, number> = {
-  standard: 1,
-  premium: 2,
-  pro: 4,
-};
-
-const DURATIONS = [
-  { id: "1d", name: "1 Tag" },
-  { id: "1w", name: "1 Woche" },
-  { id: "1m", name: "1 Monat" },
-];
+// Preislogik importiert aus @/lib/pricing (Single Source of Truth)
 
 // ==================== KATEGORIEN ====================
 
@@ -275,11 +258,9 @@ export default function PreisradarPage() {
     return tier?.interval || 30;
   }, [qualityTier]);
 
-  // Live-Kostenberechnung: Dauer × Qualitäts-Multiplikator (identisch zu scheduler.ts getSearchCost)
+  // Live-Kostenberechnung: nutzt getSearchCost aus @/lib/pricing (Single Source of Truth)
   const currentCost = useMemo(() => {
-    const baseCost = DURATION_BASE_COSTS[duration] || 1;
-    const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
-    return baseCost * multiplier;
+    return getSearchCost(duration, qualityTier);
   }, [duration, qualityTier]);
 
   // Synchronisiere Länder-Checkboxen mit Plattform-Auswahl
@@ -1476,9 +1457,7 @@ export default function PreisradarPage() {
                   </label>
                   <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     {DURATIONS.map((d) => {
-                      const baseCost = DURATION_BASE_COSTS[d.id] || 1;
-                      const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
-                      const cost = baseCost * multiplier;
+                      const cost = getSearchCost(d.id, qualityTier);
                       return (
                         <button
                           key={d.id}
@@ -1520,7 +1499,7 @@ export default function PreisradarPage() {
                     </div>
                     {qualityTier !== "standard" && (
                       <div className="text-xs text-emerald-600 mt-2 pt-2 border-t border-emerald-200">
-                        💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 1} Checko{(DURATION_BASE_COSTS[duration] || 1) > 1 ? "s" : ""} kosten
+                        💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 2} Checko{(DURATION_BASE_COSTS[duration] || 2) > 1 ? "s" : ""} kosten
                       </div>
                     )}
                   </div>

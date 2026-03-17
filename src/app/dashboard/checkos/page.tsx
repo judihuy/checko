@@ -507,7 +507,7 @@ function CheckosKaufContent() {
               <p className="text-xs text-blue-600">Bessere Qualität</p>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <span className="text-xl font-bold text-purple-700">7</span>
+              <span className="text-xl font-bold text-purple-700">8</span>
               <span className="text-sm text-purple-600 ml-1">Checkos</span>
               <p className="text-sm font-medium text-purple-700 mt-1">Pro</p>
               <p className="text-xs text-purple-600">Maximale Qualität</p>
@@ -515,7 +515,7 @@ function CheckosKaufContent() {
           </div>
           <p className="text-center text-xs text-gray-400 mt-3">
             Beispiel Preisradar: 1 Tag Standard = 2 Checkos, 1 Tag Premium = 4 Checkos, 1 Tag
-            Pro = 7 Checkos
+            Pro = 8 Checkos
           </p>
         </div>
 

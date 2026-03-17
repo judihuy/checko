@@ -71,7 +71,7 @@ const PRICING_TIERS = [
   },
   {
     name: "Pro",
-    checkos: 7,
+    checkos: 8,
     description: "Maximale Qualität mit dem besten verfügbaren Modell",
     features: [
       "Höchste Qualitätsstufe",

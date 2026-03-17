@@ -11,27 +11,16 @@ import { createNotification } from "@/lib/notifications";
 import { getPlatformDisplayName } from "@/lib/platform-names";
 import { getSetting } from "@/lib/settings";
 import { filterWithAI } from "@/lib/scraper/ai-filter";
+import {
+  DURATION_BASE_COSTS,
+  QUALITY_MULTIPLIERS,
+  DURATION_MS,
+  getSearchCost,
+  getDurationCost,
+} from "@/lib/pricing";
 
-// Basiskosten pro Dauer (Standard-Stufe)
-const DURATION_BASE_COSTS: Record<string, number> = {
-  "1d": 1,   // 1 Tag = 1 Checko (Standard)
-  "1w": 5,   // 1 Woche = 5 Checkos (Standard)
-  "1m": 15,  // 1 Monat = 15 Checkos (Standard)
-};
-
-// Qualitäts-Multiplikatoren
-const QUALITY_MULTIPLIERS: Record<string, number> = {
-  standard: 1,  // 1x Basispreis
-  premium: 2,   // 2x Basispreis
-  pro: 4,       // 4x Basispreis
-};
-
-// Dauer → Millisekunden
-const DURATION_MS: Record<string, number> = {
-  "1d": 24 * 60 * 60 * 1000,
-  "1w": 7 * 24 * 60 * 60 * 1000,
-  "1m": 30 * 24 * 60 * 60 * 1000,
-};
+// Re-export pricing functions so existing imports from scheduler still work
+export { getSearchCost, getDurationCost };
 
 /**
  * Einzelnen Suchjob ausführen
@@ -414,15 +403,6 @@ export async function runAllActiveSearches(): Promise<{
 }
 
 /**
- * Gesamtkosten für eine Suche berechnen (Dauer × Qualität)
- */
-export function getSearchCost(duration: string, qualityTier: string = "standard"): number {
-  const baseCost = DURATION_BASE_COSTS[duration] || 1;
-  const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
-  return baseCost * multiplier;
-}
-
-/**
  * Checkos für eine neue Suche abziehen
  * Berücksichtigt sowohl Dauer ALS AUCH Qualitätsstufe
  */
@@ -457,13 +437,6 @@ export async function chargeForSearch(
 export function calculateExpiresAt(duration: string): Date {
   const ms = DURATION_MS[duration] || DURATION_MS["1d"];
   return new Date(Date.now() + ms);
-}
-
-/**
- * Basiskosten für eine Dauer abfragen (ohne Qualitäts-Multiplikator)
- */
-export function getDurationCost(duration: string): number {
-  return DURATION_BASE_COSTS[duration] || 1;
 }
 
 /**

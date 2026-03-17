@@ -140,7 +140,7 @@ export function getQualityTiers(): QualityTier[] {
       id: "pro",
       name: "Pro",
       multiplier: 4,
-      checkos: 7,
+      checkos: 8,
       description: "Maximale Qualität",
     },
   ];

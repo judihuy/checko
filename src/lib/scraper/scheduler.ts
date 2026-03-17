@@ -56,25 +56,12 @@ export async function runSearchJob(searchId: string): Promise<{
     }
 
     // Scraper für gewählte Plattformen holen
-    // Für Fahrzeug-Suchen: CarForYou automatisch hinzufügen wenn nicht vorhanden
-    // (Ricardo delegiert Fahrzeuge an CarForYou, aber alte Suchen haben carforyou evtl. nicht in der Plattformliste)
+    // CarForYou entfernt (Domain tot) — Ricardo übernimmt alle Kategorien inkl. Fahrzeuge
     let platformString = search.platforms;
-    const isVehicleSearch = search.category === "Fahrzeuge" ||
-      search.category === "Motorräder" ||
-      search.subcategory === "Autos" ||
-      search.subcategory === "Motorräder" ||
-      search.subcategory === "Wohnmobile" ||
-      !!search.vehicleMake ||
-      !!search.vehicleModel;
 
-    if (isVehicleSearch) {
-      const platformList = platformString.split(",").map((p) => p.trim());
-      if (!platformList.includes("carforyou")) {
-        platformList.push("carforyou");
-        platformString = platformList.join(",");
-        console.log(`[Scheduler] Fahrzeug-Suche: CarForYou automatisch hinzugefügt → Plattformen: ${platformString}`);
-      }
-    }
+    // Legacy-Bereinigung: "carforyou" aus alten Suchen entfernen
+    const platformList = platformString.split(",").map((p) => p.trim()).filter((p) => p !== "carforyou");
+    platformString = platformList.join(",");
 
     const scrapers = getScrapersByPlatformList(platformString);
 

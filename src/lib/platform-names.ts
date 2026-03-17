@@ -11,7 +11,6 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   "anibis": "Anibis.ch",
   "google-shopping": "Google Shopping",
   "amazon": "Amazon.de",
-  "carforyou": "CarForYou.ch",
 };
 
 export function getPlatformDisplayName(slug: string): string {
@@ -32,7 +31,7 @@ export const COUNTRY_PLATFORMS: Record<CountryCode, CountryConfig> = {
   ch: {
     label: "Schweiz",
     flag: "🇨🇭",
-    platforms: ["tutti", "ricardo", "carforyou", "autoscout", "comparis", "anibis"],
+    platforms: ["tutti", "ricardo", "autoscout", "comparis", "anibis"],
     enabled: true,
   },
   de: {

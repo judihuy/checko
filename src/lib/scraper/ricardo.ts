@@ -2,7 +2,7 @@
 // HTML/JSON-LD/NEXT_DATA Parsing.
 // Proxy: Residential CH über p.webshare.io (Ländercode -ch).
 // Puppeteer nur als letzter Fallback.
-// Die /api/mfa/search API liefert generischen Müll und ignoriert Suchparameter.
+// Ricardo deckt ALLE Kategorien ab: Fahrzeuge, Elektronik, Möbel, etc.
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
@@ -13,21 +13,6 @@ export class RicardoScraper extends BaseScraper {
   isWorking = true;
 
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
-    // === VEHICLE SEARCH REDIRECT ===
-    // auto.ricardo.ch redirects to carforyou.ch.
-    // Ricardo.ch is NO LONGER used for vehicle/motorcycle searches.
-    // Vehicle searches should use the CarForYou scraper instead.
-    const isVehicleCategory = options?.category === "Fahrzeuge" ||
-      options?.category === "Motorräder" ||
-      options?.subcategory === "Autos" ||
-      options?.subcategory === "Motorräder" ||
-      options?.subcategory === "Wohnmobile";
-
-    if (isVehicleCategory || options?.vehicleMake || options?.vehicleModel) {
-      console.log("[Ricardo] ⏭️ Fahrzeug-Suche übersprungen — verwende CarForYou.ch stattdessen");
-      return [];
-    }
-
     // Enrich query with vehicle make/model if available
     let enrichedQuery = query;
     if (options?.vehicleMake) {
@@ -38,8 +23,16 @@ export class RicardoScraper extends BaseScraper {
       }
     }
 
-    // Detect vehicle searches for post-filtering (kept for edge cases)
-    const isVehicleSearch = false; // Vehicle searches are handled by CarForYou now
+    // Detect vehicle searches for post-filtering (filter out toy cars, model cars etc.)
+    const isVehicleSearch = !!(
+      options?.vehicleMake ||
+      options?.vehicleModel ||
+      options?.category === "Fahrzeuge" ||
+      options?.category === "Motorräder" ||
+      options?.subcategory === "Autos" ||
+      options?.subcategory === "Motorräder" ||
+      options?.subcategory === "Wohnmobile"
+    );
 
     // Methode 1 (PRIMÄR): HTTP-Fetch mit CH-Proxy + Browser-Headers
     try {

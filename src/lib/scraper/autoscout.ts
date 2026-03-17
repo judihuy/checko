@@ -1,27 +1,30 @@
-// AutoScout24.ch Scraper — Puppeteer-basiert
-// Nutzt headless Chromium um die React-RSC-Seite zu rendern
-// URL-Format mit echten Filtern:
+// AutoScout24.ch Scraper — HTTP-basiert (kein Puppeteer!)
+// Nutzt curl-L-äquivalentes HTTP-Fetch mit Redirect-Following.
+// AutoScout24 liefert serverseitig gerendertes HTML mit eingebetteten
+// React Server Components (RSC flight data), die Listing-Daten enthalten.
+// Fallback: JSON-LD Parsing.
+//
+// URL-Format:
 // - Make/Model: /de/s/mo-{model}/mk-{make}
-// - Year: ?yearFrom=X&yearTo=Y (legacy) ODER ?fregfrom=X&fregto=Y
-// - KM: ?kmto=X (Kilometer bis)
+// - Year: ?fregfrom=X&fregto=Y
+// - KM: ?kmfrom=X&kmto=Y
 // - Preis: ?pricefrom=X&priceto=Y
-// - Treibstoff: ?fst=p (benzin), d (diesel), e (elektro), h (hybrid)
-// - Getriebe: ?atype=M (manuell), A (automatik)
+// - Treibstoff: ?fuel=B|D|E|H|L
+// - Getriebe: ?gear=M|A
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
-// Fuel type mapping: internal → AutoScout24 URL code
+// Fuel type mapping
 const FUEL_TYPE_MAP: Record<string, string> = {
   benzin: "B",
   diesel: "D",
   elektro: "E",
   hybrid: "H",
   "plug-in-hybrid": "H",
-  gas: "L", // LPG
+  gas: "L",
 };
 
-// Transmission mapping: internal → AutoScout24 URL code
-// Robust: alle gängigen Varianten abfangen (UI zeigt "Automatik", intern evtl. "automat" etc.)
+// Transmission mapping
 const TRANSMISSION_MAP: Record<string, string> = {
   manuell: "M",
   manual: "M",
@@ -32,6 +35,30 @@ const TRANSMISSION_MAP: Record<string, string> = {
   automatic: "A",
 };
 
+// Image base URL for AutoScout24
+const IMAGE_BASE_URL = "https://listing-images.autoscout24.ch";
+
+interface AutoScoutListing {
+  id: number;
+  conditionType?: string;
+  firstRegistrationYear?: number;
+  firstRegistrationDate?: string;
+  fuelType?: string;
+  horsePower?: number;
+  kiloWatts?: number;
+  images?: Array<{ key: string }>;
+  make?: { id: number; name: string; key: string };
+  model?: { id: number; name: string; key: string };
+  mileage?: number;
+  price: number;
+  previousPrice?: number | null;
+  seller?: { city?: string; name?: string; type?: string };
+  teaser?: string;
+  transmissionTypeGroup?: string;
+  versionFullName?: string;
+  warranty?: unknown;
+}
+
 export class AutoScoutScraper extends BaseScraper {
   readonly platform = "autoscout";
   readonly displayName = "AutoScout24.ch";
@@ -39,10 +66,8 @@ export class AutoScoutScraper extends BaseScraper {
   isWorking = true;
 
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
-    const results: ScraperResult[] = [];
-
     try {
-      // Build search URL — use mk-/mo- path format for precise make/model filtering
+      // Build search URL
       let searchUrl: string;
       if (options?.vehicleMake) {
         const make = options.vehicleMake.toLowerCase().replace(/\s+/g, "-");
@@ -56,42 +81,22 @@ export class AutoScoutScraper extends BaseScraper {
         searchUrl = `${this.baseUrl}/de/s?q=${encodeURIComponent(query)}`;
       }
 
-      // Echte AutoScout24 URL-Parameter für Filter
-      // Verifizierte Parameter (autoscout24.ch/lst + autoscout24.ch/de/s):
-      // - Baujahr: fregfrom / fregto (first registration)
-      // - KM: kmfrom / kmto
-      // - Preis: pricefrom / priceto (in CHF)
-      // - Treibstoff: fuel (B=Benzin, D=Diesel, E=Elektro, H=Hybrid, L=Gas)
-      // - Getriebe: gear (M=Manuell, A=Automatik)
-      // - Zustand: ustate (N=Neu, U=Occasion)
-      // - Sortierung: sort (standard)
+      // URL parameters
       const urlParams = new URLSearchParams();
-
-      // Baujahr-Filter (fregfrom/fregto = first registration year)
       if (options?.yearFrom) urlParams.set("fregfrom", String(options.yearFrom));
       if (options?.yearTo) urlParams.set("fregto", String(options.yearTo));
-
-      // KM-Filter — JETZT mit echten Parameternamen!
       if (options?.kmFrom) urlParams.set("kmfrom", String(options.kmFrom));
       if (options?.kmTo) urlParams.set("kmto", String(options.kmTo));
-
-      // Preis-Filter (in CHF — Preise kommen als Rappen rein)
       if (options?.minPrice) urlParams.set("pricefrom", String(Math.round(options.minPrice / 100)));
       if (options?.maxPrice) urlParams.set("priceto", String(Math.round(options.maxPrice / 100)));
-
-      // Treibstoff-Filter (case-insensitive lookup)
       if (options?.fuelType) {
         const fuelCode = FUEL_TYPE_MAP[options.fuelType.toLowerCase()];
         if (fuelCode) urlParams.set("fuel", fuelCode);
       }
-
-      // Getriebe-Filter (case-insensitive lookup)
       if (options?.transmission) {
         const gearCode = TRANSMISSION_MAP[options.transmission.toLowerCase()];
         if (gearCode) urlParams.set("gear", gearCode);
       }
-
-      // Zielland Schweiz
       urlParams.set("cy", "CH");
 
       const paramStr = urlParams.toString();
@@ -101,137 +106,345 @@ export class AutoScoutScraper extends BaseScraper {
 
       console.log(`[AutoScout] Search URL: ${searchUrl}`);
 
-      // Use Puppeteer to render the page (RSC requires full browser)
-      let puppeteer;
-      try {
-        puppeteer = (await import("puppeteer")).default;
-      } catch {
-        console.error("[AutoScout] Puppeteer not available");
-        return results;
+      // Methode 1 (PRIMÄR): HTTP fetch mit Redirect-Following
+      const httpResults = await this.scrapeViaHttp(searchUrl, options);
+      if (httpResults.length > 0) {
+        console.log(`[AutoScout] ✅ HTTP: ${httpResults.length} Ergebnisse`);
+        return httpResults;
       }
 
-      const browser = await puppeteer.launch({
-        headless: true,
-        executablePath: "/usr/bin/chromium",
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-blink-features=AutomationControlled",
-        ],
-      });
+      console.warn(`[AutoScout] ⚠️ Keine Ergebnisse`);
+      return [];
+    } catch (error) {
+      const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      console.error(`[AutoScout] Scraper-Fehler: ${reason}`);
+      return [];
+    }
+  }
 
+  /**
+   * AutoScout24 Seite per HTTP laden.
+   * Folgt Redirects (307 → 200). Die Antwort enthält SSR HTML mit
+   * eingebettetem RSC flight data in self.__next_f.push() Blöcken.
+   */
+  private async scrapeViaHttp(searchUrl: string, options?: ScraperOptions): Promise<ScraperResult[]> {
+    await this.enforceRateLimit();
+
+    const userAgent = this.getRandomUserAgent();
+    const headers: Record<string, string> = {
+      "User-Agent": userAgent,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "de-CH,de;q=0.9,en;q=0.8",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-User": "?1",
+      "Upgrade-Insecure-Requests": "1",
+      "Cache-Control": "max-age=0",
+    };
+
+    // AutoScout24 may give 307 redirect → follow it
+    // Node fetch follows redirects by default
+    let response: Response;
+    try {
+      response = await fetch(searchUrl, { headers, redirect: "follow" });
+    } catch (fetchError) {
+      console.warn(`[AutoScout] Direct fetch failed:`, fetchError);
+      // Fallback: try via proxy
+      const { response: proxyResp } = await (await import("./proxy-manager")).fetchWithProxy(
+        searchUrl, this.platform, { headers, maxRetries: 2, preferredCountry: "ch" }
+      );
+      response = proxyResp;
+    }
+
+    if (!response.ok) {
+      console.error(`[AutoScout] HTTP ${response.status}`);
+      return [];
+    }
+
+    const html = await response.text();
+    console.log(`[AutoScout] HTML length: ${html.length}`);
+
+    if (html.length < 5000) {
+      console.warn(`[AutoScout] ⚠️ Sehr kurze Antwort`);
+      return [];
+    }
+
+    if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
+      console.warn("[AutoScout] ⚠️ Cloudflare-Challenge");
+      return [];
+    }
+
+    // Parse listings from RSC flight data
+    const rscResults = this.parseRscFlightData(html, options);
+    if (rscResults.length > 0) return rscResults;
+
+    // Fallback: Parse listing links from HTML
+    const htmlResults = this.parseHtmlListings(html, options);
+    if (htmlResults.length > 0) return htmlResults;
+
+    // Fallback: JSON-LD
+    return this.parseJsonLd(html, options);
+  }
+
+  /**
+   * Parse React Server Components flight data.
+   * AutoScout24 embeds listing data in self.__next_f.push() script blocks.
+   * We extract JSON objects containing make/model/price from the decoded chunks.
+   */
+  private parseRscFlightData(html: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    // Extract all RSC push chunks
+    const chunkPattern = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
+    let fullData = "";
+
+    let chunkMatch;
+    while ((chunkMatch = chunkPattern.exec(html)) !== null) {
       try {
-        const page = await browser.newPage();
-        await page.evaluateOnNewDocument(() => {
-          Object.defineProperty(navigator, "webdriver", { get: () => false });
-        });
-        await page.setUserAgent(
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-        );
+        const unescaped = JSON.parse(`"${chunkMatch[1]}"`);
+        fullData += unescaped;
+      } catch {
+        // Skip malformed chunks
+      }
+    }
 
-        await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 30000 });
-        await new Promise((r) => setTimeout(r, 3000));
+    if (fullData.length === 0) {
+      console.log("[AutoScout] No RSC flight data found");
+      return results;
+    }
 
-        // Accept cookies if present
-        await page.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll("button"));
-          const accept = btns.find((b) => b.textContent?.includes("Akzeptieren"));
-          if (accept) (accept as HTMLButtonElement).click();
-        });
-        await new Promise((r) => setTimeout(r, 3000));
+    // Find listing objects by pattern: objects with "make", "price", "mileage"
+    // These are embedded as JSON in the flight data
+    const listingPattern = /"conditionType":"(?:used|new)","consumption"/g;
+    const listingStarts: number[] = [];
 
-        // Extract listings from rendered page (including description snippets)
-        const scraped = await page.evaluate(() => {
-          const items: Array<{
-            title: string;
-            price: number;
-            url: string;
-            imageUrl: string | null;
-            description: string | null;
-          }> = [];
-          const links = document.querySelectorAll('a[href*="/de/d/"]');
-          const seen = new Set<string>();
+    let lm;
+    while ((lm = listingPattern.exec(fullData)) !== null) {
+      // Go backwards to find the { start
+      let searchStart = Math.max(0, lm.index - 500);
+      const substr = fullData.substring(searchStart, lm.index);
+      const braceIdx = substr.lastIndexOf("{");
+      if (braceIdx >= 0) {
+        listingStarts.push(searchStart + braceIdx);
+      }
+    }
 
-          for (const link of links) {
-            const href = (link as HTMLAnchorElement).href;
-            if (seen.has(href)) continue;
-            seen.add(href);
+    // Also look for the carousel/promo listings format
+    const carouselPattern = /"carouselSlot":"slot-\d+","conditionType"/g;
+    let cm;
+    while ((cm = carouselPattern.exec(fullData)) !== null) {
+      let searchStart = Math.max(0, cm.index - 50);
+      const substr = fullData.substring(searchStart, cm.index);
+      const braceIdx = substr.lastIndexOf("{");
+      if (braceIdx >= 0) {
+        listingStarts.push(searchStart + braceIdx);
+      }
+    }
 
-            const card =
-              link.closest("article") ||
-              link.parentElement?.parentElement?.parentElement;
-            if (!card) continue;
+    console.log(`[AutoScout] Found ${listingStarts.length} potential listings in RSC data`);
 
-            const cardText = (card as HTMLElement).innerText || "";
-            const lines = cardText.split("\n").filter((l) => l.trim().length > 5);
-            const title = lines[0] || "";
+    const seenIds = new Set<number>();
 
-            // Skip non-listing titles
-            if (title.startsWith("1 / ") || title.includes("Auktion erstellen")) continue;
+    for (const start of listingStarts) {
+      // Find matching closing brace
+      let depth = 0;
+      let pos = start;
+      while (pos < Math.min(fullData.length, start + 5000)) {
+        if (fullData[pos] === "{") depth++;
+        else if (fullData[pos] === "}") {
+          depth--;
+          if (depth === 0) break;
+        }
+        pos++;
+      }
 
-            // Price: CHF XX'XXX.–
-            const priceMatch = cardText.match(/CHF\s*([\d''.,-]+)/);
-            let price = 0;
-            if (priceMatch) {
-              price = Math.round(
-                parseFloat(
-                  priceMatch[1].replace(/['']/g, "").replace(".–", "").replace(",", ".")
-                ) * 100
-              ); // Rappen
-            }
+      const objStr = fullData.substring(start, pos + 1);
+      try {
+        const listing = JSON.parse(objStr) as AutoScoutListing;
 
-            // Image
-            const img = card.querySelector("img[src*='http']") as HTMLImageElement | null;
-            const imageUrl = img ? img.src : null;
+        if (!listing.price || !listing.id) continue;
+        if (seenIds.has(listing.id)) continue;
+        seenIds.add(listing.id);
 
-            // Description: collect remaining lines as description snippet
-            const descriptionLines = lines.slice(1).filter(l => 
-              !l.match(/^CHF/) && !l.match(/^\d+\s*km/) && l.length > 10
-            );
-            const description = descriptionLines.length > 0 
-              ? descriptionLines.join(" ").substring(0, 500) 
-              : null;
+        const priceRappen = Math.round(listing.price * 100);
 
-            if (title && price > 0) {
-              items.push({ title: title.substring(0, 200), price, url: href, imageUrl, description });
-            }
+        // Price filter
+        if (options?.minPrice && priceRappen < options.minPrice) continue;
+        if (options?.maxPrice && priceRappen > options.maxPrice) continue;
 
-            if (items.length >= 20) break;
-          }
-          return items;
-        });
+        // Build title
+        const titleParts: string[] = [];
+        if (listing.make?.name) titleParts.push(listing.make.name);
+        if (listing.versionFullName) {
+          titleParts.push(listing.versionFullName);
+        } else if (listing.model?.name) {
+          titleParts.push(listing.model.name);
+        }
+        const title = titleParts.join(" ") || `Listing ${listing.id}`;
 
-        console.log(`[AutoScout] ${scraped.length} listings found`);
+        // Build URL
+        const makeKey = listing.make?.key || "unknown";
+        const modelKey = listing.model?.key || "unknown";
+        const slug = listing.versionFullName
+          ? listing.versionFullName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+          : modelKey;
+        const url = `${this.baseUrl}/de/d/${makeKey}-${slug}-${listing.id}`;
 
-        for (const item of scraped) {
-          // Price filter (Doppelt-Check — URL-Parameter sollten schon filtern)
-          if (options?.minPrice && item.price < options.minPrice) continue;
-          if (options?.maxPrice && item.price > options.maxPrice) continue;
-
-          results.push({
-            title: item.title,
-            price: item.price,
-            url: item.url,
-            imageUrl: item.imageUrl,
-            description: item.description || undefined,
-            platform: this.platform,
-            scrapedAt: new Date(),
-          });
-
-          if (options?.limit && results.length >= options.limit) break;
+        // Image URL
+        let imageUrl: string | null = null;
+        if (listing.images && listing.images.length > 0) {
+          const imgKey = listing.images[0].key;
+          imageUrl = `${IMAGE_BASE_URL}/${imgKey}`;
         }
 
-        await page.close();
-      } finally {
-        await browser.close();
+        // Description
+        const descParts: string[] = [];
+        if (listing.teaser) descParts.push(listing.teaser);
+        if (listing.firstRegistrationYear) descParts.push(`EZ: ${listing.firstRegistrationYear}`);
+        if (listing.mileage !== undefined) descParts.push(`${listing.mileage.toLocaleString("de-CH")} km`);
+        if (listing.horsePower) descParts.push(`${listing.horsePower} PS`);
+        if (listing.transmissionTypeGroup) descParts.push(listing.transmissionTypeGroup);
+        if (listing.seller?.city) descParts.push(listing.seller.city);
+
+        results.push({
+          title: title.substring(0, 200),
+          price: priceRappen,
+          url,
+          imageUrl,
+          description: descParts.join(" | ").substring(0, 500) || undefined,
+          platform: this.platform,
+          scrapedAt: new Date(),
+        });
+
+        if (options?.limit && results.length >= options.limit) break;
+      } catch {
+        // JSON parse error — skip this listing
       }
-    } catch (error) {
-      const reason =
-        error instanceof Error
-          ? `${error.name}: ${error.message}`
-          : String(error);
-      console.error(`[AutoScout] Scraper error: ${reason}`);
+    }
+
+    return results;
+  }
+
+  /**
+   * Fallback: Parse listing links and prices from HTML
+   */
+  private parseHtmlListings(html: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+    const seenUrls = new Set<string>();
+
+    // Find links to detail pages /de/d/
+    const linkRegex = /href="(\/de\/d\/[^"]+)"/g;
+    let linkMatch;
+
+    while ((linkMatch = linkRegex.exec(html)) !== null) {
+      const href = linkMatch[1];
+      const normalized = href.replace(/\/$/, "");
+      if (seenUrls.has(normalized)) continue;
+      seenUrls.add(normalized);
+
+      // Context around the link
+      const start = Math.max(0, linkMatch.index - 500);
+      const end = Math.min(html.length, linkMatch.index + 500);
+      const context = html.substring(start, end);
+
+      // Price: CHF XX'XXX
+      const priceMatch = context.match(/CHF\s*([\d''.,-]+)/);
+      let price = 0;
+      if (priceMatch) {
+        price = Math.round(
+          parseFloat(priceMatch[1].replace(/['']/g, "").replace(".–", "").replace(",", ".")) * 100
+        );
+        if (isNaN(price)) price = 0;
+      }
+
+      if (price > 0) {
+        if (options?.minPrice && price < options.minPrice) continue;
+        if (options?.maxPrice && price > options.maxPrice) continue;
+      }
+
+      // Title from URL slug
+      const slugMatch = href.match(/\/de\/d\/(.+?)-(\d+)$/);
+      const title = slugMatch
+        ? slugMatch[1].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+        : "Fahrzeug";
+
+      // Image
+      const imgMatch = context.match(/src="(https:\/\/listing-images\.autoscout24\.ch[^"]+)"/i);
+
+      if (price > 0 || title !== "Fahrzeug") {
+        results.push({
+          title: title.substring(0, 200),
+          price,
+          url: `${this.baseUrl}${href}`,
+          imageUrl: imgMatch ? imgMatch[1] : null,
+          platform: this.platform,
+          scrapedAt: new Date(),
+        });
+      }
+
+      if (options?.limit && results.length >= options.limit) break;
+    }
+
+    return results;
+  }
+
+  /**
+   * Fallback: JSON-LD parsing
+   */
+  private parseJsonLd(html: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    const jsonLdMatches = html.matchAll(
+      /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi
+    );
+
+    for (const match of jsonLdMatches) {
+      try {
+        const jsonData = JSON.parse(match[1]);
+        const graphs = jsonData?.["@graph"] || [jsonData];
+
+        for (const graph of graphs) {
+          if (graph?.["@type"] !== "ItemList" || !Array.isArray(graph?.itemListElement)) continue;
+
+          for (const entry of graph.itemListElement) {
+            const item = entry?.item || entry;
+            if (!item?.name) continue;
+
+            let priceRaw = 0;
+            if (item.offers) {
+              const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+              if (offers?.price) {
+                priceRaw = typeof offers.price === "number" ? offers.price : parseFloat(String(offers.price));
+              }
+            }
+            const price = Math.round((isNaN(priceRaw) ? 0 : priceRaw) * 100);
+
+            if (price > 0) {
+              if (options?.minPrice && price < options.minPrice) continue;
+              if (options?.maxPrice && price > options.maxPrice) continue;
+            }
+
+            const url = item.url?.startsWith("http") ? item.url : `${this.baseUrl}${item.url || ""}`;
+            let imageUrl: string | null = null;
+            if (typeof item.image === "string") imageUrl = item.image;
+
+            results.push({
+              title: item.name,
+              price,
+              url,
+              imageUrl,
+              platform: this.platform,
+              scrapedAt: new Date(),
+            });
+
+            if (options?.limit && results.length >= options.limit) break;
+          }
+        }
+      } catch {
+        // Skip
+      }
     }
 
     return results;

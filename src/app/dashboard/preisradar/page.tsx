@@ -103,9 +103,9 @@ function formatSearchDetails(search: Search): string | null {
 }
 
 const ALL_PLATFORMS = [
-  { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode, disabled: false },
+  { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "Cloudflare-Schutz" },
   { id: "ricardo", name: "Ricardo.ch", country: "ch" as CountryCode, disabled: false },
-  { id: "anibis", name: "Anibis.ch", country: "ch" as CountryCode, disabled: false },
+  { id: "anibis", name: "Anibis.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "Cloudflare-Schutz" },
   { id: "autoscout", name: "AutoScout24.ch", country: "ch" as CountryCode, disabled: false },
   { id: "comparis", name: "Comparis.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "DataDome-Schutz" },
   { id: "ebay-ka", name: "Kleinanzeigen.de", country: "de" as CountryCode, disabled: false },
@@ -132,8 +132,8 @@ const CATEGORIES: Record<string, { icon: string; color: string; subcategories: s
   "Sonstiges": { icon: "📦", color: "gray", subcategories: ["Bücher", "Musik", "Filme", "Sammeln", "Kunst"] },
 };
 
-// Plattformen die von Cloudflare eingeschränkt sind
-const RESTRICTED_PLATFORMS = new Set(["tutti", "anibis"]);
+// Plattformen die von Cloudflare eingeschränkt sind (deaktiviert)
+const RESTRICTED_PLATFORMS = new Set<string>();
 
 const CONDITIONS = [
   { id: "", name: "Alle Zustände" },
@@ -222,7 +222,7 @@ export default function PreisradarPage() {
   const [query, setQuery] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo", "anibis", "ebay-ka"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["ricardo", "autoscout", "ebay-ka", "willhaben"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
   const [category, setCategory] = useState("");
@@ -550,7 +550,7 @@ export default function PreisradarPage() {
       setQuery("");
       setMinPrice("");
       setMaxPrice("");
-      setSelectedPlatforms(["tutti", "ricardo", "anibis", "ebay-ka"]);
+      setSelectedPlatforms(["ricardo", "autoscout", "ebay-ka", "willhaben"]);
       setSelectedCountries(new Set(["ch"]));
       setDuration("1d");
       setQualityTier("standard");
@@ -1408,11 +1408,7 @@ export default function PreisradarPage() {
                         );
                       })}
                     </div>
-                    {selectedPlatforms.some(p => RESTRICTED_PLATFORMS.has(p)) && (
-                      <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
-                        <span>⚡</span> Tutti.ch und Anibis.ch sind durch Cloudflare eingeschränkt — Ergebnisse können variieren.
-                      </p>
-                    )}
+                    {/* Tutti/Anibis info removed — platforms disabled due to Cloudflare */}
                   </div>
                 </div>
 

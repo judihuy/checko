@@ -8,6 +8,7 @@ import { analyzePrice } from "@/lib/ai/price-analyzer";
 import { deductCheckos } from "@/lib/checkos";
 import { sendPreisradarAlertEmail } from "@/lib/email-preisradar";
 import { createNotification } from "@/lib/notifications";
+import { reportScrapeRun } from "@/lib/scraper/health-monitor";
 import { getPlatformDisplayName } from "@/lib/platform-names";
 import { repairSearchQuery } from "@/lib/utils";
 import { getSetting } from "@/lib/settings";
@@ -118,6 +119,28 @@ export async function runSearchJob(searchId: string): Promise<{
         console.error(msg);
       }
     }
+
+    // === Health Monitor: Scrape-Ergebnisse melden ===
+    const healthReportData: { platform: string; resultsCount: number; error?: string }[] = [];
+    for (const result of scrapeResults) {
+      if (result.status === "fulfilled") {
+        const { scraper, results: scraperResults } = result.value;
+        healthReportData.push({
+          platform: scraper.platform,
+          resultsCount: scraperResults.length,
+        });
+      } else {
+        healthReportData.push({
+          platform: "unknown",
+          resultsCount: 0,
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+      }
+    }
+    // Report async — non-blocking (fire and forget)
+    reportScrapeRun(healthReportData).catch((err) => {
+      console.warn("[Scheduler] Health report failed:", err);
+    });
 
     // === SERVER-SIDE STRICT PRICE + YEAR FILTER ===
     // Even if scrapers already filter, we double-check here to ensure

@@ -44,8 +44,6 @@ const PROSPEKT_PATTERNS = [
   /sammler/i,
   /vitrine/i,
   /poster/i,
-  /bild\b/i,
-  /foto\b/i,
   /schlüsselanhänger/i,
   /aufkleber/i,
   /sticker/i,
@@ -53,9 +51,14 @@ const PROSPEKT_PATTERNS = [
   /tasse\b/i,
   /mug\b/i,
   /bettwäsche/i,
-  /handbuch/i,
-  /reparaturanleitung/i,
-  /werkstatthandbuch/i,
+  // "Handbuch"/"Reparaturanleitung" nur als Verkaufsgegenstand matchen,
+  // nicht wenn im Inserat erwähnt wird dass eines beiliegt.
+  // → Kontextbasierte Patterns: nur wenn es der Hauptgegenstand ist
+  /\b(?:verkaufe|biete|zu\s+verkaufen)\b.*\b(?:handbuch|reparaturanleitung|werkstatthandbuch)\b/i,
+  /\b(?:handbuch|reparaturanleitung|werkstatthandbuch)\b.*\b(?:zu\s+verkaufen|abzugeben)\b/i,
+  // "Bild"/"Foto" nur wenn es um Bildverkauf geht (Poster, Druck, Kunstdruck etc.)
+  /\b(?:verkaufe|biete)\b.*\b(?:bild|foto|kunstdruck|leinwand)\b/i,
+  /\b(?:original\s*bild|gerahmtes?\s*(?:bild|foto)|fotodruck|bildband)\b/i,
 ];
 
 /**

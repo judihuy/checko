@@ -11,6 +11,7 @@ import { AnibisScraper } from "./anibis";
 import { GoogleShoppingScraper } from "./google-shopping";
 import { AmazonScraper } from "./amazon";
 import { WillhabenScraper } from "./willhaben";
+import { AutolinaScraper } from "./autolina";
 
 // Alle verfügbaren Scraper
 const scraperRegistry: Map<string, BaseScraper> = new Map();
@@ -25,6 +26,7 @@ const anibisScraper = new AnibisScraper();
 const googleShoppingScraper = new GoogleShoppingScraper();
 const amazonScraper = new AmazonScraper();
 const willhabenScraper = new WillhabenScraper();
+const autolinaScraper = new AutolinaScraper();
 
 scraperRegistry.set(tuttiScraper.platform, tuttiScraper);
 scraperRegistry.set(ricardoScraper.platform, ricardoScraper);
@@ -35,6 +37,7 @@ scraperRegistry.set(anibisScraper.platform, anibisScraper);
 scraperRegistry.set(googleShoppingScraper.platform, googleShoppingScraper);
 scraperRegistry.set(amazonScraper.platform, amazonScraper);
 scraperRegistry.set(willhabenScraper.platform, willhabenScraper);
+scraperRegistry.set(autolinaScraper.platform, autolinaScraper);
 
 /**
  * Alle registrierten Scraper zurückgeben

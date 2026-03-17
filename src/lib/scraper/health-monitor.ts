@@ -6,8 +6,8 @@ import { getAllPlatformStats } from "./proxy-manager";
 
 // === Configuration ===
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "8774648234:AAGlsfQzsWPSVZVtMucpQHPCBWjig9c3DEU";
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "5464533686";
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 // === State ===

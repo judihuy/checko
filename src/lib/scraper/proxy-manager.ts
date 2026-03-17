@@ -5,12 +5,12 @@
 
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 
-// === Configuration ===
+// === Configuration (from ENV) ===
 
-const PROXY_USERNAME_BASE = "kfxavtnr";
-const PROXY_PASSWORD = "4f55trvs9n0y";
-const PROXY_HOST = "p.webshare.io";
-const PROXY_PORT = 80;
+const PROXY_USERNAME_BASE = process.env.PROXY_USERNAME || "";
+const PROXY_PASSWORD = process.env.PROXY_PASSWORD || "";
+const PROXY_HOST = process.env.PROXY_HOST || "p.webshare.io";
+const PROXY_PORT = parseInt(process.env.PROXY_PORT || "80", 10);
 
 // Country suffixes for rotation
 const PROXY_COUNTRIES = ["de", "ch", "at"];

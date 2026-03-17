@@ -48,22 +48,16 @@ export interface ScraperOptions {
   furnitureType?: string;
 }
 
-// Proxy-Pool: 10 deutsche Webshare-Proxies
-const PROXY_POOL = [
-  { username: "kfxavtnr-de-1", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-2", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-3", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-4", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-5", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-6", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-7", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-8", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-9", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-10", password: "4f55trvs9n0y" },
-];
+// Proxy-Pool: built from ENV (PROXY_USERNAME, PROXY_PASSWORD, PROXY_HOST, PROXY_PORT)
+const PROXY_USERNAME_BASE = process.env.PROXY_USERNAME || "";
+const PROXY_PASSWORD_BASE = process.env.PROXY_PASSWORD || "";
+const PROXY_HOST = process.env.PROXY_HOST || "p.webshare.io";
+const PROXY_PORT = parseInt(process.env.PROXY_PORT || "80", 10);
 
-const PROXY_HOST = "p.webshare.io";
-const PROXY_PORT = 80;
+const PROXY_POOL = Array.from({ length: 10 }, (_, i) => ({
+  username: `${PROXY_USERNAME_BASE}-de-${i + 1}`,
+  password: PROXY_PASSWORD_BASE,
+}));
 
 // Legacy proxy URLs für undici (fetchWithHeaders)
 const PROXY_URLS: string[] = PROXY_POOL.map(

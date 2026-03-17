@@ -13,17 +13,16 @@ import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-haiku-4-5-20251001";
 
-// Proxy-Pool (gleiche wie in base.ts)
-const PROXY_POOL = [
-  { username: "kfxavtnr-de-1", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-2", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-3", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-4", password: "4f55trvs9n0y" },
-  { username: "kfxavtnr-de-5", password: "4f55trvs9n0y" },
-];
+// Proxy-Pool from ENV (PROXY_USERNAME, PROXY_PASSWORD, PROXY_HOST, PROXY_PORT)
+const PROXY_USERNAME_BASE = process.env.PROXY_USERNAME || "";
+const PROXY_PASSWORD_BASE = process.env.PROXY_PASSWORD || "";
+const PROXY_HOST = process.env.PROXY_HOST || "p.webshare.io";
+const PROXY_PORT = parseInt(process.env.PROXY_PORT || "80", 10);
 
-const PROXY_HOST = "p.webshare.io";
-const PROXY_PORT = 80;
+const PROXY_POOL = Array.from({ length: 5 }, (_, i) => ({
+  username: `${PROXY_USERNAME_BASE}-de-${i + 1}`,
+  password: PROXY_PASSWORD_BASE,
+}));
 
 function getRandomProxy(): { username: string; password: string } {
   const idx = Math.floor(Math.random() * PROXY_POOL.length);

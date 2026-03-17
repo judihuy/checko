@@ -67,6 +67,7 @@ interface Alert {
   searchQuery: string;
   searchId: string;
   createdAt: string;
+  listedAt: string | null;
   detailAnalysis: DetailAnalysis | null;
 }
 
@@ -520,6 +521,9 @@ export default function PreisradarAlertsPage() {
                           {/* Suche + Datum */}
                           <div className="text-xs text-gray-400 mt-1 space-y-0.5">
                             <div>&ldquo;{alert.searchQuery}&rdquo;</div>
+                            {alert.listedAt && (
+                              <div>📌 Inseriert am {formatDate(alert.listedAt)}</div>
+                            )}
                             <div>📅 Gefunden am {formatDate(alert.createdAt)}</div>
                           </div>
                         </div>

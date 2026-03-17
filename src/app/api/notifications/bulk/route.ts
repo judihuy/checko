@@ -1,5 +1,11 @@
 // DELETE /api/notifications/bulk — Mehrere Benachrichtigungen löschen
-// Body: { ids: string[] } oder { readOnly: true } (alle gelesenen löschen)
+// Body: { ids: string[] } oder { readOnly: true } oder { all: true } oder { category: "..." }
+//
+// Modi:
+// 1. { all: true }              → ALLE Benachrichtigungen des Users löschen
+// 2. { all: true, category: X } → Alle einer Kategorie löschen
+// 3. { readOnly: true }         → Alle gelesenen löschen
+// 4. { ids: [...] }             → Bestimmte IDs löschen (max 500 pro Batch)
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -16,14 +22,27 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
   }
 
-  let body: { ids?: string[]; readOnly?: boolean };
+  let body: { ids?: string[]; readOnly?: boolean; all?: boolean; category?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Ungültiger Request-Body" }, { status: 400 });
   }
 
-  // Modus 1: Alle gelesenen löschen
+  // Modus 1: ALLE Benachrichtigungen löschen (optional nach Kategorie gefiltert)
+  if (body.all === true) {
+    const where: { userId: string; category?: string } = {
+      userId: session.user.id,
+    };
+    if (body.category) {
+      where.category = body.category;
+    }
+
+    const result = await prisma.notification.deleteMany({ where });
+    return NextResponse.json({ success: true, deleted: result.count });
+  }
+
+  // Modus 2: Alle gelesenen löschen
   if (body.readOnly === true) {
     const result = await prisma.notification.deleteMany({
       where: {
@@ -35,10 +54,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, deleted: result.count });
   }
 
-  // Modus 2: Bestimmte IDs löschen
+  // Modus 3: Bestimmte IDs löschen (max 500 pro Batch)
   if (body.ids && Array.isArray(body.ids) && body.ids.length > 0) {
-    // Max 100 auf einmal
-    const ids = body.ids.slice(0, 100);
+    const ids = body.ids.slice(0, 500);
 
     const result = await prisma.notification.deleteMany({
       where: {
@@ -51,7 +69,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { error: "Bitte 'ids' Array oder 'readOnly: true' angeben" },
+    { error: "Bitte 'ids' Array, 'readOnly: true' oder 'all: true' angeben" },
     { status: 400 }
   );
 }

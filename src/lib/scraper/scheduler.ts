@@ -8,6 +8,7 @@ import { analyzePrice } from "@/lib/ai/price-analyzer";
 import { deductCheckos } from "@/lib/checkos";
 import { sendPreisradarAlertEmail } from "@/lib/email-preisradar";
 import { createNotification } from "@/lib/notifications";
+import { sendPushToUser } from "@/lib/web-push";
 import { reportScrapeRun } from "@/lib/scraper/health-monitor";
 import { getPlatformDisplayName } from "@/lib/platform-names";
 import { repairSearchQuery } from "@/lib/utils";
@@ -269,6 +270,7 @@ export async function runSearchJob(searchId: string): Promise<{
       priceScore: string | null;
       aiAnalysis: string | null;
       isScam: boolean;
+      listedAt: Date | null;
     }> = [];
 
     // Kategorie-String für KI-Prompt zusammenbauen
@@ -300,6 +302,7 @@ export async function runSearchJob(searchId: string): Promise<{
             details: analysis.details,
           }),
           isScam: analysis.isScam,
+          listedAt: result.listedAt || null,
         });
       } catch (error) {
         // KI-Fehler: Trotzdem speichern, ohne Bewertung
@@ -313,6 +316,7 @@ export async function runSearchJob(searchId: string): Promise<{
           priceScore: null,
           aiAnalysis: null,
           isScam: false,
+          listedAt: result.listedAt || null,
         });
         errors.push(`KI-Analyse fehlgeschlagen für "${result.title}"`);
       }
@@ -344,12 +348,15 @@ export async function runSearchJob(searchId: string): Promise<{
             currency: "CHF",
           });
           const scoreText = alert.priceScore ? ` — Preis-Score: ${alert.priceScore}` : "";
+          const listedAtText = alert.listedAt
+            ? ` — Inseriert am: ${alert.listedAt.toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" })} ${alert.listedAt.toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" })}`
+            : "";
 
           await createNotification(
             search.user.id,
             "preisradar_alert",
             `Neuer Treffer: ${alert.title}`,
-            `${priceFormatted} auf ${getPlatformDisplayName(alert.platform)}${scoreText}`,
+            `${priceFormatted} auf ${getPlatformDisplayName(alert.platform)}${scoreText}${listedAtText}`,
             alert.url,
             undefined,
             alert.imageUrl || undefined
@@ -357,6 +364,35 @@ export async function runSearchJob(searchId: string): Promise<{
         } catch (notifError) {
           errors.push(`Benachrichtigung erstellen fehlgeschlagen: ${notifError instanceof Error ? notifError.message : String(notifError)}`);
         }
+      }
+    }
+
+    // Push-Benachrichtigung senden wenn neue Treffer
+    if (newAlerts > 0) {
+      try {
+        const firstAlert = alertsToCreate[0];
+        const pushPriceFormatted = (firstAlert.price / 100).toLocaleString("de-CH", {
+          style: "currency",
+          currency: "CHF",
+        });
+        const pushListedText = firstAlert.listedAt
+          ? ` | Inseriert: ${firstAlert.listedAt.toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" })} ${firstAlert.listedAt.toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" })}`
+          : "";
+        const pushBody = newAlerts === 1
+          ? `${pushPriceFormatted} auf ${getPlatformDisplayName(firstAlert.platform)}${pushListedText}`
+          : `${newAlerts} neue Treffer gefunden — ab ${pushPriceFormatted}`;
+
+        await sendPushToUser(search.user.id, {
+          title: newAlerts === 1
+            ? `Neuer Treffer: ${firstAlert.title.substring(0, 80)}`
+            : `${newAlerts} neue Preisradar-Treffer`,
+          body: pushBody,
+          url: "/dashboard/preisradar/alerts",
+          tag: `preisradar-${search.id}`,
+        });
+      } catch (pushError) {
+        // Push-Fehler sind nicht kritisch
+        console.warn(`[Scheduler] Push-Benachrichtigung fehlgeschlagen: ${pushError instanceof Error ? pushError.message : String(pushError)}`);
       }
     }
 

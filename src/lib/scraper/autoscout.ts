@@ -12,6 +12,7 @@
 // - Getriebe: ?gear=M|A
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
+import { fetchViaFlareSolverr, isCloudflareChallenge, isFlareSolverrConfigured } from "./flaresolverr";
 
 // Fuel type mapping
 const FUEL_TYPE_MAP: Record<string, string> = {
@@ -56,6 +57,11 @@ interface AutoScoutListing {
   transmissionTypeGroup?: string;
   versionFullName?: string;
   warranty?: unknown;
+  // Insertionsdatum-Felder (je nach API-Version)
+  createdAt?: string;
+  publishDate?: string;
+  listingCreationDate?: string;
+  onlineSince?: string;
 }
 
 export class AutoScoutScraper extends BaseScraper {
@@ -151,7 +157,21 @@ export class AutoScoutScraper extends BaseScraper {
         console.warn(`[AutoScout] HTTP-Fetch fehlgeschlagen: ${detail}`);
       }
 
-      // Methode 2 (FALLBACK): Puppeteer + Stealth + CH Proxy
+      // Methode 2 (FALLBACK): FlareSolverr (Cloudflare-Bypass)
+      if (isFlareSolverrConfigured()) {
+        try {
+          const flareResults = await this.scrapeViaFlareSolverr(searchUrl, options);
+          if (flareResults.length > 0) {
+            console.log(`[AutoScout] ✅ FlareSolverr-Fallback: ${flareResults.length} Ergebnisse`);
+            return flareResults;
+          }
+        } catch (error) {
+          const detail = this.formatError(error);
+          console.warn(`[AutoScout] FlareSolverr-Fallback fehlgeschlagen: ${detail}`);
+        }
+      }
+
+      // Methode 3 (LETZTER FALLBACK): Puppeteer + Stealth + CH Proxy
       try {
         const browserResults = await this.scrapeViaBrowser(searchUrl, options);
         if (browserResults.length > 0) {
@@ -170,6 +190,28 @@ export class AutoScoutScraper extends BaseScraper {
       console.error(`[AutoScout] Scraper-Fehler: ${detail}`);
       return [];
     }
+  }
+
+  /**
+   * AutoScout24 per FlareSolverr scrapen (Cloudflare-Bypass).
+   * Wird als Fallback genutzt wenn HTTP-Fetch 403/Cloudflare erhält.
+   */
+  private async scrapeViaFlareSolverr(searchUrl: string, options?: ScraperOptions): Promise<ScraperResult[]> {
+    console.log(`[AutoScout] FlareSolverr URL: ${searchUrl}`);
+
+    const html = await fetchViaFlareSolverr(searchUrl, this.platform);
+
+    if (html.length < 5000) {
+      console.warn(`[AutoScout] ⚠️ Sehr kurze FlareSolverr-Antwort (${html.length} bytes)`);
+      return [];
+    }
+
+    if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
+      console.warn("[AutoScout] ⚠️ Cloudflare-Challenge trotz FlareSolverr");
+      return [];
+    }
+
+    return this.parseAllFormats(html, options);
   }
 
   /**
@@ -205,6 +247,10 @@ export class AutoScoutScraper extends BaseScraper {
     const response = await this.fetchWithCountryHeaders(searchUrl, "ch");
 
     if (!response.ok) {
+      // Bei 403/503 Cloudflare → Exception werfen, damit FlareSolverr-Fallback greift
+      if (isCloudflareChallenge(response.status)) {
+        throw new Error(`Cloudflare-Challenge erkannt (HTTP ${response.status})`);
+      }
       let bodySnippet = "";
       try {
         const text = await response.text();
@@ -225,9 +271,8 @@ export class AutoScoutScraper extends BaseScraper {
       return [];
     }
 
-    if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
-      console.warn("[AutoScout] ⚠️ Cloudflare-Challenge");
-      return [];
+    if (isCloudflareChallenge(200, html)) {
+      throw new Error("Cloudflare-Challenge im HTML erkannt");
     }
 
     return this.parseAllFormats(html, options);
@@ -356,6 +401,14 @@ export class AutoScoutScraper extends BaseScraper {
           imageUrl = `${IMAGE_BASE_URL}/${imgKey}`;
         }
 
+        // Insertionsdatum extrahieren
+        let listedAt: Date | null = null;
+        const dateStr = listing.onlineSince || listing.publishDate || listing.listingCreationDate || listing.createdAt;
+        if (dateStr) {
+          const parsed = new Date(dateStr);
+          if (!isNaN(parsed.getTime())) listedAt = parsed;
+        }
+
         // Description
         const descParts: string[] = [];
         if (listing.teaser) descParts.push(listing.teaser);
@@ -373,6 +426,7 @@ export class AutoScoutScraper extends BaseScraper {
           description: descParts.join(" | ").substring(0, 500) || undefined,
           platform: this.platform,
           scrapedAt: new Date(),
+          listedAt,
         });
 
         if (options?.limit && results.length >= options.limit) break;

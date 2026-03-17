@@ -1,5 +1,6 @@
 // Benachrichtigungen-Seite — /dashboard/benachrichtigungen
-// Mit Checkboxen, Bulk-Aktionen, Löschen (einzeln + bulk + gelesene)
+// Mit Checkboxen, Bulk-Aktionen, "Alle auswählen" (ALLE, nicht nur sichtbare),
+// "Alle löschen" Button, Bulk-Delete für grosse Mengen
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -37,8 +38,10 @@ export default function BenachrichtigungenPage() {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [allSelected, setAllSelected] = useState(false); // TRUE = ALLE Notifications ausgewählt (nicht nur sichtbare)
   const [bulkActing, setBulkActing] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -65,13 +68,15 @@ export default function BenachrichtigungenPage() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // Checkboxen zurücksetzen wenn Seite wechselt oder neu geladen wird
+  // Auswahl zurücksetzen wenn Seite/Kategorie wechselt
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [notifications]);
+    setAllSelected(false);
+  }, [page, categoryFilter]);
 
-  // Checkbox togglen
+  // Checkbox für einzelne Notification togglen
   const toggleSelect = (id: string) => {
+    setAllSelected(false); // "Alle" Modus deaktivieren
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -83,31 +88,81 @@ export default function BenachrichtigungenPage() {
     });
   };
 
-  // Alle auswählen / abwählen
-  const toggleSelectAll = () => {
-    if (selectedIds.size === notifications.length) {
+  // "Alle auswählen" togglen — wählt ALLE Notifications, nicht nur sichtbare
+  const toggleSelectAll = async () => {
+    if (allSelected) {
+      // Abwählen
+      setAllSelected(false);
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(notifications.map((n) => n.id)));
+      // ALLE auswählen — IDs vom Server laden
+      try {
+        const params = new URLSearchParams();
+        if (categoryFilter) params.set("category", categoryFilter);
+        const res = await fetch(`/api/notifications/ids?${params}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSelectedIds(new Set(data.ids));
+          setAllSelected(true);
+        }
+      } catch {
+        // Fallback: nur sichtbare auswählen
+        setSelectedIds(new Set(notifications.map((n) => n.id)));
+      }
     }
   };
 
-  const allSelected = notifications.length > 0 && selectedIds.size === notifications.length;
+  // Prüfe ob alle sichtbaren Notifications ausgewählt sind
+  const visibleAllSelected = notifications.length > 0 && notifications.every((n) => selectedIds.has(n.id));
   const someSelected = selectedIds.size > 0;
+
+  // Anzahl ausgewählter Notifications (Anzeige)
+  const selectedCount = allSelected ? total : selectedIds.size;
 
   // Bulk: Ausgewählte löschen
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
+    if (selectedIds.size === 0 && !allSelected) return;
     setBulkActing(true);
     try {
-      const res = await fetch("/api/notifications/bulk", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selectedIds) }),
-      });
-      if (res.ok) {
-        setSelectedIds(new Set());
-        await fetchNotifications();
+      if (allSelected) {
+        // Alle löschen (server-side, optional nach Kategorie)
+        const res = await fetch("/api/notifications/bulk", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            all: true,
+            category: categoryFilter || undefined,
+          }),
+        });
+        if (res.ok) {
+          setSelectedIds(new Set());
+          setAllSelected(false);
+          setPage(0);
+          await fetchNotifications();
+        }
+      } else {
+        // Bestimmte IDs löschen — in Batches von 500
+        const ids = Array.from(selectedIds);
+        let totalDeleted = 0;
+
+        for (let i = 0; i < ids.length; i += 500) {
+          const batch = ids.slice(i, i + 500);
+          const res = await fetch("/api/notifications/bulk", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: batch }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            totalDeleted += data.deleted;
+          }
+        }
+
+        if (totalDeleted > 0) {
+          setSelectedIds(new Set());
+          setAllSelected(false);
+          await fetchNotifications();
+        }
       }
     } catch {
       // Fehlerbehandlung
@@ -118,16 +173,36 @@ export default function BenachrichtigungenPage() {
 
   // Bulk: Ausgewählte als gelesen markieren
   const handleBulkMarkRead = async () => {
-    if (selectedIds.size === 0) return;
+    if (selectedIds.size === 0 && !allSelected) return;
     setBulkActing(true);
     try {
-      const res = await fetch("/api/notifications/bulk/read", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selectedIds) }),
-      });
-      if (res.ok) {
+      if (allSelected) {
+        // Alle als gelesen markieren
+        const res = await fetch("/api/notifications/bulk/read", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ all: true }),
+        });
+        if (res.ok) {
+          setSelectedIds(new Set());
+          setAllSelected(false);
+          await fetchNotifications();
+        }
+      } else {
+        // Bestimmte IDs — in Batches
+        const ids = Array.from(selectedIds);
+
+        for (let i = 0; i < ids.length; i += 500) {
+          const batch = ids.slice(i, i + 500);
+          await fetch("/api/notifications/bulk/read", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: batch }),
+          });
+        }
+
         setSelectedIds(new Set());
+        setAllSelected(false);
         await fetchNotifications();
       }
     } catch {
@@ -173,6 +248,11 @@ export default function BenachrichtigungenPage() {
       if (res.ok) {
         setNotifications((prev) => prev.filter((n) => n.id !== id));
         setTotal((prev) => prev - 1);
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       }
     } catch {
       // Fehlerbehandlung
@@ -182,6 +262,37 @@ export default function BenachrichtigungenPage() {
         next.delete(id);
         return next;
       });
+    }
+  };
+
+  // ALLE Benachrichtigungen löschen (mit Bestätigung)
+  const handleDeleteAll = async () => {
+    if (!deleteAllConfirm) {
+      setDeleteAllConfirm(true);
+      return;
+    }
+
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/notifications/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          all: true,
+          category: categoryFilter || undefined,
+        }),
+      });
+      if (res.ok) {
+        setSelectedIds(new Set());
+        setAllSelected(false);
+        setDeleteAllConfirm(false);
+        setPage(0);
+        await fetchNotifications();
+      }
+    } catch {
+      // Fehlerbehandlung
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -207,15 +318,25 @@ export default function BenachrichtigungenPage() {
     }
   };
 
+  // Bestätigung abbrechen wenn man wegklickt
+  useEffect(() => {
+    if (deleteAllConfirm) {
+      const timer = setTimeout(() => setDeleteAllConfirm(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [deleteAllConfirm]);
+
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const hasUnread = notifications.some((n) => !n.isRead);
   const hasRead = notifications.some((n) => n.isRead);
 
-  // Prüfe ob unter den ausgewählten ungelesene sind
-  const selectedHasUnread = Array.from(selectedIds).some((id) => {
-    const n = notifications.find((notif) => notif.id === id);
-    return n && !n.isRead;
-  });
+  // Prüfe ob unter den ausgewählten (auf der sichtbaren Seite) ungelesene sind
+  const selectedHasUnread = allSelected
+    ? hasUnread || total > notifications.length // Bei "Alle" gehen wir davon aus, dass ungelesene vorhanden
+    : Array.from(selectedIds).some((id) => {
+        const n = notifications.find((notif) => notif.id === id);
+        return n && !n.isRead;
+      });
 
   // Zeitstempel formatieren
   const formatTime = (dateStr: string) => {
@@ -269,7 +390,25 @@ export default function BenachrichtigungenPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {hasRead && (
+          {/* Alle löschen Button */}
+          {total > 0 && (
+            <button
+              onClick={handleDeleteAll}
+              disabled={bulkDeleting}
+              className={`px-3 py-1.5 text-xs sm:text-sm rounded-lg transition font-medium disabled:opacity-50 whitespace-nowrap ${
+                deleteAllConfirm
+                  ? "bg-red-600 text-white hover:bg-red-700"
+                  : "text-red-600 hover:text-red-700 hover:bg-red-50"
+              }`}
+            >
+              {bulkDeleting
+                ? "Löscht..."
+                : deleteAllConfirm
+                ? `🗑 Wirklich ${categoryFilter ? CATEGORY_TABS.find((t) => t.id === categoryFilter)?.label || "" : "alle"} ${total} löschen?`
+                : `🗑 Alle löschen`}
+            </button>
+          )}
+          {hasRead && !deleteAllConfirm && (
             <button
               onClick={handleDeleteAllRead}
               disabled={bulkDeleting}
@@ -303,6 +442,7 @@ export default function BenachrichtigungenPage() {
             onClick={() => {
               setCategoryFilter(tab.id);
               setPage(0);
+              setDeleteAllConfirm(false);
             }}
             className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${
               categoryFilter === tab.id
@@ -317,27 +457,46 @@ export default function BenachrichtigungenPage() {
 
       {/* Bulk-Aktionsleiste */}
       {someSelected && (
-        <div className="mb-4 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+        <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
           <span className="text-sm text-gray-600 font-medium">
-            {selectedIds.size} ausgewählt
+            {allSelected ? (
+              <span className="text-emerald-700 font-bold">
+                Alle {total} ausgewählt
+              </span>
+            ) : (
+              <>{selectedCount} ausgewählt</>
+            )}
           </span>
-          <div className="flex-1" />
-          {selectedHasUnread && (
+
+          {/* Hinweis: "Alle X auswählen" wenn nicht alle selected sind */}
+          {!allSelected && visibleAllSelected && total > notifications.length && (
             <button
-              onClick={handleBulkMarkRead}
-              disabled={bulkActing}
-              className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition disabled:opacity-50"
+              onClick={toggleSelectAll}
+              className="text-xs text-emerald-600 hover:text-emerald-700 font-medium underline"
             >
-              {bulkActing ? "..." : "✓ Als gelesen markieren"}
+              Alle {total} Benachrichtigungen auswählen
             </button>
           )}
-          <button
-            onClick={handleBulkDelete}
-            disabled={bulkActing}
-            className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition disabled:opacity-50"
-          >
-            {bulkActing ? "Löscht..." : "🗑 Löschen"}
-          </button>
+
+          <div className="flex-1" />
+          <div className="flex gap-2">
+            {selectedHasUnread && (
+              <button
+                onClick={handleBulkMarkRead}
+                disabled={bulkActing}
+                className="px-3 sm:px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition disabled:opacity-50"
+              >
+                {bulkActing ? "..." : "✓ Gelesen"}
+              </button>
+            )}
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkActing}
+              className="px-3 sm:px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition disabled:opacity-50"
+            >
+              {bulkActing ? "Löscht..." : `🗑 ${allSelected ? "Alle" : selectedCount} löschen`}
+            </button>
+          </div>
         </div>
       )}
 
@@ -353,19 +512,32 @@ export default function BenachrichtigungenPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {/* Alle auswählen */}
+          {/* Alle auswählen Checkbox */}
           <div className="flex items-center gap-3 px-5 py-2">
             <label className="flex items-center gap-2 cursor-pointer select-none group">
               <input
                 type="checkbox"
-                checked={allSelected}
+                checked={allSelected || visibleAllSelected}
                 onChange={toggleSelectAll}
                 className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
               />
               <span className="text-sm text-gray-500 group-hover:text-gray-700 transition">
-                Alle auswählen
+                {allSelected
+                  ? `Alle ${total} ausgewählt`
+                  : `Alle auswählen`}
               </span>
             </label>
+            {allSelected && (
+              <button
+                onClick={() => {
+                  setAllSelected(false);
+                  setSelectedIds(new Set());
+                }}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                Auswahl aufheben
+              </button>
+            )}
           </div>
 
           {notifications.map((n) => (
@@ -376,7 +548,7 @@ export default function BenachrichtigungenPage() {
                   ? "border-emerald-300 bg-emerald-50/30"
                   : "border-gray-200"
               } ${deletingIds.has(n.id) ? "opacity-50" : ""} ${
-                selectedIds.has(n.id) ? "ring-2 ring-emerald-200" : ""
+                selectedIds.has(n.id) || allSelected ? "ring-2 ring-emerald-200" : ""
               }`}
             >
               <div className="px-5 py-4 flex gap-3 items-start">
@@ -384,7 +556,7 @@ export default function BenachrichtigungenPage() {
                 <div className="flex-shrink-0 pt-0.5">
                   <input
                     type="checkbox"
-                    checked={selectedIds.has(n.id)}
+                    checked={allSelected || selectedIds.has(n.id)}
                     onChange={() => toggleSelect(n.id)}
                     className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                   />

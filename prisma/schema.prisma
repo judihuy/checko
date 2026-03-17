@@ -327,6 +327,7 @@ model PreisradarAlert {
   isScam         Boolean          @default(false)
   isSeen         Boolean          @default(false)
   detailAnalysis String?          @db.LongText
+  listedAt       DateTime?        // Insertionsdatum: wann das Inserat auf der Plattform erstellt wurde
   searchId   String
   createdAt  DateTime         @default(now())
   search     PreisradarSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)

@@ -5,6 +5,7 @@
 // Ricardo deckt ALLE Kategorien ab: Fahrzeuge, Elektronik, Möbel, etc.
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
+import { fetchViaFlareSolverr, isCloudflareChallenge, isFlareSolverrConfigured } from "./flaresolverr";
 
 export class RicardoScraper extends BaseScraper {
   readonly platform = "ricardo";
@@ -48,7 +49,23 @@ export class RicardoScraper extends BaseScraper {
       );
     }
 
-    // Methode 2 (FALLBACK): Puppeteer + Stealth + CH Proxy
+    // Methode 2 (FALLBACK): FlareSolverr (Cloudflare-Bypass)
+    if (isFlareSolverrConfigured()) {
+      try {
+        const flareResults = await this.scrapeViaFlareSolverr(enrichedQuery, options, isVehicleSearch);
+        if (flareResults.length > 0) {
+          console.log(`[Ricardo] ✅ FlareSolverr-Fallback: ${flareResults.length} Ergebnisse`);
+          return flareResults;
+        }
+      } catch (error) {
+        console.warn(
+          `[Ricardo] FlareSolverr-Fallback fehlgeschlagen:`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
+
+    // Methode 3 (LETZTER FALLBACK): Puppeteer + Stealth + CH Proxy
     try {
       const browserResults = await this.scrapeViaBrowser(enrichedQuery, options, isVehicleSearch);
       if (browserResults.length > 0) {
@@ -82,6 +99,41 @@ export class RicardoScraper extends BaseScraper {
     if (paramStr) searchUrl += "?" + paramStr;
 
     return searchUrl;
+  }
+
+  /**
+   * Ricardo per FlareSolverr scrapen (Cloudflare-Bypass).
+   * Wird als Fallback genutzt wenn HTTP-Fetch 403/Cloudflare erhält.
+   */
+  private async scrapeViaFlareSolverr(
+    query: string,
+    options?: ScraperOptions,
+    isVehicleSearch?: boolean
+  ): Promise<ScraperResult[]> {
+    const searchUrl = this.buildSearchUrl(query, options);
+    console.log(`[Ricardo] FlareSolverr URL: ${searchUrl}`);
+
+    const html = await fetchViaFlareSolverr(searchUrl, this.platform);
+
+    if (html.length < 1000) {
+      console.warn("[Ricardo] ⚠️ Sehr kurze FlareSolverr-Antwort");
+      return [];
+    }
+
+    if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
+      console.warn("[Ricardo] ⚠️ Cloudflare-Challenge trotz FlareSolverr");
+      return [];
+    }
+
+    let results = this.parseJsonLd(html, options, isVehicleSearch);
+    if (results.length === 0) {
+      results = this.parseHtmlListings(html, options, isVehicleSearch);
+    }
+    if (results.length === 0) {
+      results = this.parseNextData(html, options, isVehicleSearch);
+    }
+
+    return results;
   }
 
   /**
@@ -136,7 +188,12 @@ export class RicardoScraper extends BaseScraper {
 
     // CH-Proxy mit echten Browser-Headers (wie eBay KA Ansatz)
     const response = await this.fetchWithCountryHeaders(searchUrl, "ch");
+
     if (!response.ok) {
+      // Bei 403/503 Cloudflare → Exception werfen, damit FlareSolverr-Fallback greift
+      if (isCloudflareChallenge(response.status)) {
+        throw new Error(`Cloudflare-Challenge erkannt (HTTP ${response.status})`);
+      }
       console.error(`[Ricardo] HTTP: ${response.status}`);
       return [];
     }
@@ -144,9 +201,8 @@ export class RicardoScraper extends BaseScraper {
     const html = await response.text();
     console.log(`[Ricardo] HTML length: ${html.length}`);
 
-    if (html.length < 1000 || html.includes("Just a moment") || html.includes("cf_chl_opt")) {
-      console.warn("[Ricardo] ⚠️ Cloudflare-Challenge oder kurze Antwort");
-      return [];
+    if (html.length < 1000 || isCloudflareChallenge(200, html)) {
+      throw new Error("Cloudflare-Challenge oder kurze Antwort erkannt");
     }
 
     let results = this.parseJsonLd(html, options, isVehicleSearch);
@@ -240,6 +296,14 @@ export class RicardoScraper extends BaseScraper {
 
             const description = (item.description || "") as string;
 
+            // Insertionsdatum aus JSON-LD (datePosted, dateCreated, etc.)
+            let listedAt: Date | null = null;
+            const dateStr = item.datePosted || item.dateCreated || item.datePublished;
+            if (dateStr) {
+              const parsed = new Date(dateStr as string);
+              if (!isNaN(parsed.getTime())) listedAt = parsed;
+            }
+
             results.push({
               title,
               price,
@@ -248,6 +312,7 @@ export class RicardoScraper extends BaseScraper {
               description: description ? description.substring(0, 500) : undefined,
               platform: this.platform,
               scrapedAt: new Date(),
+              listedAt,
             });
 
             if (options?.limit && results.length >= options.limit) break;
@@ -403,6 +468,16 @@ export class RicardoScraper extends BaseScraper {
           imageUrl = typeof article.images[0] === "string" ? article.images[0] : article.images[0].url;
         }
 
+        // Insertionsdatum extrahieren
+        let listedAt: Date | null = null;
+        const startDate = article.startDate || article.createdDate || article.publishDate || article.insertionDate;
+        if (startDate) {
+          const parsed = new Date(startDate);
+          if (!isNaN(parsed.getTime())) {
+            listedAt = parsed;
+          }
+        }
+
         const descParts: string[] = [];
         if (article.hasAuction && article.bidPrice) {
           descParts.push(`Auktion: CHF ${article.bidPrice}`);
@@ -422,6 +497,7 @@ export class RicardoScraper extends BaseScraper {
           description: descParts.length > 0 ? descParts.join(" | ") : undefined,
           platform: this.platform,
           scrapedAt: new Date(),
+          listedAt,
         });
 
         if (options?.limit && results.length >= options.limit) break;

@@ -1,5 +1,5 @@
 // PUT /api/notifications/bulk/read — Ausgewählte Benachrichtigungen als gelesen markieren
-// Body: { ids: string[] }
+// Body: { ids: string[] } oder { all: true }
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -16,22 +16,35 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
   }
 
-  let body: { ids?: string[] };
+  let body: { ids?: string[]; all?: boolean };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Ungültiger Request-Body" }, { status: 400 });
   }
 
+  // Modus 1: Alle als gelesen markieren
+  if (body.all === true) {
+    const result = await prisma.notification.updateMany({
+      where: {
+        userId: session.user.id,
+        isRead: false,
+      },
+      data: { isRead: true },
+    });
+    return NextResponse.json({ success: true, updated: result.count });
+  }
+
+  // Modus 2: Bestimmte IDs als gelesen markieren
   if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
     return NextResponse.json(
-      { error: "Bitte 'ids' Array angeben" },
+      { error: "Bitte 'ids' Array oder 'all: true' angeben" },
       { status: 400 }
     );
   }
 
-  // Max 100 auf einmal
-  const ids = body.ids.slice(0, 100);
+  // Max 500 auf einmal
+  const ids = body.ids.slice(0, 500);
 
   const result = await prisma.notification.updateMany({
     where: {

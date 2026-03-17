@@ -28,6 +28,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
       - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+      - FLARESOLVERR_URL=http://flaresolverr:8191/v1
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -55,6 +56,19 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - checko-network
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: checko-flaresolverr
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - TZ=Europe/Zurich
+    ports:
+      - "8191:8191"
     networks:
       - checko-network
 

@@ -21,6 +21,7 @@ export interface ScraperResult {
   description?: string; // Beschreibung des Inserats (für KI-Filter)
   platform: string;
   scrapedAt: Date;
+  listedAt?: Date | null; // Insertionsdatum: wann das Inserat erstellt wurde
 }
 
 export interface ScraperOptions {

@@ -114,6 +114,7 @@ export async function GET(request: NextRequest) {
         searchQuery,
         searchId: alert.searchId,
         createdAt: alert.createdAt,
+        listedAt: alert.listedAt,
         detailAnalysis,
       };
     });

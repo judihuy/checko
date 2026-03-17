@@ -26,7 +26,26 @@ export class RicardoScraper extends BaseScraper {
 
     try {
       const encodedQuery = encodeURIComponent(enrichedQuery);
-      const searchUrl = `${this.baseUrl}/de/s/${encodedQuery}`;
+      
+      // Ricardo URL mit echten Filtern
+      // Verifizierte Parameter (ricardo.ch/de/s/):
+      // - Preis: price_min / price_max (CHF)
+      // - Sortierung: sort_by (relevance, price_asc, price_desc, newest)
+      // - Kategorie wird über den URL-Pfad gesteuert
+      let searchUrl = `${this.baseUrl}/de/s/${encodedQuery}`;
+      const urlParams = new URLSearchParams();
+
+      // Preis-Filter (Ricardo nutzt CHF direkt)
+      if (options?.minPrice) urlParams.set("price_min", String(Math.round(options.minPrice / 100)));
+      if (options?.maxPrice) urlParams.set("price_max", String(Math.round(options.maxPrice / 100)));
+      
+      // Sortierung: neueste zuerst für bessere Ergebnisse
+      urlParams.set("sort_by", "newest");
+
+      const paramStr = urlParams.toString();
+      if (paramStr) {
+        searchUrl += "?" + paramStr;
+      }
 
       console.log(`[Ricardo] Search URL: ${searchUrl}`);
 

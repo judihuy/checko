@@ -26,7 +26,34 @@ export class TuttiScraper extends BaseScraper {
 
     try {
       const encodedQuery = encodeURIComponent(enrichedQuery);
-      const searchUrl = `${this.baseUrl}/de/q/${encodedQuery}`;
+
+      // Tutti.ch URL mit echten Filtern
+      // Basis: /de/q/suchbegriff
+      // Preis: ?pr=MIN-MAX (CHF)
+      // Kategorie: /de/c/fahrzeuge/ oder /de/c/immobilien/ etc.
+      // Hinweis: Tutti hat Cloudflare-Schutz, Ergebnisse können eingeschränkt sein
+      let searchUrl: string;
+      if (options?.category === "Fahrzeuge") {
+        searchUrl = `${this.baseUrl}/de/q/${encodedQuery}?o=autos`;
+      } else if (options?.category === "Immobilien") {
+        searchUrl = `${this.baseUrl}/de/q/${encodedQuery}?o=immobilien`;
+      } else {
+        searchUrl = `${this.baseUrl}/de/q/${encodedQuery}`;
+      }
+
+      const urlParams = new URLSearchParams();
+
+      // Preis-Filter (Tutti nutzt CHF)
+      if (options?.minPrice || options?.maxPrice) {
+        const minCHF = options.minPrice ? Math.round(options.minPrice / 100) : "";
+        const maxCHF = options.maxPrice ? Math.round(options.maxPrice / 100) : "";
+        urlParams.set("pr", `${minCHF}-${maxCHF}`);
+      }
+
+      const paramStr = urlParams.toString();
+      if (paramStr) {
+        searchUrl += (searchUrl.includes("?") ? "&" : "?") + paramStr;
+      }
 
       console.log(`[Tutti] Search URL: ${searchUrl}`);
 

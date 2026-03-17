@@ -136,16 +136,19 @@ const DURATIONS = [
 
 // ==================== KATEGORIEN ====================
 
-const CATEGORIES: Record<string, string[]> = {
-  "Fahrzeuge": ["Autos", "Motorräder", "Ersatzteile", "Zubehör", "Wohnmobile", "Fahrräder"],
-  "Elektronik": ["Smartphones", "Laptops", "Tablets", "Fernseher", "Kameras", "Audio", "Gaming"],
-  "Möbel": ["Sofas", "Tische", "Stühle", "Schränke", "Betten", "Regale"],
-  "Kleidung": ["Damen", "Herren", "Kinder", "Schuhe", "Accessoires"],
-  "Sport": ["Fitness", "Wintersport", "Radsport", "Outdoor", "Wassersport"],
-  "Haushalt": ["Küche", "Bad", "Reinigung", "Werkzeug", "Garten"],
-  "Immobilien": ["Wohnungen", "Häuser", "Grundstücke", "Gewerbe"],
-  "Sonstiges": ["Bücher", "Musik", "Filme", "Sammeln", "Kunst"],
+const CATEGORIES: Record<string, { icon: string; color: string; subcategories: string[] }> = {
+  "Fahrzeuge": { icon: "🚗", color: "blue", subcategories: ["Autos", "Motorräder", "Ersatzteile", "Zubehör", "Wohnmobile", "Fahrräder"] },
+  "Immobilien": { icon: "🏠", color: "purple", subcategories: ["Wohnungen", "Häuser", "Grundstücke", "Gewerbe"] },
+  "Möbel": { icon: "🪑", color: "amber", subcategories: ["Sofas", "Tische", "Stühle", "Schränke", "Betten", "Regale"] },
+  "Elektronik": { icon: "📱", color: "cyan", subcategories: ["Smartphones", "Laptops", "Tablets", "Fernseher", "Kameras", "Audio", "Gaming"] },
+  "Kleidung": { icon: "👕", color: "pink", subcategories: ["Damen", "Herren", "Kinder", "Schuhe", "Accessoires"] },
+  "Sport": { icon: "⚽", color: "green", subcategories: ["Fitness", "Wintersport", "Radsport", "Outdoor", "Wassersport"] },
+  "Haushalt": { icon: "🏡", color: "teal", subcategories: ["Küche", "Bad", "Reinigung", "Werkzeug", "Garten"] },
+  "Sonstiges": { icon: "📦", color: "gray", subcategories: ["Bücher", "Musik", "Filme", "Sammeln", "Kunst"] },
 };
+
+// Plattformen die von Cloudflare eingeschränkt sind
+const RESTRICTED_PLATFORMS = new Set(["tutti", "anibis"]);
 
 const CONDITIONS = [
   { id: "", name: "Alle Zustände" },
@@ -503,11 +506,21 @@ export default function PreisradarPage() {
     setError(null);
 
     try {
+      // Auto-generate query for structured categories (Fahrzeuge/Immobilien don't have free-text)
+      let effectiveQuery = query;
+      if (category === "Fahrzeuge" && !query.trim() && vehicleMake) {
+        effectiveQuery = vehicleMake + (vehicleModel ? " " + vehicleModel : "");
+      } else if (category === "Immobilien" && !query.trim()) {
+        const propLabels: Record<string, string> = { wohnung: "Wohnung", haus: "Haus", grundstueck: "Grundstück", gewerbe: "Gewerbe" };
+        const offerLabels: Record<string, string> = { miete: "Miete", kauf: "Kauf" };
+        effectiveQuery = [propLabels[propertyType] || propertyType, offerLabels[propertyOffer] || "", location].filter(Boolean).join(" ") || "Immobilie";
+      }
+
       const res = await fetch("/api/modules/preisradar/searches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query,
+          query: effectiveQuery,
           minPrice: minPrice && parseInt(minPrice, 10) > 0 ? parseInt(minPrice, 10) * 100 : undefined, // CHF → Rappen
           maxPrice: maxPrice && parseInt(maxPrice, 10) > 0 ? parseInt(maxPrice, 10) * 100 : undefined,
           platforms: selectedPlatforms,
@@ -586,11 +599,21 @@ export default function PreisradarPage() {
     setCreating(true);
     setError(null);
     try {
+      // Auto-generate query for structured categories
+      let draftQuery = query;
+      if (category === "Fahrzeuge" && !query.trim() && vehicleMake) {
+        draftQuery = vehicleMake + (vehicleModel ? " " + vehicleModel : "");
+      } else if (category === "Immobilien" && !query.trim()) {
+        const propLabels: Record<string, string> = { wohnung: "Wohnung", haus: "Haus", grundstueck: "Grundstück", gewerbe: "Gewerbe" };
+        const offerLabels: Record<string, string> = { miete: "Miete", kauf: "Kauf" };
+        draftQuery = [propLabels[propertyType] || propertyType, offerLabels[propertyOffer] || "", location].filter(Boolean).join(" ") || "Immobilie";
+      }
+
       const res = await fetch("/api/modules/preisradar/searches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query,
+          query: draftQuery,
           minPrice: minPrice ? parseInt(minPrice, 10) * 100 : undefined,
           maxPrice: maxPrice ? parseInt(maxPrice, 10) * 100 : undefined,
           platforms: selectedPlatforms,
@@ -937,72 +960,54 @@ export default function PreisradarPage() {
               )}
 
               <form onSubmit={handleCreateSearch} className="space-y-5">
-                {/* Suchbegriff */}
+                {/* SCHRITT 1: Kategorie wählen (Pflicht) */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Suchbegriff *
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    1. Kategorie wählen *
                   </label>
-                  <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="z.B. iPhone 15 Pro, BMW 320d, Sofa..."
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    minLength={2}
-                    maxLength={200}
-                  />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {Object.entries(CATEGORIES).map(([cat, config]) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => {
+                          setCategory(cat);
+                          setSubcategory("");
+                          // Reset category-specific fields when changing category
+                          if (cat !== "Fahrzeuge") {
+                            setVehicleMake(""); setVehicleModel("");
+                            setYearFrom(""); setYearTo("");
+                            setKmFrom(""); setKmTo("");
+                            setFuelType(""); setTransmission("");
+                            setEngineSizeCcm(""); setMotorcycleType("");
+                          }
+                          if (cat !== "Immobilien") {
+                            setPropertyType(""); setPropertyOffer("");
+                            setRooms(""); setAreaM2(""); setLocation("");
+                          }
+                          if (cat !== "Möbel") {
+                            setFurnitureType("");
+                          }
+                          // Clear query for structured categories
+                          if (cat === "Fahrzeuge" || cat === "Immobilien") {
+                            setQuery("");
+                          }
+                        }}
+                        className={`flex flex-col items-center gap-1 py-3 px-2 rounded-lg border text-center transition ${
+                          category === cat
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200"
+                            : "border-gray-200 hover:border-gray-300 text-gray-600"
+                        }`}
+                      >
+                        <span className="text-xl">{config.icon}</span>
+                        <span className="text-xs font-medium">{cat}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Preislimit */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Min. Preis (CHF)
-                    </label>
-                    <input
-                      type="number"
-                      value={minPrice}
-                      onChange={(e) => setMinPrice(e.target.value)}
-                      placeholder="0"
-                      min="0"
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Max. Preis (CHF)
-                    </label>
-                    <input
-                      type="number"
-                      value={maxPrice}
-                      onChange={(e) => setMaxPrice(e.target.value)}
-                      placeholder="∞"
-                      min="0"
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Kategorie-Dropdowns */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Hauptkategorie
-                    </label>
-                    <select
-                      value={category}
-                      onChange={(e) => {
-                        setCategory(e.target.value);
-                        setSubcategory("");
-                      }}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm"
-                    >
-                      <option value="">Alle Kategorien</option>
-                      {Object.keys(CATEGORIES).map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
+                {/* Unterkategorie (wenn Kategorie gewählt) */}
+                {category && CATEGORIES[category] && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Unterkategorie
@@ -1010,40 +1015,32 @@ export default function PreisradarPage() {
                     <select
                       value={subcategory}
                       onChange={(e) => setSubcategory(e.target.value)}
-                      disabled={!category}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm disabled:opacity-50 disabled:bg-gray-50"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm"
                     >
                       <option value="">Alle</option>
-                      {category && CATEGORIES[category]?.map((sub) => (
+                      {CATEGORIES[category].subcategories.map((sub) => (
                         <option key={sub} value={sub}>{sub}</option>
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Zustand
-                    </label>
-                    <select
-                      value={condition}
-                      onChange={(e) => setCondition(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm"
-                    >
-                      {CONDITIONS.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                )}
 
-                {/* === Kategorie-spezifische Felder === */}
-                {(category === "Fahrzeuge" && (subcategory === "Autos" || subcategory === "")) && (
+                {/* SCHRITT 2: Kategorie-spezifische Felder */}
+                {!category && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-gray-500 text-sm">
+                    👆 Wähle zuerst eine Kategorie, um die passenden Suchfelder zu sehen.
+                  </div>
+                )}
+
+                {/* === FAHRZEUGE: Marke, Modell, Baujahr, KM, Preis, Getriebe, Treibstoff — KEIN Freitext === */}
+                {(category === "Fahrzeuge" && (subcategory === "Autos" || subcategory === "" || subcategory === "Wohnmobile" || subcategory === "Fahrräder")) && (
                   <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-4 space-y-3">
-                    <p className="text-sm font-medium text-blue-800">🚗 Fahrzeug-Details (optional)</p>
+                    <p className="text-sm font-medium text-blue-800">🚗 Fahrzeug-Suche</p>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Marke</label>
+                        <label className="block text-xs text-gray-600 mb-1">Marke *</label>
                         <input type="text" value={vehicleMake} onChange={(e) => setVehicleMake(e.target.value)}
-                          placeholder="z.B. BMW, Audi, VW" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                          placeholder="z.B. BMW, Audi, VW" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">Modell</label>
@@ -1065,14 +1062,26 @@ export default function PreisradarPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">km von</label>
+                        <label className="block text-xs text-gray-600 mb-1">KM von</label>
                         <input type="number" value={kmFrom} onChange={(e) => setKmFrom(e.target.value)}
                           placeholder="0" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">km bis</label>
+                        <label className="block text-xs text-gray-600 mb-1">KM bis</label>
                         <input type="number" value={kmTo} onChange={(e) => setKmTo(e.target.value)}
                           placeholder="200000" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis von (CHF)</label>
+                        <input type="number" value={minPrice} onChange={(e) => setMinPrice(e.target.value)}
+                          placeholder="0" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis bis (CHF)</label>
+                        <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}
+                          placeholder="∞" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -1102,14 +1111,15 @@ export default function PreisradarPage() {
                   </div>
                 )}
 
+                {/* === MOTORRÄDER: Marke, Modell, Baujahr, KM, Preis, Typ, Hubraum — KEIN Freitext === */}
                 {category === "Fahrzeuge" && subcategory === "Motorräder" && (
                   <div className="bg-orange-50/50 border border-orange-200 rounded-lg p-4 space-y-3">
-                    <p className="text-sm font-medium text-orange-800">🏍️ Motorrad-Details (optional)</p>
+                    <p className="text-sm font-medium text-orange-800">🏍️ Motorrad-Suche</p>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Marke</label>
+                        <label className="block text-xs text-gray-600 mb-1">Marke *</label>
                         <input type="text" value={vehicleMake} onChange={(e) => setVehicleMake(e.target.value)}
-                          placeholder="z.B. Honda, Yamaha, BMW" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500" />
+                          placeholder="z.B. Honda, Yamaha, BMW" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500" required />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">Modell</label>
@@ -1129,9 +1139,21 @@ export default function PreisradarPage() {
                           placeholder="2026" min="1950" max="2026" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis von (CHF)</label>
+                        <input type="number" value={minPrice} onChange={(e) => setMinPrice(e.target.value)}
+                          placeholder="0" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis bis (CHF)</label>
+                        <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}
+                          placeholder="∞" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">km bis</label>
+                        <label className="block text-xs text-gray-600 mb-1">KM bis</label>
                         <input type="number" value={kmTo} onChange={(e) => setKmTo(e.target.value)}
                           placeholder="50000" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                       </div>
@@ -1157,15 +1179,48 @@ export default function PreisradarPage() {
                   </div>
                 )}
 
-                {category === "Immobilien" && (
-                  <div className="bg-purple-50/50 border border-purple-200 rounded-lg p-4 space-y-3">
-                    <p className="text-sm font-medium text-purple-800">🏠 Immobilien-Details (optional)</p>
+                {/* === Fahrzeuge: Ersatzteile/Zubehör — Suchbegriff + Preis === */}
+                {category === "Fahrzeuge" && (subcategory === "Ersatzteile" || subcategory === "Zubehör") && (
+                  <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-4 space-y-3">
+                    <p className="text-sm font-medium text-blue-800">🔧 {subcategory}-Suche</p>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Suchbegriff *</label>
+                      <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+                        placeholder={`z.B. ${subcategory === "Ersatzteile" ? "BMW E46 Scheinwerfer" : "Dachbox, Felgen 19 Zoll"}`}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
+                    </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Typ</label>
+                        <label className="block text-xs text-gray-600 mb-1">Preis von (CHF)</label>
+                        <input type="number" value={minPrice} onChange={(e) => setMinPrice(e.target.value)}
+                          placeholder="0" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis bis (CHF)</label>
+                        <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}
+                          placeholder="∞" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Zustand</label>
+                      <select value={condition} onChange={(e) => setCondition(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                        {CONDITIONS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* === IMMOBILIEN: Typ, Kauf/Miete, Zimmer, Fläche, Preis, Ort — KEIN Freitext === */}
+                {category === "Immobilien" && (
+                  <div className="bg-purple-50/50 border border-purple-200 rounded-lg p-4 space-y-3">
+                    <p className="text-sm font-medium text-purple-800">🏠 Immobilien-Suche</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Typ *</label>
                         <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500">
-                          <option value="">Alle</option>
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500" required>
+                          <option value="">Bitte wählen</option>
                           <option value="wohnung">Wohnung</option>
                           <option value="haus">Haus</option>
                           <option value="grundstueck">Grundstück</option>
@@ -1173,10 +1228,10 @@ export default function PreisradarPage() {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Angebot</label>
+                        <label className="block text-xs text-gray-600 mb-1">Angebot *</label>
                         <select value={propertyOffer} onChange={(e) => setPropertyOffer(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500">
-                          <option value="">Miete & Kauf</option>
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500" required>
+                          <option value="">Bitte wählen</option>
                           <option value="miete">Miete</option>
                           <option value="kauf">Kauf</option>
                         </select>
@@ -1199,25 +1254,97 @@ export default function PreisradarPage() {
                           placeholder="Zürich, 8000" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis von (CHF)</label>
+                        <input type="number" value={minPrice} onChange={(e) => setMinPrice(e.target.value)}
+                          placeholder="0" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis bis (CHF)</label>
+                        <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}
+                          placeholder="∞" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {category === "Möbel" && (
+                {/* === MÖBEL/HAUSHALT: Suchbegriff + Typ + Preis + Zustand === */}
+                {(category === "Möbel" || category === "Haushalt") && (
                   <div className="bg-amber-50/50 border border-amber-200 rounded-lg p-4 space-y-3">
-                    <p className="text-sm font-medium text-amber-800">🪑 Möbel-Details (optional)</p>
+                    <p className="text-sm font-medium text-amber-800">{category === "Möbel" ? "🪑" : "🏡"} {category}-Suche</p>
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">Möbelart</label>
-                      <select value={furnitureType} onChange={(e) => setFurnitureType(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-500">
-                        <option value="">Alle</option>
-                        <option value="sofa">Sofa / Couch</option>
-                        <option value="tisch">Tisch</option>
-                        <option value="stuhl">Stuhl</option>
-                        <option value="schrank">Schrank</option>
-                        <option value="bett">Bett</option>
-                        <option value="regal">Regal</option>
-                        <option value="kommode">Kommode</option>
-                        <option value="schreibtisch">Schreibtisch</option>
+                      <label className="block text-xs text-gray-600 mb-1">Suchbegriff *</label>
+                      <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+                        placeholder={category === "Möbel" ? "z.B. IKEA Kallax, Ledersofa, Esstisch Eiche" : "z.B. Staubsauger Dyson, Kaffeemaschine"}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500" required />
+                    </div>
+                    {category === "Möbel" && (
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Möbelart</label>
+                        <select value={furnitureType} onChange={(e) => setFurnitureType(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-500">
+                          <option value="">Alle</option>
+                          <option value="sofa">Sofa / Couch</option>
+                          <option value="tisch">Tisch</option>
+                          <option value="stuhl">Stuhl</option>
+                          <option value="schrank">Schrank</option>
+                          <option value="bett">Bett</option>
+                          <option value="regal">Regal</option>
+                          <option value="kommode">Kommode</option>
+                          <option value="schreibtisch">Schreibtisch</option>
+                        </select>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis von (CHF)</label>
+                        <input type="number" value={minPrice} onChange={(e) => setMinPrice(e.target.value)}
+                          placeholder="0" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis bis (CHF)</label>
+                        <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}
+                          placeholder="∞" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Zustand</label>
+                      <select value={condition} onChange={(e) => setCondition(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                        {CONDITIONS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* === ALLGEMEIN (Elektronik, Kleidung, Sport, Sonstiges): Suchbegriff + Preis + Zustand === */}
+                {(category === "Elektronik" || category === "Kleidung" || category === "Sport" || category === "Sonstiges") && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                    <p className="text-sm font-medium text-gray-800">{CATEGORIES[category]?.icon} {category}-Suche</p>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Suchbegriff *</label>
+                      <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Was suchst du?"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" required />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis von (CHF)</label>
+                        <input type="number" value={minPrice} onChange={(e) => setMinPrice(e.target.value)}
+                          placeholder="0" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Preis bis (CHF)</label>
+                        <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}
+                          placeholder="∞" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Zustand</label>
+                      <select value={condition} onChange={(e) => setCondition(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                        {CONDITIONS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
                   </div>
@@ -1260,10 +1387,11 @@ export default function PreisradarPage() {
                         const countryConfig = COUNTRY_PLATFORMS[p.country];
                         const isDisabled = "disabled" in p && p.disabled;
                         const disabledReason = "disabledReason" in p ? (p as { disabledReason?: string }).disabledReason : undefined;
+                        const isRestricted = RESTRICTED_PLATFORMS.has(p.id);
                         return (
                           <label
                             key={p.id}
-                            title={isDisabled ? `${p.name}: Temporär deaktiviert (${disabledReason || "Bot-Schutz"})` : p.name}
+                            title={isDisabled ? `${p.name}: Temporär deaktiviert (${disabledReason || "Bot-Schutz"})` : isRestricted ? `${p.name}: Eingeschränkt (Cloudflare-Schutz)` : p.name}
                             className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition ${
                               isDisabled
                                 ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-60"
@@ -1296,11 +1424,17 @@ export default function PreisradarPage() {
                               <span className="text-xs">{countryConfig.flag}</span>
                               <span className={`text-sm truncate ${isDisabled ? "line-through" : ""}`}>{p.name}</span>
                               {isDisabled && <span className="text-[10px] text-gray-400 ml-auto">⚠️</span>}
+                              {isRestricted && !isDisabled && <span className="text-[10px] text-amber-500 ml-auto" title="Cloudflare-Schutz kann Ergebnisse einschränken">⚡</span>}
                             </div>
                           </label>
                         );
                       })}
                     </div>
+                    {selectedPlatforms.some(p => RESTRICTED_PLATFORMS.has(p)) && (
+                      <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                        <span>⚡</span> Tutti.ch und Anibis.ch sind durch Cloudflare eingeschränkt — Ergebnisse können variieren.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1405,30 +1539,15 @@ export default function PreisradarPage() {
                         ? "bg-emerald-50 border-emerald-200"
                         : "bg-red-50 border-red-200"
                     }`}>
-                {/* Guthaben-Anzeige */}
-                <div className={`rounded-lg p-3 ${checkosBalance !== null && checkosBalance < currentCost ? "bg-red-50 border border-red-200" : "bg-emerald-50 border border-emerald-200"}`}>
-                  <p className={`text-sm font-medium ${checkosBalance !== null && checkosBalance < currentCost ? "text-red-700" : "text-emerald-700"}`}>
-                    💰 Dein Guthaben: <strong>{checkosBalance ?? 0} Checkos</strong>
-                    {checkosBalance !== null && checkosBalance < currentCost && (
-                      <span className="block mt-1 text-red-600">
-                        ⚠️ Nicht genug! Du brauchst {currentCost}, hast aber nur {checkosBalance}.{" "}
-                        <a href="/dashboard/checkos" className="underline font-bold">Checkos kaufen →</a>
-                      </span>
-                    )}
-                    {checkosBalance !== null && checkosBalance >= currentCost && (
-                      <span className="text-emerald-600"> ✅ Reicht</span>
-                    )}
-                  </p>
-                </div>
                       <div className="flex items-center justify-between">
                         <span className={`text-sm font-medium ${
                           checkosBalance >= currentCost ? "text-emerald-700" : "text-red-700"
                         }`}>
-                          Dein Guthaben: {checkosBalance} Checko{checkosBalance !== 1 ? "s" : ""}
+                          💰 Guthaben: {checkosBalance} Checko{checkosBalance !== 1 ? "s" : ""}
                         </span>
                         {checkosBalance >= currentCost ? (
                           <span className="text-xs font-medium text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
-                            ✓ Guthaben reicht
+                            ✓ Reicht
                           </span>
                         ) : (
                           <span className="text-xs font-medium text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
@@ -1439,7 +1558,7 @@ export default function PreisradarPage() {
                       {checkosBalance < currentCost && (
                         <div className="mt-2 pt-2 border-t border-red-200">
                           <p className="text-xs text-red-600 mb-2">
-                            Nicht genug Checkos! Du brauchst {currentCost}, hast aber nur {checkosBalance}.
+                            Du brauchst {currentCost}, hast aber nur {checkosBalance}.
                           </p>
                           <Link
                             href="/dashboard/checkos"
@@ -1471,7 +1590,7 @@ export default function PreisradarPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={creating || selectedPlatforms.length === 0 || (!query.trim() && !vehicleMake.trim())}
+                    disabled={creating || selectedPlatforms.length === 0 || !category || (!query.trim() && !vehicleMake.trim() && !propertyType)}
                     onClick={handleSaveDraft}
                     className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
@@ -1479,7 +1598,7 @@ export default function PreisradarPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={creating || selectedPlatforms.length === 0 || (!query.trim() && !vehicleMake.trim()) || (checkosBalance !== null && checkosBalance < currentCost)}
+                    disabled={creating || selectedPlatforms.length === 0 || !category || (!query.trim() && !vehicleMake.trim() && !propertyType) || (checkosBalance !== null && checkosBalance < currentCost)}
                     className="flex-1 py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
                     {creating ? "Wird erstellt..." : `🚀 Starten (${currentCost} 🦎)`}
@@ -1767,7 +1886,7 @@ export default function PreisradarPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={editing || editPlatforms.length === 0 || !editQuery.trim()}
+                    disabled={editing || editPlatforms.length === 0 || (!editQuery.trim() && !editVehicleMake.trim() && !editPropertyType)}
                     className="flex-1 py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {editing ? "Wird gespeichert..." : "Änderungen speichern"}

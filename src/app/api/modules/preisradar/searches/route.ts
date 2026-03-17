@@ -81,15 +81,20 @@ export async function POST(request: NextRequest) {
       furnitureType,
     } = parsed.data;
 
-    // Auto-fill query from vehicleMake + vehicleModel if empty
+    // Auto-fill query from structured fields if empty
     let finalQuery = query.trim();
     if (!finalQuery && vehicleMake) {
       finalQuery = vehicleMake;
       if (vehicleModel) finalQuery += ' ' + vehicleModel;
     }
+    if (!finalQuery && propertyType) {
+      const propLabels: Record<string, string> = { wohnung: "Wohnung", haus: "Haus", grundstueck: "Grundstück", gewerbe: "Gewerbe" };
+      const offerLabels: Record<string, string> = { miete: "Miete", kauf: "Kauf" };
+      finalQuery = [propLabels[propertyType] || propertyType, propertyOffer ? offerLabels[propertyOffer] || "" : "", searchLocation || ""].filter(Boolean).join(" ") || "Immobilie";
+    }
     if (!finalQuery || finalQuery.length < 2) {
       return NextResponse.json(
-        { error: "Suchbegriff oder Fahrzeug-Marke muss angegeben werden" },
+        { error: "Suchbegriff, Fahrzeug-Marke oder Immobilientyp muss angegeben werden" },
         { status: 400 }
       );
     }

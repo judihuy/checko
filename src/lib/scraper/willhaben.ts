@@ -24,11 +24,29 @@ export class WillhabenScraper extends BaseScraper {
         }
       }
       const encodedQuery = encodeURIComponent(enrichedQuery);
-      let searchUrl = `${this.baseUrl}/iad/kaufen-und-verkaufen/marktplatz?keyword=${encodedQuery}`;
+      
+      // Willhaben.at URL-Struktur:
+      // Allgemeine Suche: /iad/kaufen-und-verkaufen/marktplatz?keyword=X
+      // Auto-Suche: /iad/gebrauchtwagen/auto/gebraucht?keyword=X
+      // Immobilien: /iad/immobilien/mietwohnungen/mietwohnung-angebote OR /eigentumswohnungen
+      // Filter: PRICE_FROM, PRICE_TO, YEAR_MODEL_FROM, YEAR_MODEL_TO, KILOMETRES_FROM, KILOMETRES_TO
+      let basePath = "/iad/kaufen-und-verkaufen/marktplatz";
+      if (options?.category === "Fahrzeuge") {
+        basePath = "/iad/gebrauchtwagen/auto/gebraucht";
+      } else if (options?.category === "Immobilien") {
+        if (options?.propertyOffer === "miete") {
+          basePath = "/iad/immobilien/mietwohnungen/mietwohnung-angebote";
+        } else if (options?.propertyOffer === "kauf") {
+          basePath = "/iad/immobilien/eigentumswohnungen/eigentumswohnung-angebote";
+        } else {
+          basePath = "/iad/immobilien/haus-kaufen/haus-angebote";
+        }
+      }
+      
+      let searchUrl = `${this.baseUrl}${basePath}?keyword=${encodedQuery}`;
 
-      // Preisfilter
+      // Preisfilter (EUR — unsere Preise sind in CHF-Rappen, 1 CHF ≈ 0.96 EUR)
       if (options?.minPrice) {
-        // EUR Rappen → EUR: unsere Preise sind in CHF-Rappen
         const minEUR = Math.round((options.minPrice / 100) / 0.96);
         searchUrl += `&PRICE_FROM=${minEUR}`;
       }
@@ -36,6 +54,13 @@ export class WillhabenScraper extends BaseScraper {
         const maxEUR = Math.round((options.maxPrice / 100) / 0.96);
         searchUrl += `&PRICE_TO=${maxEUR}`;
       }
+
+      // Fahrzeug-spezifische Filter (Willhaben Parameter)
+      if (options?.yearFrom) searchUrl += `&YEAR_MODEL_FROM=${options.yearFrom}`;
+      if (options?.yearTo) searchUrl += `&YEAR_MODEL_TO=${options.yearTo}`;
+      // KM-Filter — jetzt mit FROM und TO!
+      if (options?.kmFrom) searchUrl += `&KILOMETRES_FROM=${options.kmFrom}`;
+      if (options?.kmTo) searchUrl += `&KILOMETRES_TO=${options.kmTo}`;
 
       console.log(`[Willhaben] Search URL: ${searchUrl}`);
 

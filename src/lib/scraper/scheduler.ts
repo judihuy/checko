@@ -10,6 +10,7 @@ import { sendPreisradarAlertEmail } from "@/lib/email-preisradar";
 import { createNotification } from "@/lib/notifications";
 import { getPlatformDisplayName } from "@/lib/platform-names";
 import { getSetting } from "@/lib/settings";
+import { filterWithAI } from "@/lib/scraper/ai-filter";
 
 // Basiskosten pro Dauer (Standard-Stufe)
 const DURATION_BASE_COSTS: Record<string, number> = {
@@ -135,7 +136,39 @@ export async function runSearchJob(searchId: string): Promise<{
     });
     const existingUrls = new Set(existingAlerts.map((a) => a.url));
 
-    const newResults = allResults.filter((r) => !existingUrls.has(r.url));
+    const newResultsBeforeAI = allResults.filter((r) => !existingUrls.has(r.url));
+
+    // KI-Nachfilterung: Claude Haiku prüft Relevanz jedes Ergebnisses
+    let newResults = newResultsBeforeAI;
+    try {
+      const aiFilterOptions = {
+        minPrice: search.minPrice || undefined,
+        maxPrice: search.maxPrice || undefined,
+        category: search.category || undefined,
+        subcategory: search.subcategory || undefined,
+        vehicleMake: search.vehicleMake || undefined,
+        vehicleModel: search.vehicleModel || undefined,
+        yearFrom: search.yearFrom || undefined,
+        yearTo: search.yearTo || undefined,
+        kmFrom: search.kmFrom || undefined,
+        kmTo: search.kmTo || undefined,
+        fuelType: search.fuelType || undefined,
+        transmission: search.transmission || undefined,
+        propertyType: search.propertyType || undefined,
+        propertyOffer: search.propertyOffer || undefined,
+        rooms: search.rooms || undefined,
+        areaM2: search.areaM2 || undefined,
+        location: search.location || undefined,
+        furnitureType: search.furnitureType || undefined,
+      };
+      newResults = await filterWithAI(newResultsBeforeAI, aiFilterOptions, search.query);
+      if (newResults.length < newResultsBeforeAI.length) {
+        console.log(`[Scheduler] KI-Filter: ${newResultsBeforeAI.length - newResults.length} irrelevante Ergebnisse entfernt`);
+      }
+    } catch (aiFilterError) {
+      console.warn("[Scheduler] KI-Filter fehlgeschlagen — alle Ergebnisse durchgelassen:", aiFilterError);
+      newResults = newResultsBeforeAI;
+    }
 
     // KI-Bewertung für neue Treffer — mit qualityTier!
     const alertsToCreate: Array<{

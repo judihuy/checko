@@ -23,16 +23,42 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
 
     try {
       // URL-Encoding: Leerzeichen → Bindestrich für Kleinanzeigen URL-Format
-      const urlQuery = query.trim().replace(/\s+/g, "-");
+      const urlQuery = enrichedQuery.trim().replace(/\s+/g, "-");
 
-      // Kleinanzeigen URL-Format: /s-preis:{min}:{max}/{query}/k0
+      // Kleinanzeigen.de URL-Format:
+      // Basis: /s-[kategorie/][preis:MIN:MAX/]suchbegriff/k0
+      // Kategorie: /s-autos/ für Autos, /s-motorraeder/ für Motorräder
+      // Preis: /s-preis:MIN:MAX/ (EUR!)
+      // Hinweis: km/Baujahr werden über UI-Filter gesteuert, NICHT als URL-Parameter.
+      // Die Filterung nach Baujahr/KM erfolgt daher über die KI-Nachfilterung.
+      let categoryPrefix = "";
+      if (options?.category === "Fahrzeuge") {
+        if (options?.subcategory === "Motorräder") {
+          categoryPrefix = "motorraeder/";
+        } else {
+          categoryPrefix = "autos/";
+        }
+      } else if (options?.category === "Immobilien") {
+        if (options?.propertyOffer === "miete") {
+          categoryPrefix = "wohnung-mieten/";
+        } else if (options?.propertyOffer === "kauf") {
+          categoryPrefix = "wohnung-kaufen/";
+        } else {
+          categoryPrefix = "immobilien/";
+        }
+      } else if (options?.category === "Möbel" || options?.category === "Haushalt") {
+        categoryPrefix = "zu-verschenken-tauschen/";
+      }
+
       let searchUrl: string;
-      if (options?.minPrice || options?.maxPrice) {
-        const minEUR = options.minPrice ? Math.round(options.minPrice / 100) : "";
-        const maxEUR = options.maxPrice ? Math.round(options.maxPrice / 100) : "";
-        searchUrl = `${this.baseUrl}/s-preis:${minEUR}:${maxEUR}/${urlQuery}/k0`;
+      // CHF → EUR Umrechnung (1 CHF ≈ 1.04 EUR, vereinfacht 1:1)
+      const minEUR = options?.minPrice ? Math.round(options.minPrice / 100) : "";
+      const maxEUR = options?.maxPrice ? Math.round(options.maxPrice / 100) : "";
+
+      if (minEUR || maxEUR) {
+        searchUrl = `${this.baseUrl}/s-${categoryPrefix}preis:${minEUR}:${maxEUR}/${urlQuery}/k0`;
       } else {
-        searchUrl = `${this.baseUrl}/s-${urlQuery}/k0`;
+        searchUrl = `${this.baseUrl}/s-${categoryPrefix}${urlQuery}/k0`;
       }
 
       console.log(`[eBay KA] Search URL: ${searchUrl}`);

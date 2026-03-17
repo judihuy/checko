@@ -1,8 +1,30 @@
 // AutoScout24.ch Scraper — Puppeteer-basiert
 // Nutzt headless Chromium um die React-RSC-Seite zu rendern
-// Such-URL: https://www.autoscout24.ch/de/s?q={query}
+// URL-Format mit echten Filtern:
+// - Make/Model: /de/s/mo-{model}/mk-{make}
+// - Year: ?yearFrom=X&yearTo=Y (legacy) ODER ?fregfrom=X&fregto=Y
+// - KM: ?kmto=X (Kilometer bis)
+// - Preis: ?pricefrom=X&priceto=Y
+// - Treibstoff: ?fst=p (benzin), d (diesel), e (elektro), h (hybrid)
+// - Getriebe: ?atype=M (manuell), A (automatik)
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
+
+// Fuel type mapping: internal → AutoScout24 URL code
+const FUEL_TYPE_MAP: Record<string, string> = {
+  benzin: "B",
+  diesel: "D",
+  elektro: "E",
+  hybrid: "H",
+  "plug-in-hybrid": "H",
+  gas: "L", // LPG
+};
+
+// Transmission mapping: internal → AutoScout24 URL code
+const TRANSMISSION_MAP: Record<string, string> = {
+  manuell: "M",
+  automat: "A",
+};
 
 export class AutoScoutScraper extends BaseScraper {
   readonly platform = "autoscout";
@@ -18,7 +40,6 @@ export class AutoScoutScraper extends BaseScraper {
       let searchUrl: string;
       if (options?.vehicleMake) {
         const make = options.vehicleMake.toLowerCase().replace(/\s+/g, "-");
-        // AutoScout24 URL: /de/s/mo-{model}/mk-{make} or /de/s/mk-{make}
         if (options.vehicleModel) {
           const model = options.vehicleModel.toLowerCase().replace(/\s+/g, "-");
           searchUrl = `${this.baseUrl}/de/s/mo-${encodeURIComponent(model)}/mk-${encodeURIComponent(make)}`;
@@ -26,16 +47,44 @@ export class AutoScoutScraper extends BaseScraper {
           searchUrl = `${this.baseUrl}/de/s/mk-${encodeURIComponent(make)}`;
         }
       } else {
-        // Fallback: free-text search
         searchUrl = `${this.baseUrl}/de/s?q=${encodeURIComponent(query)}`;
       }
 
-      // yearFrom/yearTo als URL-Parameter anhängen
+      // Echte AutoScout24 URL-Parameter für Filter
+      // Verifizierte Parameter (autoscout24.ch/lst + autoscout24.ch/de/s):
+      // - Baujahr: fregfrom / fregto (first registration)
+      // - KM: kmfrom / kmto
+      // - Preis: pricefrom / priceto (in CHF)
+      // - Treibstoff: fuel (B=Benzin, D=Diesel, E=Elektro, H=Hybrid, L=Gas)
+      // - Getriebe: gear (M=Manuell, A=Automatik)
+      // - Zustand: ustate (N=Neu, U=Occasion)
+      // - Sortierung: sort (standard)
       const urlParams = new URLSearchParams();
-      if (options?.yearFrom) urlParams.set("yearFrom", String(options.yearFrom));
-      if (options?.yearTo) urlParams.set("yearTo", String(options.yearTo));
-      if (options?.kmFrom) urlParams.set("kmFrom", String(options.kmFrom));
-      if (options?.kmTo) urlParams.set("kmTo", String(options.kmTo));
+
+      // Baujahr-Filter (fregfrom/fregto = first registration year)
+      if (options?.yearFrom) urlParams.set("fregfrom", String(options.yearFrom));
+      if (options?.yearTo) urlParams.set("fregto", String(options.yearTo));
+
+      // KM-Filter — JETZT mit echten Parameternamen!
+      if (options?.kmFrom) urlParams.set("kmfrom", String(options.kmFrom));
+      if (options?.kmTo) urlParams.set("kmto", String(options.kmTo));
+
+      // Preis-Filter (in CHF — Preise kommen als Rappen rein)
+      if (options?.minPrice) urlParams.set("pricefrom", String(Math.round(options.minPrice / 100)));
+      if (options?.maxPrice) urlParams.set("priceto", String(Math.round(options.maxPrice / 100)));
+
+      // Treibstoff-Filter
+      if (options?.fuelType && FUEL_TYPE_MAP[options.fuelType]) {
+        urlParams.set("fuel", FUEL_TYPE_MAP[options.fuelType]);
+      }
+
+      // Getriebe-Filter
+      if (options?.transmission && TRANSMISSION_MAP[options.transmission]) {
+        urlParams.set("gear", TRANSMISSION_MAP[options.transmission]);
+      }
+
+      // Zielland Schweiz
+      urlParams.set("cy", "CH");
 
       const paramStr = urlParams.toString();
       if (paramStr) {
@@ -139,7 +188,7 @@ export class AutoScoutScraper extends BaseScraper {
         console.log(`[AutoScout] ${scraped.length} listings found`);
 
         for (const item of scraped) {
-          // Price filter
+          // Price filter (Doppelt-Check — URL-Parameter sollten schon filtern)
           if (options?.minPrice && item.price < options.minPrice) continue;
           if (options?.maxPrice && item.price > options.maxPrice) continue;
 

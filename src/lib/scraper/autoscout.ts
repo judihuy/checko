@@ -1,8 +1,9 @@
-// AutoScout24.ch Scraper — HTTP-basiert (kein Puppeteer!)
+// AutoScout24.ch Scraper — NUR HTTP-basiert (kein Puppeteer/Browser!)
 // Nutzt curl-L-äquivalentes HTTP-Fetch mit Redirect-Following.
 // AutoScout24 liefert serverseitig gerendertes HTML mit eingebetteten
 // React Server Components (RSC flight data), die Listing-Daten enthalten.
-// Fallback: JSON-LD Parsing.
+// Fallback-Kette: RSC flight data → HTML listing links → JSON-LD.
+// Kein Browser-Automation — wenn HTTP nichts liefert, lieber 0 Treffer.
 //
 // URL-Format:
 // - Make/Model: /de/s/mo-{model}/mk-{make}
@@ -106,26 +107,11 @@ export class AutoScoutScraper extends BaseScraper {
 
       console.log(`[AutoScout] Search URL: ${searchUrl}`);
 
-      // Methode 1 (PRIMÄR): HTTP fetch mit Redirect-Following
+      // HTTP fetch mit Redirect-Following (kein Browser-Fallback!)
       const httpResults = await this.scrapeViaHttp(searchUrl, options);
       if (httpResults.length > 0) {
         console.log(`[AutoScout] ✅ HTTP: ${httpResults.length} Ergebnisse`);
         return httpResults;
-      }
-
-      // Methode 2 (FALLBACK): Headless Browser (Puppeteer) — bypasses Cloudflare
-      try {
-        console.log(`[AutoScout] HTTP lieferte 0 Treffer → versuche Browser-Fallback...`);
-        const browserResults = await this.scrapeViaBrowser(searchUrl, options);
-        if (browserResults.length > 0) {
-          console.log(`[AutoScout] ✅ Browser: ${browserResults.length} Ergebnisse`);
-          return browserResults;
-        }
-      } catch (browserError) {
-        console.warn(
-          `[AutoScout] Browser-Fallback fehlgeschlagen:`,
-          browserError instanceof Error ? browserError.message : String(browserError)
-        );
       }
 
       console.warn(`[AutoScout] ⚠️ Keine Ergebnisse`);
@@ -135,30 +121,6 @@ export class AutoScoutScraper extends BaseScraper {
       console.error(`[AutoScout] Scraper-Fehler: ${reason}`);
       return [];
     }
-  }
-
-  /**
-   * AutoScout24 per Headless-Browser (Puppeteer Stealth) laden.
-   * Umgeht Cloudflare-Challenge. Fallback wenn HTTP 403 kommt.
-   */
-  private async scrapeViaBrowser(searchUrl: string, options?: ScraperOptions): Promise<ScraperResult[]> {
-    const html = await this.fetchWithBrowserNoProxy(searchUrl);
-
-    if (html.length < 5000) {
-      console.warn(`[AutoScout] Browser: Sehr kurze Antwort (${html.length} bytes)`);
-      return [];
-    }
-
-    // Try RSC flight data first
-    const rscResults = this.parseRscFlightData(html, options);
-    if (rscResults.length > 0) return rscResults;
-
-    // Fallback: HTML listing links
-    const htmlResults = this.parseHtmlListings(html, options);
-    if (htmlResults.length > 0) return htmlResults;
-
-    // Fallback: JSON-LD
-    return this.parseJsonLd(html, options);
   }
 
   /**

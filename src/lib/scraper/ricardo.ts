@@ -193,17 +193,11 @@ export class RicardoScraper extends BaseScraper {
     console.log(`[Ricardo] API: ${data.articles.length} Artikel (total: ${data.totalArticlesCount})`);
 
     for (const article of data.articles) {
-      // Vehicle search: post-filter by title relevance
-      // Ricardo's general search returns everything — filter out irrelevant items
+      // Vehicle search: nur offensichtlichen Müll rausfiltern.
+      // KEIN harter Titel-Match! Die KI-Relevanzprüfung (ai-filter) übernimmt
+      // die eigentliche Filterung. Hier nur klar erkennbare Nicht-Fahrzeuge entfernen,
+      // damit keine echten Treffer verloren gehen.
       if (isVehicleSearch) {
-        const titleLower = article.title.toLowerCase();
-        const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
-        // At least one significant query word must appear in the title
-        const hasRelevantWord = queryWords.some(w => titleLower.includes(w));
-        if (!hasRelevantWord) {
-          continue; // Skip irrelevant results like "Laminiergerät" or "Pokemon"
-        }
-        // Also skip known non-vehicle items (model cars, toys, accessories, etc.)
         const NON_VEHICLE_KEYWORDS = [
           /modellauto/i, /spielzeug/i, /poster/i, /prospekt/i, /katalog/i,
           /schlüsselanhänger/i, /aufkleber/i, /t-shirt/i, /tasse\b/i,
@@ -212,8 +206,7 @@ export class RicardoScraper extends BaseScraper {
           /1[:/]\s*\d{2}\b/i, /miniatur/i, /pokemon/i, /karte\b/i, /card\b/i,
           /lamini/i, /laminier/i,
         ];
-        const fullText = `${article.title}`;
-        if (NON_VEHICLE_KEYWORDS.some(pattern => pattern.test(fullText))) {
+        if (NON_VEHICLE_KEYWORDS.some(pattern => pattern.test(article.title))) {
           console.log(`[Ricardo] Skipping non-vehicle: "${article.title.substring(0, 60)}"`);
           continue;
         }

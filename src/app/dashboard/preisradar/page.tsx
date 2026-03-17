@@ -164,10 +164,10 @@ const QUALITY_TIERS = [
   {
     id: "pro",
     name: "Pro",
-    desc: "Echtzeit — alle 5 Minuten",
+    desc: "Echtzeit — alle 15 Minuten",
     multiplier: 4,
-    interval: 5,
-    intervalLabel: "Alle 5 Minuten",
+    interval: 15,
+    intervalLabel: "Alle 15 Minuten",
     model: "Pro",
   },
 ];

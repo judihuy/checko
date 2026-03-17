@@ -15,7 +15,7 @@ import { repairSearchQuery } from "@/lib/utils";
 const TIER_INTERVALS: Record<string, number> = {
   standard: 1440, // Alle 24 Stunden
   premium: 720,   // Alle 12 Stunden
-  pro: 5,         // Alle 5 Minuten
+  pro: 15,        // Alle 15 Minuten
 };
 
 // Zod-Schema für neue Suche
@@ -26,7 +26,7 @@ const createSearchSchema = z.object({
   platforms: z.array(z.enum(["tutti", "ricardo", "carforyou", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"])).min(1, "Mindestens 1 Plattform wählen"),
   duration: z.enum(["1d", "1w", "1m"]).default("1d"),
   qualityTier: z.enum(["standard", "premium", "pro"]).default("standard"),
-  interval: z.number().int().min(5).max(1440).optional(),
+  interval: z.number().int().min(15).max(1440).optional(),
   category: z.string().max(100).optional(),
   subcategory: z.string().max(100).optional(),
   condition: z.string().max(50).optional(),

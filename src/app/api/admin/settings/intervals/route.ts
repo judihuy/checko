@@ -30,14 +30,14 @@ export async function GET(request: Request) {
     const [standardStr, premiumStr, proStr] = await Promise.all([
       getSetting("preisradar_standard_interval", "30"),
       getSetting("preisradar_premium_interval", "15"),
-      getSetting("preisradar_pro_interval", "5"),
+      getSetting("preisradar_pro_interval", "15"),
     ]);
 
     return NextResponse.json({
       settings: {
         standardInterval: parseInt(standardStr, 10) || 30,
         premiumInterval: parseInt(premiumStr, 10) || 15,
-        proInterval: parseInt(proStr, 10) || 5,
+        proInterval: parseInt(proStr, 10) || 15,
       },
     });
   } catch (error) {
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 const intervalSchema = z.object({
   standardInterval: z.number().int().min(5).max(120),
   premiumInterval: z.number().int().min(5).max(120),
-  proInterval: z.number().int().min(1).max(120),
+  proInterval: z.number().int().min(15).max(120),
 });
 
 export async function PUT(request: Request) {

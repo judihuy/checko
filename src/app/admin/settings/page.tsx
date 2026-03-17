@@ -29,7 +29,7 @@ export default function AdminSettingsPage() {
   const [intervalSettings, setIntervalSettings] = useState<IntervalSettings>({
     standardInterval: 30,
     premiumInterval: 15,
-    proInterval: 5,
+    proInterval: 15,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -419,13 +419,13 @@ export default function AdminSettingsPage() {
                 </label>
                 <input
                   type="number"
-                  min={1}
+                  min={15}
                   max={120}
                   value={intervalSettings.proInterval}
                   onChange={(e) =>
                     setIntervalSettings((s) => ({
                       ...s,
-                      proInterval: parseInt(e.target.value) || 5,
+                      proInterval: parseInt(e.target.value) || 15,
                     }))
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

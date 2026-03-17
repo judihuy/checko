@@ -342,10 +342,10 @@ export default function PreisradarAlertsPage() {
             </div>
 
             {/* Filter + Gespeichert-Link */}
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 sm:gap-2 flex-wrap">
               <button
                 onClick={() => { setFilter("all"); setPage(1); }}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
                   filter === "all"
                     ? "bg-emerald-600 text-white"
                     : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
@@ -355,7 +355,7 @@ export default function PreisradarAlertsPage() {
               </button>
               <button
                 onClick={() => { setFilter("unseen"); setPage(1); }}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
                   filter === "unseen"
                     ? "bg-emerald-600 text-white"
                     : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
@@ -365,9 +365,9 @@ export default function PreisradarAlertsPage() {
               </button>
               <Link
                 href="/dashboard/preisradar/saved"
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition flex items-center gap-1"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition flex items-center gap-1"
               >
-                🔖 Gespeichert {savedAlertIds.size > 0 && (
+                🔖 <span className="hidden sm:inline">Gespeichert</span> {savedAlertIds.size > 0 && (
                   <span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full text-xs font-bold">
                     {savedAlertIds.size}
                   </span>
@@ -497,8 +497,9 @@ export default function PreisradarAlertsPage() {
                           )}
 
                           {/* Suche + Datum */}
-                          <div className="text-xs text-gray-400 mt-1">
-                            &ldquo;{alert.searchQuery}&rdquo; · Gefunden am {formatDate(alert.createdAt)}
+                          <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+                            <div>&ldquo;{alert.searchQuery}&rdquo;</div>
+                            <div>📅 Gefunden am {formatDate(alert.createdAt)}</div>
                           </div>
                         </div>
                       </div>
@@ -593,12 +594,12 @@ export default function PreisradarAlertsPage() {
                       )}
 
                       {/* Aktionen */}
-                      <div className="flex gap-2 pt-3 mt-3 border-t border-gray-100">
+                      <div className="flex gap-1.5 sm:gap-2 pt-3 mt-3 border-t border-gray-100 flex-wrap">
                         {/* Bookmark-Button */}
                         <button
                           onClick={() => handleToggleSave(alert.id)}
                           disabled={savingIds.has(alert.id)}
-                          className={`text-xs py-2 px-2.5 rounded-lg font-medium transition ${
+                          className={`text-xs py-1.5 sm:py-2 px-2 rounded-lg font-medium transition ${
                             savedAlertIds.has(alert.id)
                               ? "bg-yellow-50 text-yellow-600 hover:bg-yellow-100"
                               : "bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
@@ -612,16 +613,16 @@ export default function PreisradarAlertsPage() {
                           href={alert.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 text-center text-xs py-2 rounded-lg font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
+                          className="flex-1 min-w-0 text-center text-xs py-1.5 sm:py-2 rounded-lg font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition truncate"
                         >
-                          🔗 Anzeige öffnen
+                          🔗 Öffnen
                         </a>
 
                         {/* Detail-Analyse Button */}
                         <button
                           onClick={() => handleDetailAnalyze(alert.id)}
                           disabled={analyzingIds.has(alert.id)}
-                          className={`text-xs py-2 px-3 rounded-lg font-medium transition ${
+                          className={`text-xs py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg font-medium transition truncate ${
                             alert.detailAnalysis
                               ? expandedIds.has(alert.id)
                                 ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
@@ -636,19 +637,19 @@ export default function PreisradarAlertsPage() {
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                               </svg>
-                              Analysiere...
+                              ...
                             </span>
                           ) : alert.detailAnalysis ? (
-                            expandedIds.has(alert.id) ? "▲ Analyse" : "▼ Analyse"
+                            expandedIds.has(alert.id) ? "▲" : "▼ Analyse"
                           ) : (
-                            "🔍 Detail-Analyse (1 Checko)"
+                            "🔍 1🦎"
                           )}
                         </button>
 
                         {!alert.isSeen && (
                           <button
                             onClick={() => handleMarkAsSeen(alert.id)}
-                            className="text-xs py-2 px-3 rounded-lg font-medium bg-gray-50 text-gray-600 hover:bg-gray-100 transition"
+                            className="text-xs py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg font-medium bg-gray-50 text-gray-600 hover:bg-gray-100 transition"
                           >
                             ✓
                           </button>

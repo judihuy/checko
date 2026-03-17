@@ -33,8 +33,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de">
-      <body className={`${inter.variable} font-sans antialiased bg-gray-50 text-gray-900 overflow-x-hidden`}>
+    <html lang="de" className="overflow-x-hidden">
+      <body className={`${inter.variable} font-sans antialiased bg-gray-50 text-gray-900 overflow-x-hidden max-w-[100vw]`}>
         <Providers>
           {children}
           <CookieBanner />

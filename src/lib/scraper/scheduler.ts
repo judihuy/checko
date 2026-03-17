@@ -129,6 +129,26 @@ export async function runSearchJob(searchId: string): Promise<{
       }
     }
 
+    // === SERVER-SIDE STRICT PRICE + YEAR FILTER ===
+    // Even if scrapers already filter, we double-check here to ensure
+    // no premium/spotlight/overpriced results slip through
+    const filteredResults = allResults.filter((r) => {
+      // Strict price filter: reject anything over maxPrice
+      if (search.maxPrice && r.price > 0 && r.price > search.maxPrice) {
+        console.log(`[Scheduler] Price filter: "${r.title.substring(0, 50)}" price ${r.price} > max ${search.maxPrice} → REMOVED`);
+        return false;
+      }
+      // Strict minPrice filter
+      if (search.minPrice && r.price > 0 && r.price < search.minPrice) {
+        return false;
+      }
+      return true;
+    });
+
+    if (filteredResults.length < allResults.length) {
+      console.log(`[Scheduler] Server-side price filter removed ${allResults.length - filteredResults.length} results`);
+    }
+
     // Duplikate filtern (gleicher Titel + Preis + Plattform)
     const existingAlerts = await prisma.preisradarAlert.findMany({
       where: { searchId },
@@ -136,7 +156,7 @@ export async function runSearchJob(searchId: string): Promise<{
     });
     const existingUrls = new Set(existingAlerts.map((a) => a.url));
 
-    const newResultsBeforeAI = allResults.filter((r) => !existingUrls.has(r.url));
+    const newResultsBeforeAI = filteredResults.filter((r) => !existingUrls.has(r.url));
 
     // KI-Nachfilterung: Claude Haiku prüft Relevanz jedes Ergebnisses
     let newResults = newResultsBeforeAI;
@@ -177,6 +197,7 @@ export async function runSearchJob(searchId: string): Promise<{
       platform: string;
       url: string;
       imageUrl: string | null;
+      description: string | null;
       priceScore: string | null;
       aiAnalysis: string | null;
       isScam: boolean;
@@ -192,7 +213,7 @@ export async function runSearchJob(searchId: string): Promise<{
           result.price,
           result.platform,
           categoryLabel,
-          undefined,
+          result.description || undefined,
           search.qualityTier
         );
 
@@ -202,6 +223,7 @@ export async function runSearchJob(searchId: string): Promise<{
           platform: result.platform,
           url: result.url,
           imageUrl: result.imageUrl,
+          description: result.description || null,
           priceScore: String(analysis.priceScore),
           aiAnalysis: JSON.stringify({
             bewertung: analysis.bewertung,
@@ -219,6 +241,7 @@ export async function runSearchJob(searchId: string): Promise<{
           platform: result.platform,
           url: result.url,
           imageUrl: result.imageUrl,
+          description: result.description || null,
           priceScore: null,
           aiAnalysis: null,
           isScam: false,
@@ -244,7 +267,7 @@ export async function runSearchJob(searchId: string): Promise<{
       data: { lastScrapedAt: new Date() },
     });
 
-    // In-App Benachrichtigungen erstellen für neue Treffer
+    // In-App Benachrichtigungen erstellen für neue Treffer (mit Bild)
     if (newAlerts > 0) {
       for (const alert of alertsToCreate) {
         try {
@@ -259,7 +282,9 @@ export async function runSearchJob(searchId: string): Promise<{
             "preisradar_alert",
             `Neuer Treffer: ${alert.title}`,
             `${priceFormatted} auf ${getPlatformDisplayName(alert.platform)}${scoreText}`,
-            alert.url
+            alert.url,
+            undefined,
+            alert.imageUrl || undefined
           );
         } catch (notifError) {
           errors.push(`Benachrichtigung erstellen fehlgeschlagen: ${notifError instanceof Error ? notifError.message : String(notifError)}`);

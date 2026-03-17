@@ -254,11 +254,15 @@ export class RicardoScraper extends BaseScraper {
             // Bild (robust)
             const imageUrl = this.extractImageUrl(item.image);
 
+            // Description aus JSON-LD extrahieren
+            const description = (item.description || item.disambiguatingDescription || "") as string;
+
             results.push({
               title,
               price,
               url: fullUrl,
               imageUrl,
+              description: description ? description.substring(0, 500) : undefined,
               platform: this.platform,
               scrapedAt: new Date(),
             });

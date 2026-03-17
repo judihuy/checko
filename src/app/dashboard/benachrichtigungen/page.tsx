@@ -14,6 +14,7 @@ interface Notification {
   title: string;
   message: string;
   link: string | null;
+  imageUrl: string | null;
   isRead: boolean;
   createdAt: string;
 }
@@ -255,47 +256,47 @@ export default function BenachrichtigungenPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col overflow-x-hidden">
       <Navbar />
-      <main className="flex-1 py-8">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <main className="flex-1 py-8 overflow-x-hidden">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">🔔 Benachrichtigungen</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">🔔 Benachrichtigungen</h1>
           <p className="text-gray-500 text-sm mt-1">
             {total} Benachrichtigung{total !== 1 ? "en" : ""}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap justify-end">
+        <div className="flex gap-2 flex-wrap">
           {hasRead && (
             <button
               onClick={handleDeleteAllRead}
               disabled={bulkDeleting}
-              className="px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition font-medium disabled:opacity-50"
+              className="px-3 py-1.5 text-xs sm:text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition font-medium disabled:opacity-50 whitespace-nowrap"
             >
-              {bulkDeleting ? "Löscht..." : "🗑 Gelesene löschen"}
+              {bulkDeleting ? "Löscht..." : "🗑 Gelesene"}
             </button>
           )}
           {hasUnread && (
             <button
               onClick={handleMarkAllAsRead}
-              className="px-4 py-2 text-sm text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition font-medium"
+              className="px-3 py-1.5 text-xs sm:text-sm text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition font-medium whitespace-nowrap"
             >
-              Alle als gelesen markieren
+              ✓ Alle gelesen
             </button>
           )}
           <Link
             href="/dashboard/einstellungen"
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition"
+            className="px-3 py-1.5 text-xs sm:text-sm text-gray-600 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition whitespace-nowrap"
           >
-            ⚙️ Einstellungen
+            ⚙️
           </Link>
         </div>
       </div>
 
-      {/* Kategorie-Filter-Tabs */}
-      <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
+      {/* Kategorie-Filter-Tabs — scrollbar auf Mobile */}
+      <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-none">
         {CATEGORY_TABS.map((tab) => (
           <button
             key={tab.id}
@@ -303,7 +304,7 @@ export default function BenachrichtigungenPage() {
               setCategoryFilter(tab.id);
               setPage(0);
             }}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition ${
+            className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${
               categoryFilter === tab.id
                 ? "bg-emerald-600 text-white"
                 : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
@@ -389,10 +390,32 @@ export default function BenachrichtigungenPage() {
                   />
                 </div>
 
-                {/* Icon */}
-                <span className="text-xl flex-shrink-0 mt-0.5">
-                  {getIcon(n.type)}
-                </span>
+                {/* Thumbnail or Icon */}
+                {n.imageUrl ? (
+                  <div className="w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
+                    <img
+                      src={n.imageUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.classList.add("flex", "items-center", "justify-center");
+                          const icon = document.createElement("span");
+                          icon.className = "text-xl";
+                          icon.textContent = getIcon(n.type);
+                          parent.appendChild(icon);
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <span className="text-xl flex-shrink-0 mt-0.5">
+                    {getIcon(n.type)}
+                  </span>
+                )}
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">

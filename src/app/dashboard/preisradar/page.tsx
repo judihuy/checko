@@ -967,7 +967,7 @@ export default function PreisradarPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     1. Kategorie wählen *
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
                     {Object.entries(CATEGORIES).map(([cat, config]) => (
                       <button
                         key={cat}
@@ -992,14 +992,14 @@ export default function PreisradarPage() {
                           setQuery("");
                           // Preis behalten: ist kategorie-übergreifend sinnvoll
                         }}
-                        className={`flex flex-col items-center gap-1 py-3 px-2 rounded-lg border text-center transition ${
+                        className={`flex flex-col items-center gap-0.5 py-2 sm:py-3 px-1 sm:px-2 rounded-lg border text-center transition overflow-hidden ${
                           category === cat
                             ? "border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200"
                             : "border-gray-200 hover:border-gray-300 text-gray-600"
                         }`}
                       >
-                        <span className="text-xl">{config.icon}</span>
-                        <span className="text-xs font-medium">{cat}</span>
+                        <span className="text-lg sm:text-xl">{config.icon}</span>
+                        <span className="text-[10px] sm:text-xs font-medium leading-tight truncate w-full">{cat}</span>
                       </button>
                     ))}
                   </div>
@@ -1354,14 +1354,14 @@ export default function PreisradarPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Welche Länder durchsuchen?
                   </label>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mb-3">
                     {(Object.entries(COUNTRY_PLATFORMS) as [CountryCode, typeof COUNTRY_PLATFORMS[CountryCode]][]).map(([code, config]) => (
                       <button
                         key={code}
                         type="button"
                         onClick={() => handleCountryToggle(code)}
                         disabled={!config.enabled}
-                        className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm font-medium transition ${
+                        className={`flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg border text-xs sm:text-sm font-medium transition ${
                           !config.enabled
                             ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
                             : selectedCountries.has(code)
@@ -1370,9 +1370,9 @@ export default function PreisradarPage() {
                         }`}
                       >
                         <span>{config.flag}</span>
-                        <span>{config.label}</span>
+                        <span className="truncate">{config.label}</span>
                         {!config.enabled && (
-                          <span className="text-[10px] text-gray-400 ml-0.5">(Demnächst)</span>
+                          <span className="text-[10px] text-gray-400 hidden sm:inline">(Demnächst)</span>
                         )}
                       </button>
                     ))}
@@ -1442,13 +1442,13 @@ export default function PreisradarPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Qualitätsstufe & Scan-Intervall
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     {QUALITY_TIERS.map((tier) => (
                       <button
                         key={tier.id}
                         type="button"
                         onClick={() => setQualityTier(tier.id)}
-                        className={`py-3 px-2 rounded-lg border text-center transition ${
+                        className={`py-2 sm:py-3 px-1 sm:px-2 rounded-lg border text-center transition overflow-hidden ${
                           qualityTier === tier.id
                             ? tier.id === "pro"
                               ? "border-purple-500 bg-purple-50 text-purple-700"
@@ -1458,16 +1458,13 @@ export default function PreisradarPage() {
                             : "border-gray-200 hover:border-gray-300"
                         }`}
                       >
-                        <div className="font-medium text-sm">{tier.name}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{tier.desc}</div>
-                        <div className="text-xs font-semibold mt-1">
+                        <div className="font-medium text-xs sm:text-sm truncate">{tier.name}</div>
+                        <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5 truncate">{tier.desc}</div>
+                        <div className="text-[10px] sm:text-xs font-semibold mt-1 truncate">
                           🔄 {tier.intervalLabel}
                         </div>
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          🤖 {tier.model}
-                        </div>
-                        <div className="text-xs font-semibold mt-1">
-                          {tier.checkos} Checko{tier.checkos > 1 ? "s" : ""}
+                        <div className="text-[10px] sm:text-xs font-semibold mt-1">
+                          {tier.checkos} 🦎
                         </div>
                       </button>
                     ))}
@@ -1479,7 +1476,7 @@ export default function PreisradarPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Dauer
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     {DURATIONS.map((d) => {
                       const baseCost = DURATION_BASE_COSTS[d.id] || 2;
                       const qualityCost = QUALITY_CHECKO_COSTS[qualityTier] || 2;
@@ -1490,15 +1487,15 @@ export default function PreisradarPage() {
                           key={d.id}
                           type="button"
                           onClick={() => setDuration(d.id)}
-                          className={`py-3 px-2 rounded-lg border text-center transition ${
+                          className={`py-2 sm:py-3 px-1 sm:px-2 rounded-lg border text-center transition ${
                             duration === d.id
                               ? "border-emerald-500 bg-emerald-50 text-emerald-700"
                               : "border-gray-200 hover:border-gray-300"
                           }`}
                         >
-                          <div className="font-medium text-sm">{d.name}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {cost} Checko{cost > 1 ? "s" : ""}
+                          <div className="font-medium text-xs sm:text-sm">{d.name}</div>
+                          <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+                            {cost} 🦎
                           </div>
                         </button>
                       );
@@ -1583,24 +1580,24 @@ export default function PreisradarPage() {
                   <button
                     type="button"
                     onClick={() => { setShowModal(false); setError(null); }}
-                    className="py-3 px-4 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition text-sm"
+                    className="py-3 px-2 sm:px-4 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition text-xs sm:text-sm whitespace-nowrap"
                   >
-                    Abbrechen
+                    ✕
                   </button>
                   <button
                     type="button"
                     disabled={creating || selectedPlatforms.length === 0 || !category || (!query.trim() && !vehicleMake.trim() && !propertyType)}
                     onClick={handleSaveDraft}
-                    className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    className="flex-1 py-3 px-2 sm:px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm whitespace-nowrap"
                   >
-                    {creating ? "Wird gespeichert..." : "💾 Speichern"}
+                    {creating ? "..." : "💾 Speichern"}
                   </button>
                   <button
                     type="submit"
                     disabled={creating || selectedPlatforms.length === 0 || !category || (!query.trim() && !vehicleMake.trim() && !propertyType) || (checkosBalance !== null && checkosBalance < currentCost)}
-                    className="flex-1 py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    className="flex-1 py-3 px-2 sm:px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm whitespace-nowrap"
                   >
-                    {creating ? "Wird erstellt..." : `🚀 Starten (${currentCost} 🦎)`}
+                    {creating ? "..." : `🚀 Starten (${currentCost} 🦎)`}
                   </button>
                 </div>
               </form>

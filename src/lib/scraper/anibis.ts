@@ -160,11 +160,15 @@ export class AnibisScraper extends BaseScraper {
               imageUrl = ((item.image as Record<string, unknown>).url as string) || null;
             }
 
+            // Description
+            const description = (item.description || "") as string;
+
             results.push({
               title,
               price,
               url: fullUrl,
               imageUrl,
+              description: description ? description.substring(0, 500) : undefined,
               platform: this.platform,
               scrapedAt: new Date(),
             });

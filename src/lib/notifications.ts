@@ -22,7 +22,8 @@ export async function createNotification(
   title: string,
   message: string,
   link?: string,
-  category?: string
+  category?: string,
+  imageUrl?: string
 ) {
   return prisma.notification.create({
     data: {
@@ -32,6 +33,7 @@ export async function createNotification(
       message,
       link: link || null,
       category: category || inferCategory(type),
+      imageUrl: imageUrl || null,
     },
   });
 }

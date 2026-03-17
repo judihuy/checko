@@ -228,6 +228,7 @@ model Notification {
   title     String   @db.Text
   message   String   @db.Text
   link      String?  @db.Text // Optional: Link zum Treffer/Seite
+  imageUrl  String?  @db.Text // Optional: Thumbnail-Bild
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -320,6 +321,7 @@ model PreisradarAlert {
   platform   String           @db.Text
   url        String           @db.Text
   imageUrl   String?          @db.Text
+  description String?         @db.Text
   priceScore String?          @db.Text
   aiAnalysis String?          @db.Text
   isScam         Boolean          @default(false)

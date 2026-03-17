@@ -393,27 +393,27 @@ function CheckosKaufContent() {
           </div>
 
           {/* Rabatt-Staffeln */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mb-6 mt-8">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mb-6 mt-8 max-w-full overflow-hidden">
             {PRICE_TIERS.map((tier) => {
               const isActive = sliderAmount >= tier.min && sliderAmount <= tier.max;
               return (
                 <div
                   key={tier.min}
-                  className={`text-center py-2 px-1 rounded-lg text-xs transition ${
+                  className={`text-center py-2 px-1 rounded-lg text-[11px] sm:text-xs transition overflow-hidden ${
                     isActive
                       ? "bg-emerald-100 border border-emerald-300 text-emerald-800 font-semibold"
                       : "bg-gray-50 text-gray-500"
                   }`}
                 >
-                  <div className="font-medium">
+                  <div className="font-medium truncate">
                     {tier.min}–{tier.max === Infinity ? "500+" : tier.max}
                   </div>
-                  <div>
+                  <div className="truncate">
                     {tier.discountPercent > 0
-                      ? `${tier.discountPercent}% Rabatt`
-                      : "Kein Rabatt"}
+                      ? `${tier.discountPercent}%`
+                      : "0%"}
                   </div>
-                  <div className="text-xs opacity-75">
+                  <div className="text-[10px] sm:text-xs opacity-75 truncate">
                     CHF {tier.pricePerChecko.toFixed(2)}
                   </div>
                 </div>

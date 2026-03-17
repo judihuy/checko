@@ -141,13 +141,14 @@ export class AutoScoutScraper extends BaseScraper {
         });
         await new Promise((r) => setTimeout(r, 3000));
 
-        // Extract listings from rendered page
+        // Extract listings from rendered page (including description snippets)
         const scraped = await page.evaluate(() => {
           const items: Array<{
             title: string;
             price: number;
             url: string;
             imageUrl: string | null;
+            description: string | null;
           }> = [];
           const links = document.querySelectorAll('a[href*="/de/d/"]');
           const seen = new Set<string>();
@@ -184,8 +185,16 @@ export class AutoScoutScraper extends BaseScraper {
             const img = card.querySelector("img[src*='http']") as HTMLImageElement | null;
             const imageUrl = img ? img.src : null;
 
+            // Description: collect remaining lines as description snippet
+            const descriptionLines = lines.slice(1).filter(l => 
+              !l.match(/^CHF/) && !l.match(/^\d+\s*km/) && l.length > 10
+            );
+            const description = descriptionLines.length > 0 
+              ? descriptionLines.join(" ").substring(0, 500) 
+              : null;
+
             if (title && price > 0) {
-              items.push({ title: title.substring(0, 200), price, url: href, imageUrl });
+              items.push({ title: title.substring(0, 200), price, url: href, imageUrl, description });
             }
 
             if (items.length >= 20) break;
@@ -205,6 +214,7 @@ export class AutoScoutScraper extends BaseScraper {
             price: item.price,
             url: item.url,
             imageUrl: item.imageUrl,
+            description: item.description || undefined,
             platform: this.platform,
             scrapedAt: new Date(),
           });

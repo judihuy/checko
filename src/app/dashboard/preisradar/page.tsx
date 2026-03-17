@@ -116,18 +116,18 @@ const ALL_PLATFORMS = [
 // Nur aktive Plattformen: ohne deaktivierte (autoscout, comparis komplett ausblenden)
 const ACTIVE_PLATFORMS = ALL_PLATFORMS.filter((p) => !("disabled" in p && p.disabled));
 
-// Basiskosten pro Dauer (Standard-Stufe = 2 Checkos)
+// Basiskosten pro Dauer (Standard-Stufe) — MUSS mit scheduler.ts DURATION_BASE_COSTS übereinstimmen!
 const DURATION_BASE_COSTS: Record<string, number> = {
-  "1d": 2,
-  "1w": 8,
-  "1m": 20,
+  "1d": 1,
+  "1w": 5,
+  "1m": 15,
 };
 
-// Qualitäts-Kosten in Checkos (konkret, keine Multiplikatoren)
-const QUALITY_CHECKO_COSTS: Record<string, number> = {
-  standard: 2,
-  premium: 4,
-  pro: 7,
+// Qualitäts-Multiplikatoren — MUSS mit scheduler.ts QUALITY_MULTIPLIERS übereinstimmen!
+const QUALITY_MULTIPLIERS: Record<string, number> = {
+  standard: 1,
+  premium: 2,
+  pro: 4,
 };
 
 const DURATIONS = [
@@ -163,7 +163,7 @@ const QUALITY_TIERS = [
     id: "standard",
     name: "Standard",
     desc: "Einmal täglich durchsuchen",
-    checkos: 2,
+    multiplier: 1,
     interval: 1440,
     intervalLabel: "Alle 24 Stunden",
     model: "Standard",
@@ -172,7 +172,7 @@ const QUALITY_TIERS = [
     id: "premium",
     name: "Premium",
     desc: "Zweimal täglich durchsuchen",
-    checkos: 4,
+    multiplier: 2,
     interval: 720,
     intervalLabel: "Alle 12 Stunden",
     model: "Premium",
@@ -181,7 +181,7 @@ const QUALITY_TIERS = [
     id: "pro",
     name: "Pro",
     desc: "Echtzeit — alle 5 Minuten",
-    checkos: 7,
+    multiplier: 4,
     interval: 5,
     intervalLabel: "Alle 5 Minuten",
     model: "Pro",
@@ -275,13 +275,11 @@ export default function PreisradarPage() {
     return tier?.interval || 30;
   }, [qualityTier]);
 
-  // Live-Kostenberechnung: Dauer-Kosten skaliert nach Qualitätsstufe
+  // Live-Kostenberechnung: Dauer × Qualitäts-Multiplikator (identisch zu scheduler.ts getSearchCost)
   const currentCost = useMemo(() => {
-    const baseCost = DURATION_BASE_COSTS[duration] || 2;
-    const qualityCost = QUALITY_CHECKO_COSTS[qualityTier] || 2;
-    // Verhältnis zur Standard-Stufe: premium = 2x, pro = 3.5x
-    const ratio = qualityCost / QUALITY_CHECKO_COSTS["standard"];
-    return Math.round(baseCost * ratio);
+    const baseCost = DURATION_BASE_COSTS[duration] || 1;
+    const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
+    return baseCost * multiplier;
   }, [duration, qualityTier]);
 
   // Synchronisiere Länder-Checkboxen mit Plattform-Auswahl
@@ -1464,7 +1462,7 @@ export default function PreisradarPage() {
                           🔄 {tier.intervalLabel}
                         </div>
                         <div className="text-[10px] sm:text-xs font-semibold mt-1">
-                          {tier.checkos} 🦎
+                          {tier.multiplier}x 🦎
                         </div>
                       </button>
                     ))}
@@ -1478,10 +1476,9 @@ export default function PreisradarPage() {
                   </label>
                   <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     {DURATIONS.map((d) => {
-                      const baseCost = DURATION_BASE_COSTS[d.id] || 2;
-                      const qualityCost = QUALITY_CHECKO_COSTS[qualityTier] || 2;
-                      const ratio = qualityCost / QUALITY_CHECKO_COSTS["standard"];
-                      const cost = Math.round(baseCost * ratio);
+                      const baseCost = DURATION_BASE_COSTS[d.id] || 1;
+                      const multiplier = QUALITY_MULTIPLIERS[qualityTier] || 1;
+                      const cost = baseCost * multiplier;
                       return (
                         <button
                           key={d.id}
@@ -1523,7 +1520,7 @@ export default function PreisradarPage() {
                     </div>
                     {qualityTier !== "standard" && (
                       <div className="text-xs text-emerald-600 mt-2 pt-2 border-t border-emerald-200">
-                        💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 2} Checko{(DURATION_BASE_COSTS[duration] || 2) > 1 ? "s" : ""} kosten
+                        💡 Standard würde nur {DURATION_BASE_COSTS[duration] || 1} Checko{(DURATION_BASE_COSTS[duration] || 1) > 1 ? "s" : ""} kosten
                       </div>
                     )}
                   </div>

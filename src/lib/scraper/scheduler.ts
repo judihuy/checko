@@ -142,11 +142,30 @@ export async function runSearchJob(searchId: string): Promise<{
       if (search.minPrice && r.price > 0 && r.price < search.minPrice) {
         return false;
       }
+
+      // Strict year filter: extract year from title and reject out-of-range
+      // Applies when yearFrom or yearTo are set (typically vehicle searches)
+      if (search.yearFrom || search.yearTo) {
+        const yearMatch = r.title.match(/\b(19[5-9]\d|20[0-3]\d)\b/);
+        if (yearMatch) {
+          const titleYear = parseInt(yearMatch[1], 10);
+          if (search.yearFrom && titleYear < search.yearFrom) {
+            console.log(`[Scheduler] Year filter: "${r.title.substring(0, 50)}" year ${titleYear} < min ${search.yearFrom} → REMOVED`);
+            return false;
+          }
+          if (search.yearTo && titleYear > search.yearTo) {
+            console.log(`[Scheduler] Year filter: "${r.title.substring(0, 50)}" year ${titleYear} > max ${search.yearTo} → REMOVED`);
+            return false;
+          }
+        }
+        // If no year found in title, let it through — AI filter can catch it later
+      }
+
       return true;
     });
 
     if (filteredResults.length < allResults.length) {
-      console.log(`[Scheduler] Server-side price filter removed ${allResults.length - filteredResults.length} results`);
+      console.log(`[Scheduler] Server-side hard filter removed ${allResults.length - filteredResults.length} results`);
     }
 
     // Duplikate filtern (gleicher Titel + Preis + Plattform)

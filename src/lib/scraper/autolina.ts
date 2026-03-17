@@ -1,6 +1,7 @@
-// Autolina.ch Scraper — HTTP-Fetch (kein Cloudflare, kein Puppeteer nötig)
+// Autolina.ch Scraper — HTTP-Fetch + SS_Requests JSON Parsing
 // Schweizer Auto-Plattform mit 100k+ Fahrzeugen.
-// Server-Side Rendered (Angular SSR) — HTML enthält alle Listing-Daten direkt.
+// Daten sind als JSON in window.SS_Requests[...] im HTML embedded.
+// Kein DOM-Parsing nötig — direkt das JSON parsen.
 //
 // URL-Format:
 // - Make only: https://www.autolina.ch/{make}
@@ -13,6 +14,50 @@
 // Preis-/Jahresfilterung erfolgt in-code nach dem Parsing.
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
+
+/** Shape of a single car entry in the SS_Requests JSON */
+interface AutolinaCar {
+  carId: number;
+  makeId: number;
+  modelId: number;
+  modelType: string;             // e.g. "3er Reihe G21 Touring 330e SAG"
+  makeName: string;              // e.g. "BMW"
+  modelName: string;             // e.g. "3ER REIHE G21"
+  makeSlug: string;              // e.g. "bmw"
+  modelSlug: string;             // e.g. "3er-reihe-g21"
+  slug: string;                  // e.g. "bmw-3er-reihe-g21"
+  firstRegDate: { date: string } | null;  // { date: "2022-05-01 00:00:00.000000", ... }
+  mileage: number;               // km
+  price: number;                 // CHF (whole units, not Rappen)
+  powerOutput: number;           // PS
+  pics: string[];                // array of image URLs
+  fuelType: number | null;       // numeric ID (1501=Benzin, 1502=Diesel, 1507=Hybrid, etc.)
+  gearboxType: number | null;    // numeric ID (1201=Automatik, 1202=Manuell)
+  region: string;
+  city: string;
+  postalCode: string;
+  isPremium: boolean;
+}
+
+/** Map Autolina fuel type IDs to human-readable strings */
+const FUEL_TYPE_MAP: Record<number, string> = {
+  1501: "Benzin",
+  1502: "Diesel",
+  1503: "Elektro",
+  1504: "Erdgas (CNG)",
+  1505: "Ethanol",
+  1506: "Wasserstoff",
+  1507: "Hybrid",
+  1508: "LPG",
+  1509: "Plug-in-Hybrid",
+};
+
+/** Map Autolina gearbox type IDs to human-readable strings */
+const GEARBOX_TYPE_MAP: Record<number, string> = {
+  1201: "Automatik",
+  1202: "Manuell",
+  1203: "Halbautomatik",
+};
 
 export class AutolinaScraper extends BaseScraper {
   readonly platform = "autolina";
@@ -34,8 +79,7 @@ export class AutolinaScraper extends BaseScraper {
       return `${this.baseUrl}/${encodeURIComponent(make)}`;
     }
 
-    // Fallback: Allgemeine Suche (alle Autos)
-    // Bei reinem Freitext-Query versuchen wir den als Make zu nutzen
+    // Fallback: Freitext-Query als Make/Model nutzen
     if (query && query.trim()) {
       const parts = query.trim().split(/\s+/);
       if (parts.length >= 2) {
@@ -109,7 +153,7 @@ export class AutolinaScraper extends BaseScraper {
       return [];
     }
 
-    return this.parseHtml(html, options);
+    return this.parseSSRequestsJson(html, options);
   }
 
   /**
@@ -130,104 +174,176 @@ export class AutolinaScraper extends BaseScraper {
       return [];
     }
 
-    return this.parseHtml(html, options);
+    return this.parseSSRequestsJson(html, options);
   }
 
   /**
-   * Parse car listings from Autolina SSR HTML.
-   *
-   * Listing structure (Angular SSR):
-   * <app-car-row>
-   *   <a href="/auto/{make-model}/{id}">
-   *     <img src="https://api.autolina.ch/auto-bild/..." alt="MAKE Model ...">
-   *     <div class="make-model">
-   *       <span title="MAKE">MAKE</span>
-   *       <span title="Model detail">Model detail</span>
-   *     </div>
-   *     <div class="price"><span>CHF</span><span>XX'XXX</span></div>
-   *     <div class="vehicle-data">
-   *       <span>2022</span> <span>73'200 km</span> <span>184 PS</span>
-   *       <span>Automatik</span> <span>Diesel</span> <span>Grau</span>
-   *     </div>
-   *     <div class="region-or-title"><span>8000 Zürich / ZH</span></div>
-   *   </a>
-   * </app-car-row>
+   * Extract all window.SS_Requests[...] JSON blocks from HTML,
+   * find the one containing the "searchcars" URL with data.cars array,
+   * and parse car listings from it.
    */
-  private parseHtml(html: string, options?: ScraperOptions): ScraperResult[] {
-    const results: ScraperResult[] = [];
-    const seenUrls = new Set<string>();
+  private parseSSRequestsJson(html: string, options?: ScraperOptions): ScraperResult[] {
+    // Extract all SS_Requests blocks: window.SS_Requests[`...`] = {...};
+    // The key is a backtick-quoted JSON string, the value is a JSON object.
+    const blocks = this.extractSSRequestBlocks(html);
 
-    // Split HTML by car-row components
-    const rowSplits = html.split(/<app-car-row\b/);
+    if (blocks.length === 0) {
+      console.warn(`[Autolina] ⚠️ Keine SS_Requests Blöcke gefunden`);
+      return [];
+    }
 
-    // Skip first element (before first car-row)
-    for (let i = 1; i < rowSplits.length; i++) {
-      const rowHtml = rowSplits[i];
-      const endIdx = rowHtml.indexOf("</app-car-row>");
-      const block = endIdx > 0 ? rowHtml.substring(0, endIdx) : rowHtml;
+    console.log(`[Autolina] ${blocks.length} SS_Requests Blöcke gefunden`);
 
-      // Extract URL: href="/auto/{slug}/{id}"
-      const hrefMatch = block.match(/href="(\/auto\/[^"]+)"/);
-      if (!hrefMatch) continue;
+    // Find the block with "searchcars" URL that contains data.cars
+    for (const { key, value } of blocks) {
+      try {
+        const keyObj = JSON.parse(key);
+        if (keyObj.url !== "searchcars") continue;
+      } catch {
+        // Key contains "searchcars" as string? Check plaintext
+        if (!key.includes("searchcars")) continue;
+      }
 
-      const relUrl = hrefMatch[1];
-      const fullUrl = `${this.baseUrl}${relUrl}`;
-      if (seenUrls.has(fullUrl)) continue;
-      seenUrls.add(fullUrl);
-
-      // Extract make from title attribute on first make-model span
-      const makeMatch = block.match(/class="make-model[^"]*"[^>]*>[\s\S]*?<span[^>]*title="([^"]+)"/);
-      const make = makeMatch ? this.decodeHtmlEntities(makeMatch[1]) : "";
-
-      // Extract model from second span title in make-model
-      // Pattern: after the first title="MAKE" span, find the next span with title
-      let model = "";
-      if (makeMatch) {
-        const afterMake = block.substring(block.indexOf(makeMatch[0]) + makeMatch[0].length);
-        const modelMatch = afterMake.match(/<span[^>]*title="([^"]+)"/);
-        if (modelMatch) {
-          model = this.decodeHtmlEntities(modelMatch[1]);
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed?.status === 1 && parsed?.data?.cars && Array.isArray(parsed.data.cars)) {
+          const cars: AutolinaCar[] = parsed.data.cars;
+          const totalCount = parsed.data.count;
+          console.log(`[Autolina] searchcars Block gefunden: ${cars.length} Autos (total: ${totalCount})`);
+          return this.carsToResults(cars, options);
         }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[Autolina] searchcars JSON parse error: ${msg}`);
+      }
+    }
+
+    console.warn(`[Autolina] ⚠️ Kein searchcars Block mit cars-Array gefunden`);
+    return [];
+  }
+
+  /**
+   * Extract all window.SS_Requests[`key`] = value blocks from HTML.
+   * Returns array of { key, value } where both are raw JSON strings.
+   */
+  private extractSSRequestBlocks(html: string): Array<{ key: string; value: string }> {
+    const blocks: Array<{ key: string; value: string }> = [];
+
+    // Pattern: window.SS_Requests[`...`] = ...;
+    // We use indexOf-based parsing since regex can't reliably handle nested JSON
+    const marker = "window.SS_Requests[`";
+    let searchFrom = 0;
+
+    while (true) {
+      const startIdx = html.indexOf(marker, searchFrom);
+      if (startIdx === -1) break;
+
+      // Extract the key (between backticks)
+      const keyStart = startIdx + marker.length;
+      const keyEnd = html.indexOf("`]", keyStart);
+      if (keyEnd === -1) {
+        searchFrom = keyStart;
+        continue;
       }
 
-      // Build title
-      const title = [make, model].filter(Boolean).join(" ") || "Fahrzeug";
+      const key = html.substring(keyStart, keyEnd);
 
-      // Extract price: look for CHF followed by digits with Swiss formatting (X'XXX)
-      let price = 0;
-      const priceMatch = block.match(/class="price[^"]*"[\s\S]*?CHF[\s\S]*?>([\d''.,-]+)</);
-      if (priceMatch) {
-        const priceStr = priceMatch[1]
-          .replace(/['']/g, "")  // Remove Swiss thousand separators
-          .replace(/\.–$/, "")    // Remove .– suffix
-          .replace(",", ".")      // Replace comma decimal
-          .trim();
-        price = Math.round(parseFloat(priceStr) * 100); // Convert CHF to Rappen
-        if (isNaN(price)) price = 0;
+      // After `] = ` comes the JSON value
+      const eqIdx = html.indexOf("=", keyEnd + 2);
+      if (eqIdx === -1) {
+        searchFrom = keyEnd;
+        continue;
       }
+
+      // Find start of JSON value (skip whitespace after =)
+      let valueStart = eqIdx + 1;
+      while (valueStart < html.length && html[valueStart] === " ") valueStart++;
+
+      if (valueStart >= html.length) break;
+
+      // Balance braces to find end of JSON object/array
+      const firstChar = html[valueStart];
+      if (firstChar !== "{" && firstChar !== "[" && firstChar !== '"') {
+        // Not a JSON value we can parse, skip
+        searchFrom = valueStart;
+        continue;
+      }
+
+      let value: string;
+      if (firstChar === "{" || firstChar === "[") {
+        const closingChar = firstChar === "{" ? "}" : "]";
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+        let i = valueStart;
+
+        while (i < html.length) {
+          const ch = html[i];
+          if (escaped) {
+            escaped = false;
+            i++;
+            continue;
+          }
+          if (ch === "\\") {
+            escaped = true;
+            i++;
+            continue;
+          }
+          if (ch === '"') {
+            inString = !inString;
+          } else if (!inString) {
+            if (ch === firstChar) depth++;
+            else if (ch === closingChar) {
+              depth--;
+              if (depth === 0) break;
+            }
+          }
+          i++;
+        }
+        value = html.substring(valueStart, i + 1);
+      } else {
+        // Quoted string value
+        const strEnd = html.indexOf('"', valueStart + 1);
+        value = strEnd >= 0 ? html.substring(valueStart, strEnd + 1) : "";
+      }
+
+      if (value) {
+        blocks.push({ key, value });
+      }
+
+      searchFrom = valueStart + value.length;
+    }
+
+    return blocks;
+  }
+
+  /**
+   * Convert Autolina car JSON objects to ScraperResult array.
+   */
+  private carsToResults(cars: AutolinaCar[], options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+    const seenIds = new Set<number>();
+
+    for (const car of cars) {
+      if (seenIds.has(car.carId)) continue;
+      seenIds.add(car.carId);
+
+      // Price: Autolina gives CHF, we need Rappen (cents)
+      const priceRappen = Math.round((car.price || 0) * 100);
 
       // Price filtering
-      if (price > 0) {
-        if (options?.minPrice && price < options.minPrice) continue;
-        if (options?.maxPrice && price > options.maxPrice) continue;
+      if (priceRappen > 0) {
+        if (options?.minPrice && priceRappen < options.minPrice) continue;
+        if (options?.maxPrice && priceRappen > options.maxPrice) continue;
       }
 
-      // Extract image URL
-      let imageUrl: string | null = null;
-      const imgMatch = block.match(/src="(https:\/\/api\.autolina\.ch\/auto-bild\/[^"]+)"/);
-      if (imgMatch) {
-        imageUrl = imgMatch[1];
-      }
-
-      // Extract vehicle data (year, km, PS, transmission, fuel, color)
-      const descParts: string[] = [];
-
-      // Year
-      const yearMatch = block.match(/class="vehicle-data[\s\S]*?<span[^>]*class="monospace"[^>]*>((?:19|20)\d{2})<\/span>/);
+      // Year from firstRegDate
       let year: number | null = null;
-      if (yearMatch) {
-        year = parseInt(yearMatch[1], 10);
-        descParts.push(`EZ: ${year}`);
+      if (car.firstRegDate?.date) {
+        const yearMatch = car.firstRegDate.date.match(/^(\d{4})/);
+        if (yearMatch) {
+          year = parseInt(yearMatch[1], 10);
+        }
       }
 
       // Year filtering
@@ -236,56 +352,45 @@ export class AutolinaScraper extends BaseScraper {
         if (options?.yearTo && year > options.yearTo) continue;
       }
 
-      // Km: look for pattern like "73'200 km" or "73<span>...</span>200 km"
-      const kmMatch = block.match(/vehicle-data[\s\S]*?class="monospace"[^>]*translate="no"[^>]*>([\d''.]+)<[\s\S]*?<span class="small">km<\/span>/);
-      if (kmMatch) {
-        const kmStr = kmMatch[1].replace(/['']/g, "").replace(/\./g, "");
-        descParts.push(`${kmStr} km`);
-      }
+      // Build title: "MAKE modelType" or "MAKE MODEL"
+      const title = [car.makeName, car.modelType || car.modelName]
+        .filter(Boolean)
+        .join(" ")
+        .substring(0, 200) || "Fahrzeug";
 
-      // PS
-      const psMatch = block.match(/vehicle-data[\s\S]*?class="monospace"[^>]*>(\d+)<\/span>[\s\S]*?<span class="small">PS<\/span>/);
-      if (psMatch) {
-        descParts.push(`${psMatch[1]} PS`);
-      }
+      // Build URL: https://www.autolina.ch/auto/{slug}/{carId}
+      const slug = car.slug || `${car.makeSlug}-${car.modelSlug}`;
+      const url = `${this.baseUrl}/auto/${slug}/${car.carId}`;
 
-      // Extract additional vehicle-data spans (transmission, fuel, color)
-      const dataSpanPattern = /class="vehicle-data[\s\S]*?/;
-      if (dataSpanPattern.test(block)) {
-        // Find transmission/fuel/color from non-monospace spans in vehicle-data
-        const vdStart = block.indexOf('class="vehicle-data');
-        if (vdStart >= 0) {
-          const vdEnd = block.indexOf("</div>", block.indexOf("</div>", vdStart) + 6);
-          const vdBlock = block.substring(vdStart, vdEnd > 0 ? vdEnd : vdStart + 2000);
+      // Image: first pic
+      const imageUrl = car.pics && car.pics.length > 0 ? car.pics[0] : null;
 
-          // Match plain text spans (no monospace class) within vehicle-data items
-          const plainSpans = vdBlock.matchAll(/<span[^>]*class="[^"]*ng-tns[^"]*"[^>]*>([^<]+)<\/span>/g);
-          for (const sp of plainSpans) {
-            const text = sp[1].trim();
-            if (text && !text.match(/^\d/) && text !== "km" && text !== "PS" && text.length > 1) {
-              descParts.push(text);
-            }
-          }
-        }
-      }
+      // Build description parts
+      const descParts: string[] = [];
+      if (year) descParts.push(`EZ: ${year}`);
+      if (car.mileage) descParts.push(`${car.mileage.toLocaleString("de-CH")} km`);
+      if (car.powerOutput) descParts.push(`${car.powerOutput} PS`);
 
-      // Extract location
-      const locMatch = block.match(/class="region-or-title[\s\S]*?translate="no"[^>]*>([\s\S]*?)<\/span>/);
-      if (locMatch) {
-        // Clean up the location text (remove inner span tags, normalize whitespace)
-        const locText = locMatch[1]
-          .replace(/<[^>]+>/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
-        if (locText) descParts.push(locText);
+      const fuelStr = car.fuelType ? FUEL_TYPE_MAP[car.fuelType] : null;
+      if (fuelStr) descParts.push(fuelStr);
+
+      const gearStr = car.gearboxType ? GEARBOX_TYPE_MAP[car.gearboxType] : null;
+      if (gearStr) descParts.push(gearStr);
+
+      if (car.city && car.postalCode) {
+        descParts.push(`${car.postalCode} ${car.city}`);
+      } else if (car.city) {
+        descParts.push(car.city);
+      } else if (car.region) {
+        descParts.push(car.region);
       }
 
       const description = descParts.join(" | ").substring(0, 500) || undefined;
 
       results.push({
-        title: title.substring(0, 200),
-        price,
-        url: fullUrl,
+        title,
+        price: priceRappen,
+        url,
         imageUrl,
         description,
         platform: this.platform,
@@ -296,19 +401,5 @@ export class AutolinaScraper extends BaseScraper {
     }
 
     return results;
-  }
-
-  /**
-   * Decode HTML entities (&amp; &quot; etc.)
-   */
-  private decodeHtmlEntities(text: string): string {
-    return text
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&#x27;/g, "'")
-      .replace(/&apos;/g, "'");
   }
 }

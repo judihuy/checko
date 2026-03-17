@@ -2,7 +2,7 @@
 // Führt Suchjobs aus: Scrape → Filter → KI-Bewertung → DB → E-Mail
 
 import { prisma } from "@/lib/prisma";
-import { getWorkingScrapers } from "@/lib/scraper";
+import { getScrapersByPlatformList } from "@/lib/scraper";
 import type { ScraperResult } from "@/lib/scraper";
 import { analyzePrice } from "@/lib/ai/price-analyzer";
 import { deductCheckos } from "@/lib/checkos";
@@ -55,11 +55,9 @@ export async function runSearchJob(searchId: string): Promise<{
       return { success: false, newAlerts: 0, errors: ["Suche abgelaufen"] };
     }
 
-    // Scraper holen: ALLE verfügbaren (isWorking=true) Plattformen nutzen,
-    // nicht nur die historisch gespeicherten DB-Plattformen.
-    // Damit werden neue Plattformen (z.B. Autolina, eBay KA) automatisch
-    // für alle Suchen genutzt, auch wenn sie bei Erstellung noch nicht existierten.
-    const scrapers = getWorkingScrapers();
+    // Scraper holen: NUR die pro Suche gespeicherten Plattformen nutzen.
+    // getScrapersByPlatformList filtert automatisch isWorking=false heraus.
+    const scrapers = getScrapersByPlatformList(search.platforms);
 
     if (scrapers.length === 0) {
       errors.push("Keine Scraper für die gewählten Plattformen verfügbar");
@@ -388,6 +386,42 @@ export async function runSearchJob(searchId: string): Promise<{
 }
 
 /**
+ * Migration: Bestehende Suchen um neue Plattformen (autolina, ebay-ka) ergänzen.
+ * Fügt fehlende Plattformen zur komma-getrennten Liste hinzu, ohne bestehende zu überschreiben.
+ * Idempotent — kann beliebig oft aufgerufen werden.
+ */
+async function migrateSearchPlatforms(): Promise<number> {
+  const ENRICH_PLATFORMS = ["autolina", "ebay-ka"];
+  
+  // Alle Suchen laden, die nicht bereits beide Plattformen haben
+  const allSearches = await prisma.preisradarSearch.findMany({
+    select: { id: true, platforms: true },
+  });
+
+  let migratedCount = 0;
+
+  for (const search of allSearches) {
+    const currentPlatforms = search.platforms.split(",").map((p) => p.trim()).filter(Boolean);
+    const missing = ENRICH_PLATFORMS.filter((p) => !currentPlatforms.includes(p));
+
+    if (missing.length > 0) {
+      const updatedPlatforms = [...currentPlatforms, ...missing].join(",");
+      await prisma.preisradarSearch.update({
+        where: { id: search.id },
+        data: { platforms: updatedPlatforms },
+      });
+      migratedCount++;
+    }
+  }
+
+  if (migratedCount > 0) {
+    console.log(`[Scheduler] Migration: ${migratedCount} Suchen um neue Plattformen ergänzt (${ENRICH_PLATFORMS.join(", ")})`);
+  }
+
+  return migratedCount;
+}
+
+/**
  * Alle aktiven Suchen verarbeiten
  * Berücksichtigt das Intervall jeder Suche:
  * - Nur scrapen wenn lastScrapedAt + interval Minuten vergangen ist
@@ -404,6 +438,12 @@ export async function runAllActiveSearches(): Promise<{
   let skippedSearches = 0;
 
   try {
+    // Migration: Bestehende Suchen um autolina + ebay-ka ergänzen (idempotent)
+    await migrateSearchPlatforms().catch((err) => {
+      console.warn("[Scheduler] Platform migration failed:", err);
+      errors.push(`Platform migration error: ${err instanceof Error ? err.message : String(err)}`);
+    });
+
     // Alle aktiven, nicht abgelaufenen Suchen finden
     const activeSearches = await prisma.preisradarSearch.findMany({
       where: {

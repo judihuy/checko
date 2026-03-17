@@ -10,7 +10,7 @@ import { z } from "zod";
 import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 import { chargeForSearch, calculateExpiresAt, getSearchCost, runSearchJob } from "@/lib/scraper/scheduler";
 
-const VALID_PLATFORMS = ["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"];
+const VALID_PLATFORMS = ["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben", "autolina"];
 
 // Zod-Schema für Update — erlaubt Pause/Aktivierung UND Bearbeitung
 const updateSearchSchema = z.object({

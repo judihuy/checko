@@ -18,6 +18,11 @@ const TIER_INTERVALS: Record<string, number> = {
   pro: 15,        // Alle 15 Minuten
 };
 
+// Plattformen, die automatisch zu neuen Suchen hinzugefügt werden,
+// sofern der User sie nicht explizit weggelassen hat.
+// Diese werden ZUSÄTZLICH zur User-Auswahl ergänzt.
+const AUTO_ENRICH_PLATFORMS = ["autolina", "ebay-ka"] as const;
+
 // Zod-Schema für neue Suche
 const createSearchSchema = z.object({
   query: z.string().max(200).default(""),
@@ -74,13 +79,22 @@ export async function POST(request: NextRequest) {
     }
 
     const { 
-      query, maxPrice, minPrice, platforms, duration, qualityTier, isDraft,
+      query, maxPrice, minPrice, platforms: userPlatforms, duration, qualityTier, isDraft,
       category: searchCategory, subcategory: searchSubcategory, condition: searchCondition,
       vehicleMake, vehicleModel, yearFrom, yearTo, kmFrom, kmTo, fuelType, transmission,
       engineSizeCcm, motorcycleType,
       propertyType, propertyOffer, rooms, areaM2, location: searchLocation,
       furnitureType,
     } = parsed.data;
+
+    // Auto-Enrichment: Neue Plattformen (autolina, ebay-ka) zur User-Auswahl hinzufügen,
+    // sofern sie noch nicht enthalten sind. Die User-Auswahl bleibt vollständig erhalten.
+    const platforms = [...userPlatforms];
+    for (const p of AUTO_ENRICH_PLATFORMS) {
+      if (!platforms.includes(p)) {
+        platforms.push(p);
+      }
+    }
 
     // Auto-fill query from structured fields if empty
     let finalQuery = query.trim();

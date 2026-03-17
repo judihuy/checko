@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       alert: {
         include: {
           search: {
-            select: { query: true },
+            select: { query: true, vehicleMake: true, vehicleModel: true },
           },
         },
       },
@@ -41,7 +41,27 @@ export async function GET(request: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ saved });
+  // Query-Reparatur für Altdaten: fehlende Leerzeichen aus vehicleMake/Model rekonstruieren
+  const repairedSaved = saved.map((s) => {
+    const search = s.alert.search;
+    if (search.vehicleMake && search.vehicleModel) {
+      const expected = search.vehicleMake + " " + search.vehicleModel;
+      const normStored = search.query.toLowerCase().replace(/[\s-]+/g, "");
+      const normExpected = expected.toLowerCase().replace(/[\s-]+/g, "");
+      if (normStored === normExpected && !search.query.includes(" ")) {
+        return {
+          ...s,
+          alert: {
+            ...s.alert,
+            search: { ...search, query: expected },
+          },
+        };
+      }
+    }
+    return s;
+  });
+
+  return NextResponse.json({ saved: repairedSaved });
 }
 
 export async function POST(request: NextRequest) {

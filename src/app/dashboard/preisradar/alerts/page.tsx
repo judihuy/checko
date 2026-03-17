@@ -181,8 +181,11 @@ export default function PreisradarAlertsPage() {
     }
   };
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const loadAlerts = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
@@ -194,9 +197,12 @@ export default function PreisradarAlertsPage() {
         const data = await res.json();
         setAlerts(data.alerts);
         setPagination(data.pagination);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setLoadError(errData.error || `Fehler beim Laden (${res.status})`);
       }
     } catch {
-      console.error("Fehler beim Laden der Alerts");
+      setLoadError("Netzwerkfehler beim Laden der Treffer");
     } finally {
       setLoading(false);
     }
@@ -375,6 +381,19 @@ export default function PreisradarAlertsPage() {
               </Link>
             </div>
           </div>
+
+          {/* Fehler */}
+          {loadError && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700 font-medium">❌ {loadError}</p>
+              <button
+                onClick={() => loadAlerts()}
+                className="mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
+              >
+                🔄 Erneut versuchen
+              </button>
+            </div>
+          )}
 
           {/* Loading */}
           {loading ? (

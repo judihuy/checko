@@ -21,17 +21,26 @@ export async function GET(request: NextRequest) {
   try {
     const userId = session.user.id;
 
+    // User-Suchen IDs laden für robuste Alert-Abfrage
+    const userSearches = await prisma.preisradarSearch.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+    const searchIds = userSearches.map((s) => s.id);
+
     // Parallel laden
     const [unreadNotifications, wheelStatus, newAlerts, balance] = await Promise.all([
       getUnreadCount(userId),
       getDailyWheelStatus(userId),
-      // Neue Preisradar-Treffer (ungelesen)
-      prisma.preisradarAlert.count({
-        where: {
-          search: { userId },
-          isSeen: false,
-        },
-      }),
+      // Neue Preisradar-Treffer (ungelesen) — explizit über searchId IN [...]
+      searchIds.length > 0
+        ? prisma.preisradarAlert.count({
+            where: {
+              searchId: { in: searchIds },
+              isSeen: false,
+            },
+          })
+        : Promise.resolve(0),
       // Aktueller Kontostand
       prisma.user.findFirst({
         where: { id: userId },

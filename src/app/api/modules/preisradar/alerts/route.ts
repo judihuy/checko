@@ -28,18 +28,25 @@ export async function GET(request: NextRequest) {
     const searchId = searchParams.get("searchId") || undefined;
     const unseenOnly = searchParams.get("unseen") === "true";
 
-    // Where-Clause aufbauen
+    // Erst die IDs aller Suchen des Users laden, dann Alerts über searchId filtern.
+    // Robuster als der relationale Filter `search: { userId }`, der bei manchen
+    // Prisma/MySQL-Konstellationen inkonsistente Counts liefern kann.
+    const userSearchIds = await prisma.preisradarSearch.findMany({
+      where: { userId: session.user.id },
+      select: { id: true },
+    });
+
+    const searchIdList = userSearchIds.map((s) => s.id);
+
+    // Where-Clause aufbauen — explizit über searchId IN [...]
     const where: {
-      search: { userId: string };
-      searchId?: string;
+      searchId: { in: string[] } | string;
       isSeen?: boolean;
     } = {
-      search: { userId: session.user.id },
+      searchId: searchId
+        ? searchId  // einzelne Suche → exakter Match
+        : { in: searchIdList }, // alle Suchen des Users
     };
-
-    if (searchId) {
-      where.searchId = searchId;
-    }
 
     if (unseenOnly) {
       where.isSeen = false;
@@ -51,7 +58,7 @@ export async function GET(request: NextRequest) {
         where,
         include: {
           search: {
-            select: { query: true },
+            select: { query: true, vehicleMake: true, vehicleModel: true },
           },
         },
         orderBy: { createdAt: "desc" },
@@ -83,6 +90,17 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Query-Reparatur: Falls Leerzeichen fehlen, aus vehicleMake/Model rekonstruieren
+      let searchQuery = alert.search.query;
+      if (alert.search.vehicleMake && alert.search.vehicleModel) {
+        const expected = alert.search.vehicleMake + " " + alert.search.vehicleModel;
+        const normStored = alert.search.query.toLowerCase().replace(/[\s-]+/g, "");
+        const normExpected = expected.toLowerCase().replace(/[\s-]+/g, "");
+        if (normStored === normExpected && !alert.search.query.includes(" ")) {
+          searchQuery = expected;
+        }
+      }
+
       return {
         id: alert.id,
         title: alert.title,
@@ -96,7 +114,7 @@ export async function GET(request: NextRequest) {
         details: aiData?.details || null,
         isScam: alert.isScam,
         isSeen: alert.isSeen,
-        searchQuery: alert.search.query,
+        searchQuery,
         searchId: alert.searchId,
         createdAt: alert.createdAt,
         detailAnalysis,

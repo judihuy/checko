@@ -516,7 +516,7 @@ export abstract class BaseScraper {
 
   /**
    * Fetcht mit HTTP-Headers via undici + Proxy (kein Browser).
-   * Wird als Fallback verwendet wenn Puppeteer fehlschlägt.
+   * PRIMÄRE Scrape-Methode — schneller und ressourcenschonender als Puppeteer.
    */
   protected async fetchWithHeaders(url: string): Promise<Response> {
     await this.enforceRateLimit();
@@ -528,6 +528,11 @@ export abstract class BaseScraper {
       "Accept-Encoding": "gzip, deflate, br",
       "Connection": "keep-alive",
       "Cache-Control": "no-cache",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-User": "?1",
+      "Upgrade-Insecure-Requests": "1",
     };
 
     // Proxy aus Pool wählen
@@ -553,6 +558,41 @@ export abstract class BaseScraper {
     // Kein Proxy konfiguriert → normales fetch
     console.log(`[Scraper/${this.platform}] Fetching directly (no proxy configured)`);
     return fetch(url, { headers });
+  }
+
+  /**
+   * Fetcht mit HTTP-Headers via Proxy mit spezifischem Land (z.B. "ch" für Schweiz).
+   * Nutzt den Proxy-Manager mit Länder-Präferenz und automatischem Retry.
+   * PRIMÄRE Scrape-Methode für CH-geoblockte Plattformen.
+   */
+  protected async fetchWithCountryHeaders(url: string, country: string): Promise<Response> {
+    await this.enforceRateLimit();
+
+    const { fetchWithProxy } = await import("./proxy-manager");
+
+    const headers: Record<string, string> = {
+      "User-Agent": this.getRandomUserAgent(),
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "de-CH,de;q=0.9,en;q=0.8",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Connection": "keep-alive",
+      "Cache-Control": "no-cache",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-User": "?1",
+      "Upgrade-Insecure-Requests": "1",
+    };
+
+    console.log(`[Scraper/${this.platform}] Fetching via ${country.toUpperCase()} proxy with browser headers`);
+
+    const { response } = await fetchWithProxy(url, this.platform, {
+      headers,
+      maxRetries: 3,
+      preferredCountry: country,
+    });
+
+    return response;
   }
 
   /**

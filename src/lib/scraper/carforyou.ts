@@ -1,7 +1,8 @@
-// CarForYou.ch Scraper — Puppeteer + Stealth + CH Residential Proxy
+// CarForYou.ch Scraper — HTTP-Fetch mit CH-Proxy + echten Browser-Headers (primär)
 // carforyou.ch ist die Nachfolge-Plattform von auto.ricardo.ch für Fahrzeuge.
 // Geo-Blocking: Leitet Nicht-CH-IPs auf globalipaction.ch um → CH Proxy ZWINGEND.
 // Next.js-basiert: Listings in __NEXT_DATA__ + HTML-Elemente.
+// Puppeteer nur als letzter Fallback.
 // URL-Schema: /de/auto-kaufen/{make}/{model}?price_from=X&price_to=Y&year_from=X&year_to=Y&km_to=X
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
@@ -13,30 +14,30 @@ export class CarForYouScraper extends BaseScraper {
   isWorking = true;
 
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
-    // Methode 1 (PRIMÄR): Puppeteer + Stealth + CH Proxy
-    try {
-      const browserResults = await this.scrapeViaBrowser(query, options);
-      if (browserResults.length > 0) {
-        console.log(`[CarForYou] ✅ Browser: ${browserResults.length} Ergebnisse`);
-        return browserResults;
-      }
-    } catch (error) {
-      console.warn(
-        `[CarForYou] Browser-Methode fehlgeschlagen:`,
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-
-    // Methode 2 (FALLBACK): HTTP fetch via CH Proxy
+    // Methode 1 (PRIMÄR): HTTP-Fetch mit CH-Proxy + Browser-Headers
     try {
       const httpResults = await this.scrapeViaHttp(query, options);
       if (httpResults.length > 0) {
-        console.log(`[CarForYou] ✅ HTTP-Fallback: ${httpResults.length} Ergebnisse`);
+        console.log(`[CarForYou] ✅ HTTP-Fetch: ${httpResults.length} Ergebnisse`);
         return httpResults;
       }
     } catch (error) {
       console.warn(
-        `[CarForYou] HTTP-Fallback fehlgeschlagen:`,
+        `[CarForYou] HTTP-Fetch fehlgeschlagen:`,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+
+    // Methode 2 (FALLBACK): Puppeteer + Stealth + CH Proxy
+    try {
+      const browserResults = await this.scrapeViaBrowser(query, options);
+      if (browserResults.length > 0) {
+        console.log(`[CarForYou] ✅ Browser-Fallback: ${browserResults.length} Ergebnisse`);
+        return browserResults;
+      }
+    } catch (error) {
+      console.warn(
+        `[CarForYou] Browser-Fallback fehlgeschlagen:`,
         error instanceof Error ? error.message : String(error)
       );
     }
@@ -142,14 +143,68 @@ export class CarForYouScraper extends BaseScraper {
   }
 
   /**
-   * HTTP-Fallback via Proxy (may fail due to geo-blocking, but worth trying)
+   * PRIMÄR: HTTP-Fetch mit CH-Proxy + Browser-Headers.
+   * CH-Proxy ist ZWINGEND weil carforyou.ch Nicht-CH-IPs auf globalipaction.ch redirected.
+   * SSL-Workaround: NODE_TLS_REJECT_UNAUTHORIZED wird NICHT global gesetzt.
+   * Stattdessen nutzen wir den Proxy-Manager der undici mit eigenem Agent verwendet.
    */
   private async scrapeViaHttp(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
     const searchUrl = this.buildSearchUrl(query, options);
-    console.log(`[CarForYou] HTTP Fallback URL: ${searchUrl}`);
+    console.log(`[CarForYou] HTTP-Fetch URL: ${searchUrl}`);
 
-    // Use proxy-manager with CH preference to avoid geo-blocking
-    const { fetchWithProxy } = await import("./proxy-manager");
+    // CH-Proxy mit echten Browser-Headers (wie eBay KA Ansatz)
+    try {
+      const response = await this.fetchWithCountryHeaders(searchUrl, "ch");
+
+      if (!response.ok) {
+        console.error(`[CarForYou] HTTP: ${response.status}`);
+        return [];
+      }
+
+      const html = await response.text();
+      console.log(`[CarForYou] HTML length: ${html.length}`);
+
+      if (html.length < 1000 || html.includes("globalipaction.ch")) {
+        console.warn("[CarForYou] ⚠️ Geo-Block oder kurze Antwort");
+        return [];
+      }
+
+      if (html.includes("Just a moment") || html.includes("cf_chl_opt")) {
+        console.warn("[CarForYou] ⚠️ Cloudflare-Challenge");
+        return [];
+      }
+
+      return this.parseAllFormats(html, options);
+    } catch (error) {
+      // SSL-Fehler speziell behandeln — Retry mit rejectUnauthorized: false
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes("CERT") || errorMsg.includes("SSL") || errorMsg.includes("certificate")) {
+        console.warn(`[CarForYou] SSL-Fehler, Retry mit lockerem TLS: ${errorMsg}`);
+        try {
+          return await this.scrapeViaHttpInsecure(searchUrl, options);
+        } catch (retryError) {
+          console.warn(`[CarForYou] Auch mit lockerem TLS fehlgeschlagen:`, retryError instanceof Error ? retryError.message : String(retryError));
+          return [];
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * SSL-Fallback: HTTP-Fetch mit `connect.rejectUnauthorized: false` über undici ProxyAgent.
+   * Wird nur aufgerufen wenn der normale Fetch einen SSL/Certificate-Fehler wirft.
+   */
+  private async scrapeViaHttpInsecure(searchUrl: string, options?: ScraperOptions): Promise<ScraperResult[]> {
+    const { getProxy, reportSuccess, reportFailure } = await import("./proxy-manager");
+    const { ProxyAgent, fetch: undiciFetch } = await import("undici");
+
+    const proxy = getProxy("ch");
+    if (!proxy) {
+      console.warn("[CarForYou] Kein CH-Proxy verfügbar für SSL-Fallback");
+      return [];
+    }
+
     const headers: Record<string, string> = {
       "User-Agent": this.getRandomUserAgent(),
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -158,32 +213,36 @@ export class CarForYouScraper extends BaseScraper {
       "Sec-Fetch-Dest": "document",
       "Sec-Fetch-Mode": "navigate",
       "Sec-Fetch-Site": "none",
+      "Sec-Fetch-User": "?1",
+      "Upgrade-Insecure-Requests": "1",
     };
 
-    try {
-      const { response } = await fetchWithProxy(searchUrl, this.platform, {
-        headers,
-        maxRetries: 2,
-        preferredCountry: "ch",
-      });
+    console.log(`[CarForYou] SSL-Fallback via ${proxy.username} (rejectUnauthorized: false)`);
 
-      if (!response.ok) {
-        console.error(`[CarForYou] HTTP: ${response.status}`);
-        return [];
-      }
+    const dispatcher = new ProxyAgent({
+      uri: proxy.url,
+      connect: { rejectUnauthorized: false },
+    });
 
-      const html = await response.text();
+    const response = await undiciFetch(searchUrl, { headers, dispatcher });
 
-      if (html.length < 1000 || html.includes("globalipaction.ch")) {
-        console.warn("[CarForYou] ⚠️ Geo-Block oder kurze Antwort im HTTP-Fallback");
-        return [];
-      }
-
-      return this.parseAllFormats(html, options);
-    } catch (error) {
-      console.warn(`[CarForYou] HTTP fetch failed:`, error);
+    if (!response.ok) {
+      reportFailure(proxy, this.platform, response.status);
+      console.error(`[CarForYou] SSL-Fallback HTTP: ${response.status}`);
       return [];
     }
+
+    reportSuccess(proxy, this.platform);
+
+    const html = await response.text() as string;
+    console.log(`[CarForYou] SSL-Fallback HTML length: ${html.length}`);
+
+    if (html.length < 1000 || html.includes("globalipaction.ch")) {
+      console.warn("[CarForYou] ⚠️ Geo-Block im SSL-Fallback");
+      return [];
+    }
+
+    return this.parseAllFormats(html, options);
   }
 
   /**

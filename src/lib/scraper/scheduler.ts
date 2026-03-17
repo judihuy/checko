@@ -83,45 +83,58 @@ export async function runSearchJob(searchId: string): Promise<{
       return { success: false, newAlerts: 0, errors };
     }
 
-    // Alle Plattformen PARALLEL scrapen (Promise.allSettled)
+    // Plattformen SEQUENTIELL scrapen mit 10-15s Pause dazwischen
+    // Verhindert Rate-Limiting und Blockierung durch zu viele gleichzeitige Requests
+    const INTER_PLATFORM_DELAY_MS = 12_000; // 12 Sekunden zwischen Plattformen
     const allResults: ScraperResult[] = [];
 
-    console.log(`[Scheduler] Starte parallelen Scrape für ${scrapers.length} Plattformen (${scrapers.map(s => s.platform).join(", ")}): "${search.query}"...`);
-    const scrapePromises = scrapers.map(async (scraper) => {
-      const scraperStart = Date.now();
-      const results = await scraper.scrape(search.query, {
-        minPrice: search.minPrice || undefined,
-        maxPrice: search.maxPrice || undefined,
-        limit: 20,
-        // Kategorie-spezifische Felder durchreichen
-        category: search.category || undefined,
-        subcategory: search.subcategory || undefined,
-        vehicleMake: search.vehicleMake || undefined,
-        vehicleModel: search.vehicleModel || undefined,
-        yearFrom: search.yearFrom || undefined,
-        yearTo: search.yearTo || undefined,
-        kmFrom: search.kmFrom || undefined,
-        kmTo: search.kmTo || undefined,
-        fuelType: search.fuelType || undefined,
-        transmission: search.transmission || undefined,
-        engineSizeCcm: search.engineSizeCcm || undefined,
-        motorcycleType: search.motorcycleType || undefined,
-        propertyType: search.propertyType || undefined,
-        propertyOffer: search.propertyOffer || undefined,
-        rooms: search.rooms || undefined,
-        areaM2: search.areaM2 || undefined,
-        location: search.location || undefined,
-        furnitureType: search.furnitureType || undefined,
-      });
-      const durationMs = Date.now() - scraperStart;
-      return { scraper, results, durationMs };
-    });
+    console.log(`[Scheduler] Starte sequentiellen Scrape für ${scrapers.length} Plattformen (${scrapers.map(s => s.platform).join(", ")}): "${search.query}"...`);
 
-    const scrapeResults = await Promise.allSettled(scrapePromises);
+    interface ScrapeResultEntry {
+      status: "fulfilled" | "rejected";
+      value?: { scraper: typeof scrapers[0]; results: ScraperResult[]; durationMs: number };
+      reason?: unknown;
+    }
+    const scrapeResults: ScrapeResultEntry[] = [];
 
-    for (const result of scrapeResults) {
-      if (result.status === "fulfilled") {
-        const { scraper, results, durationMs } = result.value;
+    for (let i = 0; i < scrapers.length; i++) {
+      const scraper = scrapers[i];
+
+      // Pause zwischen Plattformen (nicht vor der ersten)
+      if (i > 0) {
+        const delayMs = INTER_PLATFORM_DELAY_MS + Math.floor(Math.random() * 3000); // 12-15s
+        console.log(`[Scheduler] ⏳ Warte ${Math.round(delayMs / 1000)}s vor ${scraper.displayName}...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      try {
+        const scraperStart = Date.now();
+        const results = await scraper.scrape(search.query, {
+          minPrice: search.minPrice || undefined,
+          maxPrice: search.maxPrice || undefined,
+          limit: 20,
+          // Kategorie-spezifische Felder durchreichen
+          category: search.category || undefined,
+          subcategory: search.subcategory || undefined,
+          vehicleMake: search.vehicleMake || undefined,
+          vehicleModel: search.vehicleModel || undefined,
+          yearFrom: search.yearFrom || undefined,
+          yearTo: search.yearTo || undefined,
+          kmFrom: search.kmFrom || undefined,
+          kmTo: search.kmTo || undefined,
+          fuelType: search.fuelType || undefined,
+          transmission: search.transmission || undefined,
+          engineSizeCcm: search.engineSizeCcm || undefined,
+          motorcycleType: search.motorcycleType || undefined,
+          propertyType: search.propertyType || undefined,
+          propertyOffer: search.propertyOffer || undefined,
+          rooms: search.rooms || undefined,
+          areaM2: search.areaM2 || undefined,
+          location: search.location || undefined,
+          furnitureType: search.furnitureType || undefined,
+        });
+        const durationMs = Date.now() - scraperStart;
+
         if (results.length === 0) {
           const msg = `[Scheduler] ${scraper.displayName}: 0 Treffer nach ${durationMs}ms — möglicherweise blockiert oder Parse-Fehler`;
           console.warn(msg);
@@ -130,32 +143,33 @@ export async function runSearchJob(searchId: string): Promise<{
           console.log(`[Scheduler] ${scraper.displayName}: ${results.length} Treffer in ${durationMs}ms`);
         }
         allResults.push(...results);
-      } else {
+        scrapeResults.push({ status: "fulfilled", value: { scraper, results, durationMs } });
+      } catch (error) {
         let errorDetail: string;
-        if (result.reason instanceof Error) {
-          errorDetail = `${result.reason.message}${result.reason.stack ? `\n${result.reason.stack.split("\n").slice(0, 3).join("\n")}` : ""}`;
-        } else if (typeof result.reason === "string") {
-          errorDetail = result.reason;
-        } else if (result.reason && typeof result.reason === "object") {
-          // Verhindert [object Object] — JSON-Serialisierung mit Limit
+        if (error instanceof Error) {
+          errorDetail = `${error.message}${error.stack ? `\n${error.stack.split("\n").slice(0, 3).join("\n")}` : ""}`;
+        } else if (typeof error === "string") {
+          errorDetail = error;
+        } else if (error && typeof error === "object") {
           try {
-            errorDetail = JSON.stringify(result.reason).substring(0, 500);
+            errorDetail = JSON.stringify(error).substring(0, 500);
           } catch {
-            errorDetail = `[Objekt: ${Object.keys(result.reason as Record<string, unknown>).join(", ")}]`;
+            errorDetail = `[Objekt: ${Object.keys(error as Record<string, unknown>).join(", ")}]`;
           }
         } else {
-          errorDetail = String(result.reason);
+          errorDetail = String(error);
         }
-        const msg = `[Scheduler] Scraper FEHLER: ${errorDetail}`;
+        const msg = `[Scheduler] ${scraper.displayName} FEHLER: ${errorDetail}`;
         errors.push(msg);
         console.error(msg);
+        scrapeResults.push({ status: "rejected", reason: error });
       }
     }
 
     // === Health Monitor: Scrape-Ergebnisse melden ===
     const healthReportData: { platform: string; resultsCount: number; error?: string }[] = [];
     for (const result of scrapeResults) {
-      if (result.status === "fulfilled") {
+      if (result.status === "fulfilled" && result.value) {
         const { scraper, results: scraperResults } = result.value;
         healthReportData.push({
           platform: scraper.platform,
@@ -163,12 +177,13 @@ export async function runSearchJob(searchId: string): Promise<{
         });
       } else {
         let errMsg: string;
-        if (result.reason instanceof Error) {
-          errMsg = result.reason.message;
-        } else if (typeof result.reason === "string") {
-          errMsg = result.reason;
+        const reason = result.reason;
+        if (reason instanceof Error) {
+          errMsg = reason.message;
+        } else if (typeof reason === "string") {
+          errMsg = reason;
         } else {
-          try { errMsg = JSON.stringify(result.reason).substring(0, 300); } catch { errMsg = "[unbekannter Fehler]"; }
+          try { errMsg = JSON.stringify(reason).substring(0, 300); } catch { errMsg = "[unbekannter Fehler]"; }
         }
         healthReportData.push({
           platform: "unknown",

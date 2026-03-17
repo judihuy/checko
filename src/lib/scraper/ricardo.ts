@@ -1,8 +1,8 @@
-// Ricardo.ch Scraper — Puppeteer + Stealth + CH Residential Proxy
-// Die /api/mfa/search API liefert generischen Müll und ignoriert Suchparameter.
-// Daher: Browser-Scraping der Suchseite mit Puppeteer-Extra-Stealth.
+// Ricardo.ch Scraper — HTTP-Fetch mit Proxy + echten Browser-Headers (primär)
+// HTML/JSON-LD/NEXT_DATA Parsing.
 // Proxy: Residential CH über p.webshare.io (Ländercode -ch).
-// Fallback-Kette: Puppeteer → HTML/JSON-LD fetch
+// Puppeteer nur als letzter Fallback.
+// Die /api/mfa/search API liefert generischen Müll und ignoriert Suchparameter.
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
@@ -41,30 +41,30 @@ export class RicardoScraper extends BaseScraper {
     // Detect vehicle searches for post-filtering (kept for edge cases)
     const isVehicleSearch = false; // Vehicle searches are handled by CarForYou now
 
-    // Methode 1 (PRIMÄR): Puppeteer + Stealth + CH Proxy
-    try {
-      const browserResults = await this.scrapeViaBrowser(enrichedQuery, options, isVehicleSearch);
-      if (browserResults.length > 0) {
-        console.log(`[Ricardo] ✅ Browser: ${browserResults.length} Ergebnisse`);
-        return browserResults;
-      }
-    } catch (error) {
-      console.warn(
-        `[Ricardo] Browser-Methode fehlgeschlagen:`,
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-
-    // Methode 2 (FALLBACK): HTTP fetch + HTML/JSON-LD Parsing
+    // Methode 1 (PRIMÄR): HTTP-Fetch mit CH-Proxy + Browser-Headers
     try {
       const htmlResults = await this.scrapeViaHtml(enrichedQuery, options, isVehicleSearch);
       if (htmlResults.length > 0) {
-        console.log(`[Ricardo] HTML-Fallback: ${htmlResults.length} Ergebnisse`);
+        console.log(`[Ricardo] ✅ HTTP-Fetch: ${htmlResults.length} Ergebnisse`);
         return htmlResults;
       }
     } catch (error) {
       console.warn(
-        `[Ricardo] HTML-Fallback fehlgeschlagen:`,
+        `[Ricardo] HTTP-Fetch fehlgeschlagen:`,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+
+    // Methode 2 (FALLBACK): Puppeteer + Stealth + CH Proxy
+    try {
+      const browserResults = await this.scrapeViaBrowser(enrichedQuery, options, isVehicleSearch);
+      if (browserResults.length > 0) {
+        console.log(`[Ricardo] ✅ Browser-Fallback: ${browserResults.length} Ergebnisse`);
+        return browserResults;
+      }
+    } catch (error) {
+      console.warn(
+        `[Ricardo] Browser-Fallback fehlgeschlagen:`,
         error instanceof Error ? error.message : String(error)
       );
     }
@@ -131,7 +131,7 @@ export class RicardoScraper extends BaseScraper {
   }
 
   /**
-   * HTML-Fallback: Seite per HTTP laden und parsen
+   * PRIMÄR: Seite per HTTP-Fetch mit CH-Proxy + Browser-Headers laden und parsen
    */
   private async scrapeViaHtml(
     query: string,
@@ -139,15 +139,18 @@ export class RicardoScraper extends BaseScraper {
     isVehicleSearch?: boolean
   ): Promise<ScraperResult[]> {
     const searchUrl = this.buildSearchUrl(query, options);
-    console.log(`[Ricardo] HTML Fallback URL: ${searchUrl}`);
+    console.log(`[Ricardo] HTTP-Fetch URL: ${searchUrl}`);
 
-    const response = await this.fetchWithHeaders(searchUrl);
+    // CH-Proxy mit echten Browser-Headers (wie eBay KA Ansatz)
+    const response = await this.fetchWithCountryHeaders(searchUrl, "ch");
     if (!response.ok) {
-      console.error(`[Ricardo] HTML: HTTP ${response.status}`);
+      console.error(`[Ricardo] HTTP: ${response.status}`);
       return [];
     }
 
     const html = await response.text();
+    console.log(`[Ricardo] HTML length: ${html.length}`);
+
     if (html.length < 1000 || html.includes("Just a moment") || html.includes("cf_chl_opt")) {
       console.warn("[Ricardo] ⚠️ Cloudflare-Challenge oder kurze Antwort");
       return [];

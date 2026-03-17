@@ -1,8 +1,7 @@
-// AutoScout24.ch Scraper — Puppeteer + Stealth + CH Residential Proxy
-// Browser-Scraping mit puppeteer-extra-plugin-stealth.
+// AutoScout24.ch Scraper — HTTP-Fetch mit Proxy + echten Browser-Headers (primär)
 // Proxy: Residential CH über p.webshare.io (Ländercode -ch).
 // Parsing-Kette: RSC flight data → HTML listing links → JSON-LD.
-// Fallback auf HTTP wenn Browser fehlschlägt.
+// Puppeteer nur als letzter Fallback.
 //
 // URL-Format:
 // - Make/Model: /de/s/mo-{model}/mk-{make}
@@ -140,28 +139,28 @@ export class AutoScoutScraper extends BaseScraper {
       const searchUrl = this.buildSearchUrl(query, options);
       console.log(`[AutoScout] Search URL: ${searchUrl}`);
 
-      // Methode 1 (PRIMÄR): Puppeteer + Stealth + CH Proxy
-      try {
-        const browserResults = await this.scrapeViaBrowser(searchUrl, options);
-        if (browserResults.length > 0) {
-          console.log(`[AutoScout] ✅ Browser: ${browserResults.length} Ergebnisse`);
-          return browserResults;
-        }
-      } catch (error) {
-        const detail = this.formatError(error);
-        console.warn(`[AutoScout] Browser-Methode fehlgeschlagen: ${detail}`);
-      }
-
-      // Methode 2 (FALLBACK): HTTP fetch
+      // Methode 1 (PRIMÄR): HTTP-Fetch mit CH-Proxy + Browser-Headers
       try {
         const httpResults = await this.scrapeViaHttp(searchUrl, options);
         if (httpResults.length > 0) {
-          console.log(`[AutoScout] ✅ HTTP-Fallback: ${httpResults.length} Ergebnisse`);
+          console.log(`[AutoScout] ✅ HTTP-Fetch: ${httpResults.length} Ergebnisse`);
           return httpResults;
         }
       } catch (error) {
         const detail = this.formatError(error);
-        console.warn(`[AutoScout] HTTP-Fallback fehlgeschlagen: ${detail}`);
+        console.warn(`[AutoScout] HTTP-Fetch fehlgeschlagen: ${detail}`);
+      }
+
+      // Methode 2 (FALLBACK): Puppeteer + Stealth + CH Proxy
+      try {
+        const browserResults = await this.scrapeViaBrowser(searchUrl, options);
+        if (browserResults.length > 0) {
+          console.log(`[AutoScout] ✅ Browser-Fallback: ${browserResults.length} Ergebnisse`);
+          return browserResults;
+        }
+      } catch (error) {
+        const detail = this.formatError(error);
+        console.warn(`[AutoScout] Browser-Fallback fehlgeschlagen: ${detail}`);
       }
 
       console.warn(`[AutoScout] ⚠️ Keine Ergebnisse`);
@@ -197,36 +196,13 @@ export class AutoScoutScraper extends BaseScraper {
   }
 
   /**
-   * HTTP-Fallback: Seite per HTTP laden.
+   * PRIMÄR: Seite per HTTP-Fetch mit CH-Proxy + Browser-Headers laden.
    */
   private async scrapeViaHttp(searchUrl: string, options?: ScraperOptions): Promise<ScraperResult[]> {
-    await this.enforceRateLimit();
+    console.log(`[AutoScout] HTTP-Fetch URL: ${searchUrl}`);
 
-    const userAgent = this.getRandomUserAgent();
-    const headers: Record<string, string> = {
-      "User-Agent": userAgent,
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "de-CH,de;q=0.9,en;q=0.8",
-      "Accept-Encoding": "gzip, deflate, br",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1",
-      "Upgrade-Insecure-Requests": "1",
-      "Cache-Control": "max-age=0",
-    };
-
-    let response: Response;
-    try {
-      response = await fetch(searchUrl, { headers, redirect: "follow" });
-    } catch (fetchError) {
-      const detail = this.formatError(fetchError);
-      console.warn(`[AutoScout] Direct fetch failed: ${detail}`);
-      const { response: proxyResp } = await (await import("./proxy-manager")).fetchWithProxy(
-        searchUrl, this.platform, { headers, maxRetries: 2, preferredCountry: "ch" }
-      );
-      response = proxyResp;
-    }
+    // CH-Proxy mit echten Browser-Headers (wie eBay KA Ansatz)
+    const response = await this.fetchWithCountryHeaders(searchUrl, "ch");
 
     if (!response.ok) {
       let bodySnippet = "";

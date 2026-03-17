@@ -1,5 +1,6 @@
 // eBay Kleinanzeigen Scraper (kleinanzeigen.de)
-// Nutzt Puppeteer (headless Browser) mit Proxy für Anti-Bot-Bypass
+// HTTP-Fetch mit Proxy + echten Browser-Headers (primär)
+// Puppeteer nur als letzter Fallback
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 
@@ -65,18 +66,27 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
 
       console.log(`[eBay KA] Search URL: ${searchUrl}`);
 
-      // Puppeteer-First, Fallback auf fetchWithHeaders
+      // HTTP-Fetch mit Proxy + Browser-Headers (primär)
+      // Puppeteer nur als letzter Fallback
       let html: string;
       try {
-        html = await this.fetchWithBrowser(searchUrl);
-      } catch (browserError) {
-        console.warn(`[eBay KA] Puppeteer failed, falling back to HTTP fetch:`, browserError);
         const response = await this.fetchWithHeaders(searchUrl);
         if (!response.ok) {
-          console.error(`eBay KA: HTTP ${response.status} für "${query}"`);
-          return results;
+          throw new Error(`HTTP ${response.status}`);
         }
         html = await response.text();
+        if (html.length < 1000 || html.includes("Just a moment") || html.includes("cf_chl_opt")) {
+          throw new Error("Cloudflare-Challenge oder zu kurze Antwort");
+        }
+        console.log(`[eBay KA] ✅ HTTP-Fetch erfolgreich`);
+      } catch (httpError) {
+        console.warn(`[eBay KA] HTTP-Fetch fehlgeschlagen, Fallback auf Puppeteer:`, httpError instanceof Error ? httpError.message : String(httpError));
+        try {
+          html = await this.fetchWithBrowser(searchUrl);
+        } catch (browserError) {
+          console.error(`[eBay KA] Puppeteer-Fallback auch fehlgeschlagen:`, browserError instanceof Error ? browserError.message : String(browserError));
+          return results;
+        }
       }
 
       console.log(`[eBay KA] HTML length: ${html.length}`);

@@ -113,6 +113,21 @@ export class AutoScoutScraper extends BaseScraper {
         return httpResults;
       }
 
+      // Methode 2 (FALLBACK): Headless Browser (Puppeteer) — bypasses Cloudflare
+      try {
+        console.log(`[AutoScout] HTTP lieferte 0 Treffer → versuche Browser-Fallback...`);
+        const browserResults = await this.scrapeViaBrowser(searchUrl, options);
+        if (browserResults.length > 0) {
+          console.log(`[AutoScout] ✅ Browser: ${browserResults.length} Ergebnisse`);
+          return browserResults;
+        }
+      } catch (browserError) {
+        console.warn(
+          `[AutoScout] Browser-Fallback fehlgeschlagen:`,
+          browserError instanceof Error ? browserError.message : String(browserError)
+        );
+      }
+
       console.warn(`[AutoScout] ⚠️ Keine Ergebnisse`);
       return [];
     } catch (error) {
@@ -120,6 +135,30 @@ export class AutoScoutScraper extends BaseScraper {
       console.error(`[AutoScout] Scraper-Fehler: ${reason}`);
       return [];
     }
+  }
+
+  /**
+   * AutoScout24 per Headless-Browser (Puppeteer Stealth) laden.
+   * Umgeht Cloudflare-Challenge. Fallback wenn HTTP 403 kommt.
+   */
+  private async scrapeViaBrowser(searchUrl: string, options?: ScraperOptions): Promise<ScraperResult[]> {
+    const html = await this.fetchWithBrowserNoProxy(searchUrl);
+
+    if (html.length < 5000) {
+      console.warn(`[AutoScout] Browser: Sehr kurze Antwort (${html.length} bytes)`);
+      return [];
+    }
+
+    // Try RSC flight data first
+    const rscResults = this.parseRscFlightData(html, options);
+    if (rscResults.length > 0) return rscResults;
+
+    // Fallback: HTML listing links
+    const htmlResults = this.parseHtmlListings(html, options);
+    if (htmlResults.length > 0) return htmlResults;
+
+    // Fallback: JSON-LD
+    return this.parseJsonLd(html, options);
   }
 
   /**

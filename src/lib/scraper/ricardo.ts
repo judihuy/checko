@@ -94,10 +94,11 @@ export class RicardoScraper extends BaseScraper {
       params.set("range_filters.price.max", String(Math.round(options.maxPrice / 100)));
     }
 
-    // Category filter: Fahrzeuge = 69956
-    if (options?.category === "Fahrzeuge") {
-      params.set("category_id", "69956");
-    }
+    // Detect vehicle searches for post-filtering
+    // Note: Ricardo API ignores category_id param, so we post-filter instead
+    const isVehicleSearch = options?.category === "Fahrzeuge" ||
+      options?.category === "Motorräder" ||
+      !!(options?.vehicleMake || options?.vehicleModel);
 
     const apiUrl = `${this.baseUrl}/api/mfa/search?${params.toString()}`;
     console.log(`[Ricardo] API URL: ${apiUrl}`);
@@ -192,6 +193,32 @@ export class RicardoScraper extends BaseScraper {
     console.log(`[Ricardo] API: ${data.articles.length} Artikel (total: ${data.totalArticlesCount})`);
 
     for (const article of data.articles) {
+      // Vehicle search: post-filter by title relevance
+      // Ricardo's general search returns everything — filter out irrelevant items
+      if (isVehicleSearch) {
+        const titleLower = article.title.toLowerCase();
+        const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+        // At least one significant query word must appear in the title
+        const hasRelevantWord = queryWords.some(w => titleLower.includes(w));
+        if (!hasRelevantWord) {
+          continue; // Skip irrelevant results like "Laminiergerät" or "Pokemon"
+        }
+        // Also skip known non-vehicle items (model cars, toys, accessories, etc.)
+        const NON_VEHICLE_KEYWORDS = [
+          /modellauto/i, /spielzeug/i, /poster/i, /prospekt/i, /katalog/i,
+          /schlüsselanhänger/i, /aufkleber/i, /t-shirt/i, /tasse\b/i,
+          /hülle/i, /cover\b/i, /case\b/i, /sticker/i, /buch\b/i,
+          /lego/i, /playmobil/i, /hot\s*wheels/i, /matchbox/i, /diecast/i,
+          /1[:/]\s*\d{2}\b/i, /miniatur/i, /pokemon/i, /karte\b/i, /card\b/i,
+          /lamini/i, /laminier/i,
+        ];
+        const fullText = `${article.title}`;
+        if (NON_VEHICLE_KEYWORDS.some(pattern => pattern.test(fullText))) {
+          console.log(`[Ricardo] Skipping non-vehicle: "${article.title.substring(0, 60)}"`);
+          continue;
+        }
+      }
+
       // Preis: buyNowPrice hat Priorität, dann bidPrice
       const priceCHF = article.buyNowPrice ?? article.bidPrice ?? 0;
       const priceRappen = Math.round(priceCHF * 100);

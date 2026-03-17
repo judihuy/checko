@@ -94,13 +94,22 @@ function isNotRealVehicle(title: string, description?: string): boolean {
 /**
  * Versucht das Baujahr aus dem Titel zu extrahieren.
  * Sucht nach 4-stelligen Jahreszahlen zwischen 1950 und 2030.
- * Gibt ALLE gefundenen Jahreszahlen zurück.
+ * Ignoriert Jahreszahlen die Teil eines Datums sind (z.B. "17.03.2026", "2026-03-17").
+ * Gibt ALLE gefundenen Baujahre zurück.
  */
 function extractYearsFromText(text: string): number[] {
+  // First, remove date-like patterns so they don't get picked up as build years
+  // Patterns: DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY
+  const textWithoutDates = text
+    .replace(/\d{1,2}[./-]\d{1,2}[./-](19[5-9]\d|20[0-3]\d)/g, "")
+    .replace(/(19[5-9]\d|20[0-3]\d)[./-]\d{1,2}[./-]\d{1,2}/g, "")
+    // Also remove "Endet: <date>" patterns that Ricardo adds
+    .replace(/Endet:\s*[^\|]*/gi, "");
+
   const yearPattern = /\b(19[5-9]\d|20[0-3]\d)\b/g;
   const years: number[] = [];
   let match;
-  while ((match = yearPattern.exec(text)) !== null) {
+  while ((match = yearPattern.exec(textWithoutDates)) !== null) {
     years.push(parseInt(match[1], 10));
   }
   return years;

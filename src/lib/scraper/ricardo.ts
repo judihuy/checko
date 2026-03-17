@@ -13,6 +13,21 @@ export class RicardoScraper extends BaseScraper {
   isWorking = true;
 
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
+    // === VEHICLE SEARCH REDIRECT ===
+    // auto.ricardo.ch redirects to carforyou.ch.
+    // Ricardo.ch is NO LONGER used for vehicle/motorcycle searches.
+    // Vehicle searches should use the CarForYou scraper instead.
+    const isVehicleCategory = options?.category === "Fahrzeuge" ||
+      options?.category === "Motorräder" ||
+      options?.subcategory === "Autos" ||
+      options?.subcategory === "Motorräder" ||
+      options?.subcategory === "Wohnmobile";
+
+    if (isVehicleCategory || options?.vehicleMake || options?.vehicleModel) {
+      console.log("[Ricardo] ⏭️ Fahrzeug-Suche übersprungen — verwende CarForYou.ch stattdessen");
+      return [];
+    }
+
     // Enrich query with vehicle make/model if available
     let enrichedQuery = query;
     if (options?.vehicleMake) {
@@ -23,10 +38,8 @@ export class RicardoScraper extends BaseScraper {
       }
     }
 
-    // Detect vehicle searches for post-filtering
-    const isVehicleSearch = options?.category === "Fahrzeuge" ||
-      options?.category === "Motorräder" ||
-      !!(options?.vehicleMake || options?.vehicleModel);
+    // Detect vehicle searches for post-filtering (kept for edge cases)
+    const isVehicleSearch = false; // Vehicle searches are handled by CarForYou now
 
     // Methode 1 (PRIMÄR): Puppeteer + Stealth + CH Proxy
     try {

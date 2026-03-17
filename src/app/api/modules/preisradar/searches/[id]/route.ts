@@ -10,7 +10,7 @@ import { z } from "zod";
 import { checkRateLimit, RATE_LIMIT_DEFAULT } from "@/lib/rate-limit";
 import { chargeForSearch, calculateExpiresAt, getSearchCost, runSearchJob } from "@/lib/scraper/scheduler";
 
-const VALID_PLATFORMS = ["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"];
+const VALID_PLATFORMS = ["tutti", "ricardo", "carforyou", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"];
 
 // Zod-Schema für Update — erlaubt Pause/Aktivierung UND Bearbeitung
 const updateSearchSchema = z.object({
@@ -20,7 +20,7 @@ const updateSearchSchema = z.object({
   maxPrice: z.number().int().min(0).nullable().optional(),
   minPrice: z.number().int().min(0).nullable().optional(),
   platforms: z
-    .array(z.enum(["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"]))
+    .array(z.enum(["tutti", "ricardo", "carforyou", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben"]))
     .min(1, "Mindestens eine Plattform auswählen")
     .optional(),
   // Kategorie-Felder

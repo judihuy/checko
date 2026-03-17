@@ -105,6 +105,7 @@ function formatSearchDetails(search: Search): string | null {
 const ALL_PLATFORMS = [
   { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "Cloudflare-Schutz" },
   { id: "ricardo", name: "Ricardo.ch", country: "ch" as CountryCode, disabled: false },
+  { id: "carforyou", name: "CarForYou.ch", country: "ch" as CountryCode, disabled: false },
   { id: "anibis", name: "Anibis.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "Cloudflare-Schutz" },
   { id: "autoscout", name: "AutoScout24.ch", country: "ch" as CountryCode, disabled: false },
   { id: "comparis", name: "Comparis.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "DataDome-Schutz" },
@@ -222,7 +223,7 @@ export default function PreisradarPage() {
   const [query, setQuery] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["ricardo", "autoscout", "ebay-ka", "willhaben"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["ricardo", "carforyou", "autoscout", "ebay-ka", "willhaben"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
   const [category, setCategory] = useState("");
@@ -550,7 +551,7 @@ export default function PreisradarPage() {
       setQuery("");
       setMinPrice("");
       setMaxPrice("");
-      setSelectedPlatforms(["ricardo", "autoscout", "ebay-ka", "willhaben"]);
+      setSelectedPlatforms(["ricardo", "carforyou", "autoscout", "ebay-ka", "willhaben"]);
       setSelectedCountries(new Set(["ch"]));
       setDuration("1d");
       setQualityTier("standard");

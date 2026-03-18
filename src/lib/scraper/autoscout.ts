@@ -201,13 +201,6 @@ export class AutoScoutScraper extends BaseScraper {
 
     const html = await fetchViaFlareSolverr(searchUrl, this.platform);
 
-    // Debug: save HTML for analysis (non-blocking, best-effort)
-    try {
-      const fs = await import("fs/promises");
-      await fs.writeFile("/tmp/autoscout_debug.html", html);
-      console.log(`[AutoScout] Debug HTML saved to /tmp/autoscout_debug.html (${html.length} bytes)`);
-    } catch { /* ignore write errors */ }
-
     if (html.length < 5000) {
       console.warn(`[AutoScout] ⚠️ Sehr kurze FlareSolverr-Antwort (${html.length} bytes)`);
       return [];

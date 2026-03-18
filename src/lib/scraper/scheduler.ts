@@ -3,6 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getScrapersByPlatformList } from "@/lib/scraper";
+import { isPlatformForCountry, type CountryCode } from "@/lib/platform-names";
 import type { ScraperResult } from "@/lib/scraper";
 import { analyzePrice } from "@/lib/ai/price-analyzer";
 import { deductCheckos } from "@/lib/checkos";
@@ -58,7 +59,12 @@ export async function runSearchJob(searchId: string): Promise<{
 
     // Scraper holen: NUR die pro Suche gespeicherten Plattformen nutzen.
     // getScrapersByPlatformList filtert automatisch isWorking=false heraus.
-    const scrapers = getScrapersByPlatformList(search.platforms);
+    // Zusätzlich: Nur Plattformen die zum gewählten Land passen.
+    const searchCountry = (search.country || "ch") as CountryCode;
+    const allScrapersForPlatforms = getScrapersByPlatformList(search.platforms);
+    const scrapers = allScrapersForPlatforms.filter((s) =>
+      isPlatformForCountry(s.platform, searchCountry)
+    );
 
     if (scrapers.length === 0) {
       errors.push("Keine Scraper für die gewählten Plattformen verfügbar");
@@ -431,36 +437,58 @@ export async function runSearchJob(searchId: string): Promise<{
 }
 
 /**
- * Migration: Bestehende Suchen um neue Plattformen (autolina, ebay-ka, tutti, anibis) ergänzen.
- * Fügt fehlende Plattformen zur komma-getrennten Liste hinzu, ohne bestehende zu überschreiben.
+ * Migration: Bestehende Suchen um neue Plattformen ergänzen UND fehlende Länder setzen.
+ * 1. Setzt country="ch" für alle Suchen ohne Land (Altdaten)
+ * 2. Ergänzt Plattformen die zum Land passen
  * Idempotent — kann beliebig oft aufgerufen werden.
  */
 async function migrateSearchPlatforms(): Promise<number> {
-  const ENRICH_PLATFORMS = ["autolina", "ebay-ka", "tutti", "anibis", "willhaben"];
+  const CH_PLATFORMS = ["tutti", "ricardo", "autoscout", "anibis", "autolina"];
+  const DE_PLATFORMS = ["ebay-ka"];
   
-  // Alle Suchen laden, die nicht bereits beide Plattformen haben
   const allSearches = await prisma.preisradarSearch.findMany({
-    select: { id: true, platforms: true },
+    select: { id: true, platforms: true, country: true },
   });
 
   let migratedCount = 0;
 
   for (const search of allSearches) {
+    const country = search.country || "ch";
     const currentPlatforms = search.platforms.split(",").map((p) => p.trim()).filter(Boolean);
-    const missing = ENRICH_PLATFORMS.filter((p) => !currentPlatforms.includes(p));
+    const updates: Record<string, unknown> = {};
 
+    // 1. Fehlende Länder setzen (Altdaten → default CH)
+    if (!search.country) {
+      updates.country = "ch";
+    }
+
+    // 2. Plattformen ergänzen — nur die die zum Land passen
+    let enrichPlatforms: string[] = [];
+    if (country === "ch") {
+      enrichPlatforms = CH_PLATFORMS;
+    } else if (country === "de") {
+      enrichPlatforms = DE_PLATFORMS;
+    } else if (country === "all") {
+      enrichPlatforms = [...CH_PLATFORMS, ...DE_PLATFORMS];
+    }
+    // AT: keine Enrichment, da willhaben deaktiviert
+
+    const missing = enrichPlatforms.filter((p) => !currentPlatforms.includes(p));
     if (missing.length > 0) {
-      const updatedPlatforms = [...currentPlatforms, ...missing].join(",");
+      updates.platforms = [...currentPlatforms, ...missing].join(",");
+    }
+
+    if (Object.keys(updates).length > 0) {
       await prisma.preisradarSearch.update({
         where: { id: search.id },
-        data: { platforms: updatedPlatforms },
+        data: updates,
       });
       migratedCount++;
     }
   }
 
   if (migratedCount > 0) {
-    console.log(`[Scheduler] Migration: ${migratedCount} Suchen um neue Plattformen ergänzt (${ENRICH_PLATFORMS.join(", ")})`);
+    console.log(`[Scheduler] Migration: ${migratedCount} Suchen aktualisiert (Länder + Plattformen)`);
   }
 
   return migratedCount;

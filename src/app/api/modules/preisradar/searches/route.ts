@@ -18,10 +18,9 @@ const TIER_INTERVALS: Record<string, number> = {
   pro: 15,        // Alle 15 Minuten
 };
 
-// Plattformen, die automatisch zu neuen Suchen hinzugefügt werden,
-// sofern der User sie nicht explizit weggelassen hat.
-// Diese werden ZUSÄTZLICH zur User-Auswahl ergänzt.
-const AUTO_ENRICH_PLATFORMS = ["autolina", "ebay-ka", "tutti", "anibis", "willhaben"] as const;
+// Plattform-Enrichment ist jetzt länderspezifisch — siehe migrateSearchPlatforms() im Scheduler.
+// Bei neuen Suchen bestimmt der User via Länderauswahl + Plattform-Checkboxen selbst.
+import { getPlatformsForCountry, type CountryCode } from "@/lib/platform-names";
 
 // Zod-Schema für neue Suche
 const createSearchSchema = z.object({
@@ -29,6 +28,7 @@ const createSearchSchema = z.object({
   maxPrice: z.number().int().nonnegative().optional(),
   minPrice: z.number().int().nonnegative().optional(),
   platforms: z.array(z.enum(["tutti", "ricardo", "ebay-ka", "autoscout", "comparis", "anibis", "google-shopping", "amazon", "willhaben", "autolina"])).min(1, "Mindestens 1 Plattform wählen"),
+  country: z.enum(["ch", "de", "at", "all"]).default("ch"),
   duration: z.enum(["1d", "1w", "1m"]).default("1d"),
   qualityTier: z.enum(["standard", "premium", "pro"]).default("standard"),
   interval: z.number().int().min(15).max(1440).optional(),
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { 
-      query, maxPrice, minPrice, platforms: userPlatforms, duration, qualityTier, isDraft,
+      query, maxPrice, minPrice, platforms: userPlatforms, country, duration, qualityTier, isDraft,
       category: searchCategory, subcategory: searchSubcategory, condition: searchCondition,
       vehicleMake, vehicleModel, yearFrom, yearTo, kmFrom, kmTo, fuelType, transmission,
       engineSizeCcm, motorcycleType,
@@ -87,14 +87,11 @@ export async function POST(request: NextRequest) {
       furnitureType,
     } = parsed.data;
 
-    // Auto-Enrichment: Plattformen (autolina, ebay-ka, tutti, anibis) zur User-Auswahl hinzufügen,
-    // sofern sie noch nicht enthalten sind. Die User-Auswahl bleibt vollständig erhalten.
-    const platforms = [...userPlatforms];
-    for (const p of AUTO_ENRICH_PLATFORMS) {
-      if (!platforms.includes(p)) {
-        platforms.push(p);
-      }
-    }
+    // Plattformen: User-Auswahl beibehalten, aber nur Plattformen die zum Land passen.
+    const allowedPlatforms = getPlatformsForCountry(country as CountryCode);
+    const platforms = userPlatforms.filter((p) =>
+      country === "all" ? true : allowedPlatforms.includes(p)
+    );
 
     // Auto-fill query from structured fields if empty
     let finalQuery = query.trim();
@@ -137,6 +134,7 @@ export async function POST(request: NextRequest) {
           maxPrice: maxPrice || null,
           minPrice: minPrice || null,
           platforms: platforms.join(","),
+          country,
           category: searchCategory || null,
           subcategory: searchSubcategory || null,
           condition: searchCondition || null,
@@ -172,6 +170,7 @@ export async function POST(request: NextRequest) {
           id: search.id,
           query: search.query,
           platforms: search.platforms,
+          country: search.country,
           duration: search.duration,
           qualityTier: search.qualityTier,
           interval: search.interval,
@@ -203,6 +202,7 @@ export async function POST(request: NextRequest) {
         maxPrice: maxPrice || null,
         minPrice: minPrice || null,
         platforms: platforms.join(","),
+        country,
         category: searchCategory || null,
         subcategory: searchSubcategory || null,
         condition: searchCondition || null,
@@ -243,6 +243,7 @@ export async function POST(request: NextRequest) {
         id: search.id,
         query: search.query,
         platforms: search.platforms,
+        country: search.country,
         duration: search.duration,
         qualityTier: search.qualityTier,
         interval: search.interval,
@@ -297,6 +298,7 @@ export async function GET(request: NextRequest) {
         maxPrice: s.maxPrice,
         minPrice: s.minPrice,
         platforms: s.platforms.split(","),
+        country: s.country || "ch",
         duration: s.duration,
         qualityTier: s.qualityTier,
         interval: s.interval,

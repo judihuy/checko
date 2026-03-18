@@ -269,6 +269,7 @@ model PreisradarSearch {
   maxPrice       Int?
   minPrice       Int?
   platforms      String // Komma-getrennt: "tutti,ricardo,ebay-ka"
+  country        String            @default("ch") // Länderfilter: "ch", "de", "at", "all"
   category       String?           // Hauptkategorie: Fahrzeuge, Elektronik, Immobilien, etc.
   subcategory    String?           // Unterkategorie: Autos, Motorräder, Smartphones, etc.
   condition      String?           // Zustand: Alle, Neu, Gebraucht

@@ -2,6 +2,7 @@
 // Zentrale Verwaltung aller Plattform-Scraper
 
 import { BaseScraper } from "./base";
+import { getPlatformsForCountry, type CountryCode } from "@/lib/platform-names";
 import { TuttiScraper } from "./tutti";
 import { RicardoScraper } from "./ricardo";
 import { EbayKleinanzeigenScraper } from "./ebay-ka";
@@ -93,6 +94,20 @@ export function getScrapersByPlatformList(platformString: string): BaseScraper[]
   }
 
   return scrapers;
+}
+
+/**
+ * Scraper anhand eines Ländercodes zurückgeben.
+ * Berücksichtigt COUNTRY_PLATFORMS-Mapping und isWorking-Status.
+ * Bei "all" werden alle funktionsfähigen Scraper zurückgegeben.
+ */
+export function getScrapersForCountry(country: string): BaseScraper[] {
+  const allowedPlatforms = getPlatformsForCountry(country as CountryCode);
+  
+  return Array.from(scraperRegistry.values()).filter((s) => {
+    if (!s.isWorking) return false;
+    return allowedPlatforms.includes(s.platform);
+  });
 }
 
 // Re-exports

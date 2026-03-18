@@ -16,6 +16,7 @@ interface Search {
   maxPrice: number | null;
   minPrice: number | null;
   platforms: string[];
+  country: string;
   duration: string;
   qualityTier: string;
   interval: number;
@@ -105,14 +106,11 @@ function formatSearchDetails(search: Search): string | null {
 const ALL_PLATFORMS = [
   { id: "tutti", name: "Tutti.ch", country: "ch" as CountryCode, disabled: false },
   { id: "ricardo", name: "Ricardo.ch", country: "ch" as CountryCode, disabled: false },
-
   { id: "anibis", name: "Anibis.ch", country: "ch" as CountryCode, disabled: false },
   { id: "autoscout", name: "AutoScout24.ch", country: "ch" as CountryCode, disabled: false },
-  { id: "comparis", name: "Comparis.ch", country: "ch" as CountryCode, disabled: true, disabledReason: "DataDome-Schutz" },
+  { id: "autolina", name: "Autolina.ch", country: "ch" as CountryCode, disabled: false },
   { id: "ebay-ka", name: "Kleinanzeigen.de", country: "de" as CountryCode, disabled: false },
-  { id: "amazon", name: "Amazon.de", country: "de" as CountryCode, disabled: true, disabledReason: "Bot-Schutz" },
-  { id: "willhaben", name: "Willhaben.at", country: "at" as CountryCode, disabled: false },
-  { id: "google-shopping", name: "Google Shopping", country: "int" as CountryCode, disabled: true, disabledReason: "CAPTCHA-Schutz" },
+  { id: "willhaben", name: "Willhaben.at", country: "at" as CountryCode, disabled: true, disabledReason: "Vorübergehend deaktiviert" },
 ];
 
 // Nur aktive Plattformen: ohne deaktivierte (autoscout, comparis komplett ausblenden)
@@ -223,7 +221,7 @@ export default function PreisradarPage() {
   const [query, setQuery] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo", "anibis", "autoscout", "ebay-ka", "willhaben"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["tutti", "ricardo", "anibis", "autoscout", "autolina"]);
   const [duration, setDuration] = useState("1d");
   const [qualityTier, setQualityTier] = useState("standard");
   const [category, setCategory] = useState("");
@@ -250,8 +248,8 @@ export default function PreisradarPage() {
   // Möbel-Felder
   const [furnitureType, setFurnitureType] = useState("");
 
-  // Länder-Checkbox-State (für Neue Suche)
-  const [selectedCountries, setSelectedCountries] = useState<Set<CountryCode>>(new Set(["ch"]));
+  // Länder-Auswahl (für Neue Suche) — ein Land oder "all"
+  const [selectedCountry, setSelectedCountry] = useState<CountryCode>("ch");
 
   // Intervall wird automatisch vom qualityTier abgeleitet
   const currentInterval = useMemo(() => {
@@ -264,55 +262,38 @@ export default function PreisradarPage() {
     return getSearchCost(duration, qualityTier);
   }, [duration, qualityTier]);
 
-  // Synchronisiere Länder-Checkboxen mit Plattform-Auswahl
-  const handleCountryToggle = (country: CountryCode) => {
+  // Land wählen → Plattformen automatisch setzen
+  const handleCountrySelect = (country: CountryCode) => {
     const config = COUNTRY_PLATFORMS[country];
-    if (!config.enabled) return; // AT = coming soon
+    if (!config.enabled) return;
 
-    setSelectedCountries((prev) => {
-      const next = new Set(prev);
-      if (next.has(country)) {
-        next.delete(country);
-        // Alle Plattformen dieses Landes entfernen
-        setSelectedPlatforms((platforms) =>
-          platforms.filter((p) => !config.platforms.includes(p))
-        );
-      } else {
-        next.add(country);
-        // Alle aktiven Plattformen dieses Landes hinzufügen (disabled überspringen)
-        const disabledIds = new Set(ALL_PLATFORMS.filter((ap) => "disabled" in ap && ap.disabled).map((ap) => ap.id));
-        setSelectedPlatforms((platforms) => {
-          const newPlatforms = [...platforms];
-          for (const p of config.platforms) {
-            if (!newPlatforms.includes(p) && !disabledIds.has(p)) {
-              newPlatforms.push(p);
-            }
-          }
-          return newPlatforms;
-        });
-      }
-      return next;
-    });
+    setSelectedCountry(country);
+
+    // Plattformen passend zum Land setzen
+    const disabledIds = new Set(ALL_PLATFORMS.filter((ap) => "disabled" in ap && ap.disabled).map((ap) => ap.id));
+    
+    if (country === "all") {
+      // Alle aktiven Plattformen aller Länder
+      const allPlatforms = ACTIVE_PLATFORMS
+        .filter((p) => !disabledIds.has(p.id))
+        .map((p) => p.id);
+      setSelectedPlatforms(allPlatforms);
+    } else {
+      // Nur Plattformen des gewählten Landes
+      const countryPlatforms = ACTIVE_PLATFORMS
+        .filter((p) => p.country === country && !disabledIds.has(p.id))
+        .map((p) => p.id);
+      setSelectedPlatforms(countryPlatforms);
+    }
   };
 
-  // Einzelne Plattform togglen — Länder-Checkbox synchron halten
+  // Einzelne Plattform togglen (im Plattform-Detail-Bereich)
   const togglePlatform = (platformId: string) => {
-    setSelectedPlatforms((prev) => {
-      const next = prev.includes(platformId)
+    setSelectedPlatforms((prev) =>
+      prev.includes(platformId)
         ? prev.filter((p) => p !== platformId)
-        : [...prev, platformId];
-
-      // Länder-Checkboxen synchronisieren
-      const newCountries = new Set<CountryCode>();
-      for (const [code, config] of Object.entries(COUNTRY_PLATFORMS) as [CountryCode, typeof COUNTRY_PLATFORMS[CountryCode]][]) {
-        if (!config.enabled) continue;
-        const hasAny = config.platforms.some((p) => next.includes(p));
-        if (hasAny) newCountries.add(code);
-      }
-      setSelectedCountries(newCountries);
-
-      return next;
-    });
+        : [...prev, platformId]
+    );
   };
 
   const loadSearches = useCallback(async () => {
@@ -506,6 +487,7 @@ export default function PreisradarPage() {
           minPrice: minPrice && parseInt(minPrice, 10) > 0 ? parseInt(minPrice, 10) * 100 : undefined, // CHF → Rappen
           maxPrice: maxPrice && parseInt(maxPrice, 10) > 0 ? parseInt(maxPrice, 10) * 100 : undefined,
           platforms: selectedPlatforms,
+          country: selectedCountry,
           duration,
           qualityTier,
           interval: currentInterval,
@@ -551,8 +533,8 @@ export default function PreisradarPage() {
       setQuery("");
       setMinPrice("");
       setMaxPrice("");
-      setSelectedPlatforms(["ricardo", "autoscout", "ebay-ka", "willhaben"]);
-      setSelectedCountries(new Set(["ch"]));
+      setSelectedPlatforms(["tutti", "ricardo", "anibis", "autoscout", "autolina"]);
+      setSelectedCountry("ch");
       setDuration("1d");
       setQualityTier("standard");
       setCategory("");
@@ -599,6 +581,7 @@ export default function PreisradarPage() {
           minPrice: minPrice ? parseInt(minPrice, 10) * 100 : undefined,
           maxPrice: maxPrice ? parseInt(maxPrice, 10) * 100 : undefined,
           platforms: selectedPlatforms,
+          country: selectedCountry,
           duration,
           qualityTier,
           category: category || undefined,
@@ -847,8 +830,11 @@ export default function PreisradarPage() {
                     </div>
                   )}
 
-                  {/* Plattformen + Qualität */}
+                  {/* Land + Plattformen + Qualität */}
                   <div className="flex flex-wrap gap-1 mb-3">
+                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium">
+                      {COUNTRY_PLATFORMS[search.country as CountryCode]?.flag || "🌍"} {COUNTRY_PLATFORMS[search.country as CountryCode]?.label || search.country}
+                    </span>
                     {search.platforms.map((p) => (
                       <span key={p} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
                         {getPlatformDisplayName(p)}
@@ -1332,37 +1318,39 @@ export default function PreisradarPage() {
                 {/* Länder-Auswahl */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Welche Länder durchsuchen?
+                    🌍 Land wählen
                   </label>
-                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mb-3">
+                  <div className="grid grid-cols-4 gap-1.5 sm:gap-2 mb-3">
                     {(Object.entries(COUNTRY_PLATFORMS) as [CountryCode, typeof COUNTRY_PLATFORMS[CountryCode]][]).map(([code, config]) => (
                       <button
                         key={code}
                         type="button"
-                        onClick={() => handleCountryToggle(code)}
+                        onClick={() => handleCountrySelect(code)}
                         disabled={!config.enabled}
                         className={`flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg border text-xs sm:text-sm font-medium transition ${
                           !config.enabled
                             ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                            : selectedCountries.has(code)
-                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                            : selectedCountry === code
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200"
                             : "border-gray-200 hover:border-gray-300 text-gray-600"
                         }`}
                       >
                         <span>{config.flag}</span>
                         <span className="truncate">{config.label}</span>
                         {!config.enabled && (
-                          <span className="text-[10px] text-gray-400 hidden sm:inline">(Demnächst)</span>
+                          <span className="text-[10px] text-gray-400 hidden sm:inline">(Bald)</span>
                         )}
                       </button>
                     ))}
                   </div>
 
-                  {/* Plattformen (Sub-Checkboxen) */}
+                  {/* Plattformen (Sub-Checkboxen) — nur die des gewählten Landes */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
                     <p className="text-xs text-gray-500 mb-2">Einzelne Plattformen an-/abwählen:</p>
                     <div className="grid grid-cols-2 gap-2">
-                      {ACTIVE_PLATFORMS.map((p) => {
+                      {ACTIVE_PLATFORMS
+                        .filter((p) => selectedCountry === "all" || p.country === selectedCountry)
+                        .map((p) => {
                         const countryConfig = COUNTRY_PLATFORMS[p.country];
                         const isDisabled = "disabled" in p && p.disabled;
                         const disabledReason = "disabledReason" in p ? (p as { disabledReason?: string }).disabledReason : undefined;

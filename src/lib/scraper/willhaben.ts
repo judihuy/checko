@@ -8,7 +8,7 @@ export class WillhabenScraper extends BaseScraper {
   readonly platform = "willhaben";
   readonly displayName = "Willhaben.at";
   readonly baseUrl = "https://www.willhaben.at";
-  isWorking = true;
+  isWorking = false; // ❌ Vorerst deaktiviert — Schweizer Fokus, Österreich nicht Priorität
 
   async scrape(query: string, options?: ScraperOptions): Promise<ScraperResult[]> {
     const results: ScraperResult[] = [];

@@ -280,19 +280,115 @@ export class AutoScoutScraper extends BaseScraper {
   }
 
   /**
-   * Parse all formats: RSC → JSON-LD → HTML
-   * JSON-LD is tried before HTML because it provides structured price data reliably.
+   * Parse all formats and merge: RSC (base) + JSON-LD (prices) + HTML (images).
+   *
+   * RSC flight data provides good structural data (titles, URLs, descriptions)
+   * but often has price=0. JSON-LD reliably provides correct prices. HTML/srcset
+   * provides images when RSC has none.
+   *
+   * Strategy:
+   * 1. Parse RSC (allow price=0 listings through)
+   * 2. Always parse JSON-LD for price enrichment
+   * 3. Merge JSON-LD prices into RSC results where price=0
+   * 4. Enrich missing images from HTML/srcset
+   * 5. Apply price filters after enrichment
+   * 6. If RSC found nothing, fall back to JSON-LD → HTML
    */
   private parseAllFormats(html: string, options?: ScraperOptions): ScraperResult[] {
-    // Parse listings from RSC flight data
-    const rscResults = this.parseRscFlightData(html, options);
-    if (rscResults.length > 0) return rscResults;
+    // Step 1: Parse RSC (with relaxed price filtering — allow price=0 through)
+    const optionsNoPrice = { ...options, minPrice: undefined, maxPrice: undefined };
+    const rscResults = this.parseRscFlightData(html, optionsNoPrice);
 
-    // Fallback: JSON-LD (reliable structured data with prices)
-    const jsonLdResults = this.parseJsonLd(html, options);
-    if (jsonLdResults.length > 0) return jsonLdResults;
+    // Step 2: Always parse JSON-LD for price data
+    const jsonLdResults = this.parseJsonLd(html, optionsNoPrice);
 
-    // Fallback: Parse listing links from HTML
+    if (rscResults.length > 0) {
+      // Build lookup maps from JSON-LD by URL and by listing ID
+      const jsonLdByUrl = new Map<string, ScraperResult>();
+      const jsonLdById = new Map<string, ScraperResult>();
+      for (const jr of jsonLdResults) {
+        jsonLdByUrl.set(jr.url, jr);
+        // Extract listing ID from URL (last numeric segment)
+        const idMatch = jr.url.match(/(\d+)\/?$/);
+        if (idMatch) jsonLdById.set(idMatch[1], jr);
+      }
+
+      // Step 3: Enrich RSC results with JSON-LD prices
+      let enrichedPrices = 0;
+      let enrichedImages = 0;
+      for (const rsc of rscResults) {
+        // Match by URL or listing ID
+        const idMatch = rsc.url.match(/-(\d+)$/);
+        const jsonLd = jsonLdByUrl.get(rsc.url)
+          || (idMatch ? jsonLdById.get(idMatch[1]) : undefined);
+
+        // Enrich price if RSC has 0 but JSON-LD has a real price
+        if (rsc.price === 0 && jsonLd && jsonLd.price > 0) {
+          rsc.price = jsonLd.price;
+          enrichedPrices++;
+        }
+
+        // Enrich image if RSC has none but JSON-LD has one
+        if (!rsc.imageUrl && jsonLd?.imageUrl) {
+          rsc.imageUrl = jsonLd.imageUrl;
+          enrichedImages++;
+        }
+      }
+
+      // Step 4: Enrich missing images from HTML/srcset
+      const rscMissingImages = rscResults.filter(r => !r.imageUrl);
+      if (rscMissingImages.length > 0) {
+        const htmlResults = this.parseHtmlListings(html, optionsNoPrice);
+        const htmlByUrl = new Map<string, ScraperResult>();
+        const htmlById = new Map<string, ScraperResult>();
+        for (const hr of htmlResults) {
+          htmlByUrl.set(hr.url, hr);
+          const idM = hr.url.match(/(\d+)\/?$/);
+          if (idM) htmlById.set(idM[1], hr);
+        }
+
+        for (const rsc of rscMissingImages) {
+          const idMatch = rsc.url.match(/-(\d+)$/);
+          const htmlMatch = htmlByUrl.get(rsc.url)
+            || (idMatch ? htmlById.get(idMatch[1]) : undefined);
+          if (htmlMatch?.imageUrl) {
+            rsc.imageUrl = htmlMatch.imageUrl;
+            enrichedImages++;
+          }
+        }
+      }
+
+      if (enrichedPrices > 0 || enrichedImages > 0) {
+        console.log(`[AutoScout] Enrichment: ${enrichedPrices} prices from JSON-LD, ${enrichedImages} images from JSON-LD/HTML`);
+      }
+
+      // Step 5: Apply price filters after enrichment
+      let results = rscResults;
+      if (options?.minPrice || options?.maxPrice) {
+        results = results.filter(r => {
+          if (options.minPrice && r.price < options.minPrice) return false;
+          if (options.maxPrice && r.price > options.maxPrice) return false;
+          return true;
+        });
+      }
+
+      if (results.length > 0) return results;
+    }
+
+    // Fallback: if RSC found nothing, use JSON-LD results (with price filters)
+    if (jsonLdResults.length > 0) {
+      let results = jsonLdResults;
+      if (options?.minPrice || options?.maxPrice) {
+        results = results.filter(r => {
+          if (options.minPrice && r.price < options.minPrice) return false;
+          if (options.maxPrice && r.price > options.maxPrice) return false;
+          return true;
+        });
+      }
+      if (results.length > 0) return results;
+    }
+
+    // Last fallback: HTML parsing
     return this.parseHtmlListings(html, options);
   }
 
@@ -491,12 +587,14 @@ export class AutoScoutScraper extends BaseScraper {
    * Returns null if the listing should be filtered out.
    */
   private rscListingToResult(listing: AutoScoutListing, options?: ScraperOptions): ScraperResult | null {
-    if (!listing.price || !listing.id) return null;
+    if (!listing.id) return null;
 
-    const priceRappen = Math.round(listing.price * 100);
+    const priceRappen = listing.price ? Math.round(listing.price * 100) : 0;
 
-    if (options?.minPrice && priceRappen < options.minPrice) return null;
-    if (options?.maxPrice && priceRappen > options.maxPrice) return null;
+    // Price filters are applied after enrichment in parseAllFormats(),
+    // but if caller passes them, respect them (for non-enrichment paths)
+    if (options?.minPrice && priceRappen > 0 && priceRappen < options.minPrice) return null;
+    if (options?.maxPrice && priceRappen > 0 && priceRappen > options.maxPrice) return null;
 
     // Year filter: respect yearFrom/yearTo from options
     if (listing.firstRegistrationYear) {

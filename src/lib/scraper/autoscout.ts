@@ -290,7 +290,8 @@ export class AutoScoutScraper extends BaseScraper {
    * 1. Parse RSC (allow price=0 listings through)
    * 2. Always parse JSON-LD for price enrichment
    * 3. Merge JSON-LD prices into RSC results where price=0
-   * 4. Enrich missing images from HTML/srcset
+   * 4. If ALL RSC prices still 0: HTML fallback for prices + images
+   *    Otherwise: enrich only missing images from HTML/srcset
    * 5. Apply price filters after enrichment
    * 6. If RSC found nothing, fall back to JSON-LD → HTML
    */
@@ -335,9 +336,10 @@ export class AutoScoutScraper extends BaseScraper {
         }
       }
 
-      // Step 4: Enrich missing images from HTML/srcset
+      // Step 4: Enrich from HTML — prices (if all still 0) + missing images
+      const allPricesZero = rscResults.every(r => r.price === 0);
       const rscMissingImages = rscResults.filter(r => !r.imageUrl);
-      if (rscMissingImages.length > 0) {
+      if (allPricesZero || rscMissingImages.length > 0) {
         const htmlResults = this.parseHtmlListings(html, optionsNoPrice);
         const htmlByUrl = new Map<string, ScraperResult>();
         const htmlById = new Map<string, ScraperResult>();
@@ -347,19 +349,46 @@ export class AutoScoutScraper extends BaseScraper {
           if (idM) htmlById.set(idM[1], hr);
         }
 
-        for (const rsc of rscMissingImages) {
+        // Helper to find matching HTML result for an RSC result
+        const findHtmlMatch = (rsc: ScraperResult): ScraperResult | undefined => {
           const idMatch = rsc.url.match(/-(\d+)$/);
-          const htmlMatch = htmlByUrl.get(rsc.url)
+          return htmlByUrl.get(rsc.url)
             || (idMatch ? htmlById.get(idMatch[1]) : undefined);
-          if (htmlMatch?.imageUrl) {
-            rsc.imageUrl = htmlMatch.imageUrl;
-            enrichedImages++;
+        };
+
+        // Enrich prices from HTML when all RSC prices are 0
+        if (allPricesZero) {
+          let htmlPricesEnriched = 0;
+          for (const rsc of rscResults) {
+            const htmlMatch = findHtmlMatch(rsc);
+            if (htmlMatch && htmlMatch.price > 0) {
+              rsc.price = htmlMatch.price;
+              htmlPricesEnriched++;
+            }
+            // Also pick up images while we're here
+            if (!rsc.imageUrl && htmlMatch?.imageUrl) {
+              rsc.imageUrl = htmlMatch.imageUrl;
+              enrichedImages++;
+            }
+          }
+          if (htmlPricesEnriched > 0) {
+            console.log(`[AutoScout] HTML fallback: enriched ${htmlPricesEnriched} prices (all RSC prices were 0)`);
+            enrichedPrices += htmlPricesEnriched;
+          }
+        } else {
+          // Only enrich missing images
+          for (const rsc of rscMissingImages) {
+            const htmlMatch = findHtmlMatch(rsc);
+            if (htmlMatch?.imageUrl) {
+              rsc.imageUrl = htmlMatch.imageUrl;
+              enrichedImages++;
+            }
           }
         }
       }
 
       if (enrichedPrices > 0 || enrichedImages > 0) {
-        console.log(`[AutoScout] Enrichment: ${enrichedPrices} prices from JSON-LD, ${enrichedImages} images from JSON-LD/HTML`);
+        console.log(`[AutoScout] Enrichment: ${enrichedPrices} prices from JSON-LD/HTML, ${enrichedImages} images from JSON-LD/HTML`);
       }
 
       // Step 5: Apply price filters after enrichment

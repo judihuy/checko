@@ -21,7 +21,7 @@ const TIER_INTERVALS: Record<string, number> = {
 // Plattformen, die automatisch zu neuen Suchen hinzugefügt werden,
 // sofern der User sie nicht explizit weggelassen hat.
 // Diese werden ZUSÄTZLICH zur User-Auswahl ergänzt.
-const AUTO_ENRICH_PLATFORMS = ["autolina", "ebay-ka"] as const;
+const AUTO_ENRICH_PLATFORMS = ["autolina", "ebay-ka", "tutti", "anibis"] as const;
 
 // Zod-Schema für neue Suche
 const createSearchSchema = z.object({
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       furnitureType,
     } = parsed.data;
 
-    // Auto-Enrichment: Neue Plattformen (autolina, ebay-ka) zur User-Auswahl hinzufügen,
+    // Auto-Enrichment: Plattformen (autolina, ebay-ka, tutti, anibis) zur User-Auswahl hinzufügen,
     // sofern sie noch nicht enthalten sind. Die User-Auswahl bleibt vollständig erhalten.
     const platforms = [...userPlatforms];
     for (const p of AUTO_ENRICH_PLATFORMS) {

@@ -431,12 +431,12 @@ export async function runSearchJob(searchId: string): Promise<{
 }
 
 /**
- * Migration: Bestehende Suchen um neue Plattformen (autolina, ebay-ka) ergänzen.
+ * Migration: Bestehende Suchen um neue Plattformen (autolina, ebay-ka, tutti, anibis) ergänzen.
  * Fügt fehlende Plattformen zur komma-getrennten Liste hinzu, ohne bestehende zu überschreiben.
  * Idempotent — kann beliebig oft aufgerufen werden.
  */
 async function migrateSearchPlatforms(): Promise<number> {
-  const ENRICH_PLATFORMS = ["autolina", "ebay-ka"];
+  const ENRICH_PLATFORMS = ["autolina", "ebay-ka", "tutti", "anibis"];
   
   // Alle Suchen laden, die nicht bereits beide Plattformen haben
   const allSearches = await prisma.preisradarSearch.findMany({
@@ -483,7 +483,7 @@ export async function runAllActiveSearches(): Promise<{
   let skippedSearches = 0;
 
   try {
-    // Migration: Bestehende Suchen um autolina + ebay-ka ergänzen (idempotent)
+    // Migration: Bestehende Suchen um autolina, ebay-ka, tutti, anibis ergänzen (idempotent)
     await migrateSearchPlatforms().catch((err) => {
       console.warn("[Scheduler] Platform migration failed:", err);
       errors.push(`Platform migration error: ${err instanceof Error ? err.message : String(err)}`);

@@ -42,6 +42,7 @@ const updateSearchSchema = z.object({
   areaM2: z.number().int().min(1).nullable().optional(),
   location: z.string().max(200).nullable().optional(),
   furnitureType: z.string().max(100).nullable().optional(),
+  country: z.enum(["ch", "de", "at", "all"]).optional(),
 });
 
 // PUT: Suche bearbeiten
@@ -152,6 +153,9 @@ export async function PUT(
     if (parsed.data.platforms !== undefined) {
       // DB speichert Plattformen komma-getrennt
       updateData.platforms = parsed.data.platforms.join(",");
+    }
+    if (parsed.data.country !== undefined) {
+      updateData.country = parsed.data.country;
     }
     // Kategorie-Felder aktualisieren
     const categoryFields = [

@@ -3,6 +3,7 @@
 // Parse-Methode: HTML-Pattern-Matching der Shopping-Ergebnisse
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
+import { parseSwissPriceRappen } from "./price-utils";
 
 export class GoogleShoppingScraper extends BaseScraper {
   readonly platform = "google-shopping";
@@ -100,11 +101,8 @@ export class GoogleShoppingScraper extends BaseScraper {
         const end = Math.min(html.length, priceMatch.index + 200);
         const context = html.substring(start, end);
 
-        const priceStr = priceMatch[1].replace(/'/g, "").replace(/,/g, "");
-        const priceRaw = parseFloat(priceStr);
-        if (isNaN(priceRaw) || priceRaw <= 0) continue;
-
-        const price = Math.round(priceRaw * 100);
+        const price = parseSwissPriceRappen(priceMatch[1]);
+        if (price <= 0) continue;
         if (options?.minPrice && price < options.minPrice) continue;
         if (options?.maxPrice && price > options.maxPrice) continue;
 
@@ -165,11 +163,8 @@ export class GoogleShoppingScraper extends BaseScraper {
       block.match(/([\d'.,]+)\s*(?:CHF|Fr\.?)/i);
     if (!priceMatch) return;
 
-    const priceStr = priceMatch[1].replace(/'/g, "").replace(/,/g, "");
-    const priceRaw = parseFloat(priceStr);
-    if (isNaN(priceRaw) || priceRaw <= 0) return;
-
-    const price = Math.round(priceRaw * 100);
+    const price = parseSwissPriceRappen(priceMatch[1]);
+    if (price <= 0) return;
     if (options?.minPrice && price < options.minPrice) return;
     if (options?.maxPrice && price > options.maxPrice) return;
 

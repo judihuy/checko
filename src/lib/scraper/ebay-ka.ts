@@ -3,6 +3,7 @@
 // Puppeteer nur als letzter Fallback
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
+import { parseSwissPrice } from "./price-utils";
 
 export class EbayKleinanzeigenScraper extends BaseScraper {
   readonly platform = "ebay-ka";
@@ -162,9 +163,8 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
         );
         if (!priceMatch) continue;
 
-        const priceStr = priceMatch[1].replace(/\./g, "").replace(",", ".");
-        const priceEUR = parseFloat(priceStr);
-        if (isNaN(priceEUR)) continue;
+        const priceEUR = parseSwissPrice(priceMatch[1]);
+        if (priceEUR <= 0) continue;
 
         // EUR → CHF Rappen (1 EUR ≈ 0.96 CHF)
         const price = Math.round(priceEUR * 0.96 * 100);
@@ -228,9 +228,8 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
       );
       if (!priceMatch) continue;
 
-      const priceStr = priceMatch[1].replace(/\./g, "").replace(",", ".");
-      const priceEUR = parseFloat(priceStr);
-      if (isNaN(priceEUR)) continue;
+      const priceEUR = parseSwissPrice(priceMatch[1]);
+      if (priceEUR <= 0) continue;
 
       // EUR → CHF Rappen
       const price = Math.round(priceEUR * 0.96 * 100);
@@ -293,8 +292,8 @@ export class EbayKleinanzeigenScraper extends BaseScraper {
       titles.push(m[1].trim());
     }
     while ((m = priceRegex.exec(html)) !== null) {
-      const priceStr = m[1].replace(/\./g, "").replace(",", ".");
-      prices.push(Math.round(parseFloat(priceStr) * 0.96 * 100));
+      const priceEUR = parseSwissPrice(m[1]);
+      prices.push(Math.round(priceEUR * 0.96 * 100));
     }
     while ((m = hrefRegex.exec(html)) !== null) {
       urls.push(m[1]);

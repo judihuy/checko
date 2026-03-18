@@ -3,6 +3,7 @@
 // Parse-Methoden: JSON-LD, __NEXT_DATA__, HTML-Pattern-Matching
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
+import { parseSwissPrice, parseSwissPriceRappen } from "./price-utils";
 
 export class WillhabenScraper extends BaseScraper {
   readonly platform = "willhaben";
@@ -194,8 +195,8 @@ export class WillhabenScraper extends BaseScraper {
             if (name === "PRICE" || name === "PRICE/AMOUNT" || name === "PRICE_FOR_DISPLAY") {
               const vals = attr.values as string[] | undefined;
               if (vals && vals.length > 0) {
-                const v = parseFloat(String(vals[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
-                if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+                const v = parseSwissPrice(String(vals[0]));
+                if (v > 0) { priceRaw = v; break; }
               }
             }
           }
@@ -204,8 +205,8 @@ export class WillhabenScraper extends BaseScraper {
             for (const attr of attrs) {
               const name = String(attr.name || "").toUpperCase();
               if (name.includes("PRICE") && Array.isArray(attr.values) && (attr.values as string[]).length > 0) {
-                const v = parseFloat(String((attr.values as string[])[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
-                if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+                const v = parseSwissPrice(String((attr.values as string[])[0]));
+                if (v > 0) { priceRaw = v; break; }
               }
             }
           }
@@ -213,9 +214,7 @@ export class WillhabenScraper extends BaseScraper {
 
         // Fallback: price direkt auf dem Objekt
         if (priceRaw <= 0 && item.price !== undefined) {
-          priceRaw = typeof item.price === "number"
-            ? item.price
-            : parseFloat(String(item.price).replace(/[^0-9.,\-]/g, "").replace(",", "."));
+          priceRaw = parseSwissPrice(item.price as string | number);
         }
 
         // Fallback: teaserAttributes (neueres Willhaben-Format)
@@ -224,8 +223,8 @@ export class WillhabenScraper extends BaseScraper {
             const name = String(attr.prefix || attr.key || "").toUpperCase();
             if (name.includes("PRICE") || name.includes("€")) {
               const val = String(attr.value || attr.formattedValue || "");
-              const v = parseFloat(val.replace(/[^0-9.,\-]/g, "").replace(",", "."));
-              if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+              const v = parseSwissPrice(val);
+              if (v > 0) { priceRaw = v; break; }
             }
           }
         }
@@ -345,18 +344,17 @@ export class WillhabenScraper extends BaseScraper {
               const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
               if (offers) {
                 const val = offers.price || offers.lowPrice;
-                priceRaw = typeof val === "number" ? val : parseFloat(String(val || "0"));
+                priceRaw = parseSwissPrice(val as string | number);
               }
             }
-            if (isNaN(priceRaw)) priceRaw = 0;
         
         // Fallback: Check more attribute names for price
         if (priceRaw === 0 && Array.isArray(item.attributes)) {
           for (const attr of (item.attributes as Array<Record<string, unknown>>)) {
             const name = String(attr.name || "").toUpperCase();
             if (name.includes("PRICE") && Array.isArray(attr.values) && (attr.values as string[]).length > 0) {
-              const v = parseFloat(String((attr.values as string[])[0]).replace(/[^0-9.,\-]/g, "").replace(",", "."));
-              if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+              const v = parseSwissPrice(String((attr.values as string[])[0]));
+              if (v > 0) { priceRaw = v; break; }
             }
           }
         }
@@ -428,9 +426,8 @@ export class WillhabenScraper extends BaseScraper {
 
       let price = 0;
       if (priceMatch) {
-        const priceStr = priceMatch[1].replace(/\./g, "").replace(",", ".");
-        const priceEUR = parseFloat(priceStr);
-        if (!isNaN(priceEUR)) {
+        const priceEUR = parseSwissPrice(priceMatch[1]);
+        if (priceEUR > 0) {
           price = Math.round(priceEUR * 0.96 * 100); // EUR → CHF Rappen
         }
       }

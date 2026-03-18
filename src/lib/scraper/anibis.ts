@@ -5,6 +5,7 @@
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 import { fetchViaFlareSolverr, isCloudflareChallenge, isFlareSolverrConfigured } from "./flaresolverr";
+import { parseSwissPrice, parseSwissPriceRappen } from "./price-utils";
 
 export class AnibisScraper extends BaseScraper {
   readonly platform = "anibis";
@@ -294,13 +295,10 @@ export class AnibisScraper extends BaseScraper {
       if (offers && typeof offers === 'object') {
         const o = offers as Record<string, unknown>;
         const val = o.price || o.lowPrice;
-        priceRaw = typeof val === "number"
-          ? val
-          : parseFloat(String(val || "0").replace(/'/g, "").replace(/[^0-9.\-]/g, ""));
+        priceRaw = parseSwissPrice(val as string | number);
       }
     }
-    if (isNaN(priceRaw)) priceRaw = 0;
-    const price = Math.round(priceRaw * 100);
+    const price = parseSwissPriceRappen(priceRaw || 0);
 
     const url = (item.url as string) || "";
     const fullUrl = url.startsWith("http") ? url : url ? `${this.baseUrl}${url}` : this.baseUrl;
@@ -520,17 +518,14 @@ export class AnibisScraper extends BaseScraper {
       if (pf !== undefined && pf !== null) {
         if (typeof pf === 'number') { priceRaw = pf; break; }
         if (typeof pf === 'string') {
-          const v = parseFloat(pf.replace(/[^0-9.,\-]/g, '').replace(',', '.'));
-          if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+          const v = parseSwissPrice(pf);
+          if (v > 0) { priceRaw = v; break; }
         }
         if (typeof pf === 'object') {
           const po = pf as Record<string, unknown>;
           const val = po.value || po.amount || po.raw || po.display;
-          if (typeof val === 'number') { priceRaw = val; break; }
-          if (typeof val === 'string') {
-            const v = parseFloat(val.replace(/[^0-9.,\-]/g, '').replace(',', '.'));
-            if (!isNaN(v) && v > 0) { priceRaw = v; break; }
-          }
+          const v = parseSwissPrice(val as string | number);
+          if (v > 0) { priceRaw = v; break; }
         }
       }
     }
@@ -539,14 +534,13 @@ export class AnibisScraper extends BaseScraper {
       for (const attr of item.attributes as Array<Record<string, unknown>>) {
         const name = String(attr.name || attr.key || '').toUpperCase();
         if (name.includes('PRICE') && Array.isArray(attr.values) && (attr.values as string[]).length > 0) {
-          const v = parseFloat(String((attr.values as string[])[0]).replace(/[^0-9.,\-]/g, '').replace(',', '.'));
-          if (!isNaN(v) && v > 0) { priceRaw = v; break; }
+          const v = parseSwissPrice(String((attr.values as string[])[0]));
+          if (v > 0) { priceRaw = v; break; }
         }
       }
     }
 
-    if (isNaN(priceRaw)) priceRaw = 0;
-    const price = Math.round(priceRaw * 100);
+    const price = parseSwissPriceRappen(priceRaw || 0);
 
     // URL
     const listingId = item.id || item.listingId || item.adId || item.advertId || "";
@@ -757,15 +751,9 @@ export class AnibisScraper extends BaseScraper {
       for (const pp of pricePatterns) {
         const priceMatch = context.match(pp);
         if (priceMatch) {
-          const priceStr = priceMatch[1] || "0";
-          const cleaned = priceStr
-            .replace(/['''\u2019]/g, "")
-            .replace(/\.–|,-/g, "")
-            .replace(/[^0-9.,\-]/g, "")
-            .replace(/,/g, ".");
-          const parsed = parseFloat(cleaned);
-          if (!isNaN(parsed) && parsed > 0 && parsed < 10000000) {
-            price = Math.round(parsed * 100);
+          const parsed = parseSwissPriceRappen(priceMatch[1] || "0");
+          if (parsed > 0 && parsed < 1000000000) { // < 10M CHF
+            price = parsed;
             break;
           }
         }

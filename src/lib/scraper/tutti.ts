@@ -5,6 +5,7 @@
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 import { fetchViaFlareSolverr, isCloudflareChallenge, isFlareSolverrConfigured } from "./flaresolverr";
+import { parseSwissPrice, parseSwissPriceRappen } from "./price-utils";
 
 export class TuttiScraper extends BaseScraper {
   readonly platform = "tutti";
@@ -193,13 +194,10 @@ export class TuttiScraper extends BaseScraper {
               const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
               if (offers) {
                 const val = offers.price || offers.lowPrice;
-                priceRaw = typeof val === "number"
-                  ? val
-                  : parseFloat(String(val || "0").replace(/'/g, "").replace(/[^0-9.\-]/g, ""));
+                priceRaw = parseSwissPrice(val as string | number);
               }
             }
-            if (isNaN(priceRaw)) priceRaw = 0;
-            const price = Math.round(priceRaw * 100);
+            const price = parseSwissPriceRappen(priceRaw || 0);
 
             if (price > 0) {
               if (options?.minPrice && price < options.minPrice) continue;
@@ -278,9 +276,7 @@ export class TuttiScraper extends BaseScraper {
         if (!title) continue;
 
         const priceCHF = listing.price ?? listing.sellPrice ?? 0;
-        const priceRappen = Math.round(
-          (typeof priceCHF === "number" ? priceCHF : parseFloat(String(priceCHF || "0"))) * 100
-        );
+        const priceRappen = parseSwissPriceRappen(priceCHF as string | number);
 
         if (priceRappen > 0) {
           if (options?.minPrice && priceRappen < options.minPrice) continue;
@@ -369,10 +365,7 @@ export class TuttiScraper extends BaseScraper {
       let price = 0;
       if (priceMatch) {
         const priceStr = priceMatch[1] || priceMatch[2] || "0";
-        price = Math.round(
-          parseFloat(priceStr.replace(/['']/g, "").replace(".–", "").replace(",", ".")) * 100
-        );
-        if (isNaN(price)) price = 0;
+        price = parseSwissPriceRappen(priceStr);
       }
 
       if (price > 0) {

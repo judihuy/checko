@@ -6,6 +6,7 @@
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 import { fetchViaFlareSolverr, isCloudflareChallenge, isFlareSolverrConfigured } from "./flaresolverr";
+import { parseSwissPrice, parseSwissPriceRappen } from "./price-utils";
 
 export class RicardoScraper extends BaseScraper {
   readonly platform = "ricardo";
@@ -268,13 +269,10 @@ export class RicardoScraper extends BaseScraper {
               const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
               if (offers) {
                 const val = offers.price || offers.lowPrice;
-                priceRaw = typeof val === "number"
-                  ? val
-                  : parseFloat(String(val || "0").replace(/'/g, "").replace(/[^0-9.\-]/g, ""));
+                priceRaw = parseSwissPrice(val as string | number);
               }
             }
-            if (isNaN(priceRaw)) priceRaw = 0;
-            const price = Math.round(priceRaw * 100);
+            const price = parseSwissPriceRappen(priceRaw || 0);
 
             if (price > 0) {
               if (options?.minPrice && price < options.minPrice) continue;
@@ -346,17 +344,9 @@ export class RicardoScraper extends BaseScraper {
     for (const pattern of patterns) {
       const match = text.match(pattern);
       if (match) {
-        const cleaned = match[1]
-          .replace(/[\u2009\s]/g, "")      // thin space / whitespace
-          .replace(/['''`\u2019]/g, "")     // all apostrophe variants as thousands sep
-          .replace(/\.–$/, "")              // trailing .–
-          .replace(/,–$/, "")              // trailing ,–
-          .replace(/[–\-]$/, "")           // trailing dash
-          .replace(/\.$/, "")              // trailing dot
-          .trim();
-        const parsed = parseFloat(cleaned.replace(",", "."));
-        if (!isNaN(parsed) && parsed > 0) {
-          return Math.round(parsed * 100);
+        const price = parseSwissPriceRappen(match[1]);
+        if (price > 0) {
+          return price;
         }
       }
     }
@@ -491,14 +481,14 @@ export class RicardoScraper extends BaseScraper {
 
     while ((am = articlePattern.exec(fullData)) !== null) {
       const title = am[1];
-      const priceCHF = parseFloat(am[2]);
+      const priceCHF = parseSwissPrice(am[2]);
 
       if (seenTitles.has(title)) continue;
       seenTitles.add(title);
 
       if (isVehicleSearch && this.isNonVehicleItem(title)) continue;
 
-      const priceRappen = Math.round(priceCHF * 100);
+      const priceRappen = parseSwissPriceRappen(priceCHF);
       if (priceRappen > 0) {
         if (options?.minPrice && priceRappen < options.minPrice) continue;
         if (options?.maxPrice && priceRappen > options.maxPrice) continue;

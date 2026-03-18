@@ -436,7 +436,7 @@ export async function runSearchJob(searchId: string): Promise<{
  * Idempotent — kann beliebig oft aufgerufen werden.
  */
 async function migrateSearchPlatforms(): Promise<number> {
-  const ENRICH_PLATFORMS = ["autolina", "ebay-ka", "tutti", "anibis"];
+  const ENRICH_PLATFORMS = ["autolina", "ebay-ka", "tutti", "anibis", "willhaben"];
   
   // Alle Suchen laden, die nicht bereits beide Plattformen haben
   const allSearches = await prisma.preisradarSearch.findMany({

@@ -21,7 +21,7 @@ const TIER_INTERVALS: Record<string, number> = {
 // Plattformen, die automatisch zu neuen Suchen hinzugefügt werden,
 // sofern der User sie nicht explizit weggelassen hat.
 // Diese werden ZUSÄTZLICH zur User-Auswahl ergänzt.
-const AUTO_ENRICH_PLATFORMS = ["autolina", "ebay-ka", "tutti", "anibis"] as const;
+const AUTO_ENRICH_PLATFORMS = ["autolina", "ebay-ka", "tutti", "anibis", "willhaben"] as const;
 
 // Zod-Schema für neue Suche
 const createSearchSchema = z.object({

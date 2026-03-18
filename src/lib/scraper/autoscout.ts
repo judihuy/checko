@@ -201,6 +201,13 @@ export class AutoScoutScraper extends BaseScraper {
 
     const html = await fetchViaFlareSolverr(searchUrl, this.platform);
 
+    // Debug: save HTML for analysis (non-blocking, best-effort)
+    try {
+      const fs = await import("fs/promises");
+      await fs.writeFile("/tmp/autoscout_debug.html", html);
+      console.log(`[AutoScout] Debug HTML saved to /tmp/autoscout_debug.html (${html.length} bytes)`);
+    } catch { /* ignore write errors */ }
+
     if (html.length < 5000) {
       console.warn(`[AutoScout] ⚠️ Sehr kurze FlareSolverr-Antwort (${html.length} bytes)`);
       return [];
@@ -297,15 +304,18 @@ export class AutoScoutScraper extends BaseScraper {
   /**
    * Parse React Server Components flight data.
    * AutoScout24 embeds listing data in self.__next_f.push() script blocks.
-   * We extract JSON objects containing make/model/price from the decoded chunks.
+   * The listings are in a "topVehicles.content" array within the decoded RSC chunks.
+   * We also look for individual listing objects with conditionType+firstRegistrationYear.
    */
-  private parseRscFlightData(html: string, options?: ScraperOptions): ScraperResult[] {
-    const results: ScraperResult[] = [];
-
-    // Extract all RSC push chunks
-    const chunkPattern = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
+  /**
+   * Extract and decode all RSC flight data chunks from HTML.
+   * Handles both single-escaped (\"...\") and double-escaped (\\"...\\") chunks.
+   */
+  private extractRscData(html: string): string {
     let fullData = "";
 
+    // Pattern 1: Standard RSC chunks with single-escaped strings
+    const chunkPattern = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
     let chunkMatch;
     while ((chunkMatch = chunkPattern.exec(html)) !== null) {
       try {
@@ -316,18 +326,114 @@ export class AutoScoutScraper extends BaseScraper {
       }
     }
 
+    // Pattern 2: Chunks with double-escaped content (\\" instead of \")
+    // These are NOT captured by Pattern 1 because \\" causes the regex to break
+    // at the first \\", treating \\ as an escape and " as the string end.
+    // We find these by looking for push calls near data we care about.
+    const doubleEscPattern = /self\.__next_f\.push\(\[1,"/g;
+    let deMatch;
+    while ((deMatch = doubleEscPattern.exec(html)) !== null) {
+      const contentStart = deMatch.index + deMatch[0].length;
+      // Check if this chunk uses double-escaping (first few chars contain \\")
+      const peek = html.substring(contentStart, contentStart + 100);
+      if (!peek.includes('\\\\"')) continue; // not double-escaped
+
+      // Extract the full string content by finding the closing "]\)
+      // The string ends with "]) but we need to handle the escaping
+      let pos = contentStart;
+      while (pos < html.length) {
+        if (html[pos] === '"' && html.substring(pos).startsWith('"]')) {
+          // Check this isn't an escaped quote: look back for odd number of backslashes
+          let backslashes = 0;
+          let bp = pos - 1;
+          while (bp >= contentStart && html[bp] === '\\') {
+            backslashes++;
+            bp--;
+          }
+          if (backslashes % 2 === 0) {
+            // Even number of backslashes (including 0) = real end of string
+            break;
+          }
+        }
+        pos++;
+      }
+
+      const rawContent = html.substring(contentStart, pos);
+      if (rawContent.length < 50) continue; // too short
+
+      try {
+        // First unescape: HTML-level escaping → JS string
+        const firstPass = JSON.parse(`"${rawContent}"`);
+        fullData += firstPass;
+      } catch {
+        // Try without JSON.parse: manual unescape of \\" → " and \\\\ → \\
+        try {
+          const manual = rawContent
+            .replace(/\\\\/g, '\\')
+            .replace(/\\"/g, '"')
+            .replace(/\\n/g, '\n')
+            .replace(/\\t/g, '\t');
+          fullData += manual;
+        } catch {
+          // Skip
+        }
+      }
+    }
+
+    return fullData;
+  }
+
+  private parseRscFlightData(html: string, options?: ScraperOptions): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    const fullData = this.extractRscData(html);
+
     if (fullData.length === 0) {
       console.log("[AutoScout] No RSC flight data found");
       return results;
     }
 
-    // Find listing objects by pattern: objects with "make", "price", "mileage"
-    const listingPattern = /"conditionType":"(?:used|new)","consumption"/g;
+    console.log(`[AutoScout] RSC data extracted: ${fullData.length} chars`);
+
+    // Strategy 1: Extract topVehicles.content array (promoted/carousel listings)
+    // Use bracket balancing instead of regex for the array — it contains nested objects
+    const tvContentIdx = fullData.indexOf('"topVehicles":{"content":[{');
+    if (tvContentIdx >= 0) {
+      const arrStart = fullData.indexOf("[", tvContentIdx + '"topVehicles":{"content":'.length);
+      if (arrStart >= 0) {
+        let depth = 0;
+        let pos = arrStart;
+        while (pos < fullData.length) {
+          if (fullData[pos] === "[") depth++;
+          else if (fullData[pos] === "]") {
+            depth--;
+            if (depth === 0) break;
+          }
+          pos++;
+        }
+        const arrStr = fullData.substring(arrStart, pos + 1);
+        try {
+          const listings = JSON.parse(arrStr) as AutoScoutListing[];
+          console.log(`[AutoScout] Found ${listings.length} listings in topVehicles.content`);
+          for (const listing of listings) {
+            const result = this.rscListingToResult(listing, options);
+            if (result) results.push(result);
+            if (options?.limit && results.length >= options.limit) return results;
+          }
+        } catch {
+          console.log("[AutoScout] Failed to parse topVehicles.content array");
+        }
+      }
+    }
+
+    // Strategy 2: Find individual listing objects by pattern
+    // AutoScout listings have "conditionType":"used|new" followed by "firstRegistrationYear"
+    const listingPattern = /"conditionType":"(?:used|new)","firstRegistrationYear"/g;
     const listingStarts: number[] = [];
 
     let lm;
     while ((lm = listingPattern.exec(fullData)) !== null) {
-      let searchStart = Math.max(0, lm.index - 500);
+      const searchStart = Math.max(0, lm.index - 500);
       const substr = fullData.substring(searchStart, lm.index);
       const braceIdx = substr.lastIndexOf("{");
       if (braceIdx >= 0) {
@@ -335,11 +441,11 @@ export class AutoScoutScraper extends BaseScraper {
       }
     }
 
-    // Also look for the carousel/promo listings format
-    const carouselPattern = /"carouselSlot":"slot-\d+","conditionType"/g;
+    // Also look for carousel listings where carouselSlot comes before conditionType
+    const carouselPattern = /"carouselSlot":(?:"slot-\d+"|null),"conditionType"/g;
     let cm;
     while ((cm = carouselPattern.exec(fullData)) !== null) {
-      let searchStart = Math.max(0, cm.index - 50);
+      const searchStart = Math.max(0, cm.index - 50);
       const substr = fullData.substring(searchStart, cm.index);
       const braceIdx = substr.lastIndexOf("{");
       if (braceIdx >= 0) {
@@ -347,14 +453,19 @@ export class AutoScoutScraper extends BaseScraper {
       }
     }
 
-    console.log(`[AutoScout] Found ${listingStarts.length} potential listings in RSC data`);
+    if (listingStarts.length > 0) {
+      console.log(`[AutoScout] Found ${listingStarts.length} additional listing candidates in RSC data`);
+    }
 
-    const seenIds = new Set<number>();
+    const seenIds = new Set<number>(results.map(r => {
+      const idMatch = r.url.match(/-(\d+)$/);
+      return idMatch ? parseInt(idMatch[1]) : 0;
+    }));
 
     for (const start of listingStarts) {
       let depth = 0;
       let pos = start;
-      while (pos < Math.min(fullData.length, start + 5000)) {
+      while (pos < Math.min(fullData.length, start + 10000)) {
         if (fullData[pos] === "{") depth++;
         else if (fullData[pos] === "}") {
           depth--;
@@ -366,69 +477,11 @@ export class AutoScoutScraper extends BaseScraper {
       const objStr = fullData.substring(start, pos + 1);
       try {
         const listing = JSON.parse(objStr) as AutoScoutListing;
-
-        if (!listing.price || !listing.id) continue;
-        if (seenIds.has(listing.id)) continue;
+        if (!listing.id || seenIds.has(listing.id)) continue;
         seenIds.add(listing.id);
 
-        const priceRappen = Math.round(listing.price * 100);
-
-        if (options?.minPrice && priceRappen < options.minPrice) continue;
-        if (options?.maxPrice && priceRappen > options.maxPrice) continue;
-
-        // Build title
-        const titleParts: string[] = [];
-        if (listing.make?.name) titleParts.push(listing.make.name);
-        if (listing.versionFullName) {
-          titleParts.push(listing.versionFullName);
-        } else if (listing.model?.name) {
-          titleParts.push(listing.model.name);
-        }
-        const title = titleParts.join(" ") || `Listing ${listing.id}`;
-
-        // Build URL
-        const makeKey = listing.make?.key || "unknown";
-        const modelKey = listing.model?.key || "unknown";
-        const slug = listing.versionFullName
-          ? listing.versionFullName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
-          : modelKey;
-        const url = `${this.baseUrl}/de/d/${makeKey}-${slug}-${listing.id}`;
-
-        // Image URL
-        let imageUrl: string | null = null;
-        if (listing.images && listing.images.length > 0) {
-          const imgKey = listing.images[0].key;
-          imageUrl = `${IMAGE_BASE_URL}/${imgKey}`;
-        }
-
-        // Insertionsdatum extrahieren
-        let listedAt: Date | null = null;
-        const dateStr = listing.onlineSince || listing.publishDate || listing.listingCreationDate || listing.createdAt;
-        if (dateStr) {
-          const parsed = new Date(dateStr);
-          if (!isNaN(parsed.getTime())) listedAt = parsed;
-        }
-
-        // Description
-        const descParts: string[] = [];
-        if (listing.teaser) descParts.push(listing.teaser);
-        if (listing.firstRegistrationYear) descParts.push(`EZ: ${listing.firstRegistrationYear}`);
-        if (listing.mileage !== undefined) descParts.push(`${listing.mileage.toLocaleString("de-CH")} km`);
-        if (listing.horsePower) descParts.push(`${listing.horsePower} PS`);
-        if (listing.transmissionTypeGroup) descParts.push(listing.transmissionTypeGroup);
-        if (listing.seller?.city) descParts.push(listing.seller.city);
-
-        results.push({
-          title: title.substring(0, 200),
-          price: priceRappen,
-          url,
-          imageUrl,
-          description: descParts.join(" | ").substring(0, 500) || undefined,
-          platform: this.platform,
-          scrapedAt: new Date(),
-          listedAt,
-        });
-
+        const result = this.rscListingToResult(listing, options);
+        if (result) results.push(result);
         if (options?.limit && results.length >= options.limit) break;
       } catch {
         // JSON parse error — skip
@@ -439,7 +492,79 @@ export class AutoScoutScraper extends BaseScraper {
   }
 
   /**
-   * Fallback: Parse listing links and prices from HTML
+   * Convert a single RSC listing object to a ScraperResult.
+   * Returns null if the listing should be filtered out.
+   */
+  private rscListingToResult(listing: AutoScoutListing, options?: ScraperOptions): ScraperResult | null {
+    if (!listing.price || !listing.id) return null;
+
+    const priceRappen = Math.round(listing.price * 100);
+
+    if (options?.minPrice && priceRappen < options.minPrice) return null;
+    if (options?.maxPrice && priceRappen > options.maxPrice) return null;
+
+    // Year filter: respect yearFrom/yearTo from options
+    if (listing.firstRegistrationYear) {
+      if (options?.yearFrom && listing.firstRegistrationYear < options.yearFrom) return null;
+      if (options?.yearTo && listing.firstRegistrationYear > options.yearTo) return null;
+    }
+
+    // Build title
+    const titleParts: string[] = [];
+    if (listing.make?.name) titleParts.push(listing.make.name);
+    if (listing.versionFullName) {
+      titleParts.push(listing.versionFullName);
+    } else if (listing.model?.name) {
+      titleParts.push(listing.model.name);
+    }
+    const title = titleParts.join(" ") || `Listing ${listing.id}`;
+
+    // Build URL
+    const makeKey = listing.make?.key || "unknown";
+    const slug = listing.versionFullName
+      ? listing.versionFullName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+      : listing.model?.key || "unknown";
+    const url = `${this.baseUrl}/de/d/${makeKey}-${slug}-${listing.id}`;
+
+    // Image URL — use first image with proper size parameter
+    let imageUrl: string | null = null;
+    if (listing.images && listing.images.length > 0) {
+      const imgKey = listing.images[0].key;
+      imageUrl = `${IMAGE_BASE_URL}/${imgKey}`;
+    }
+
+    // Insertionsdatum extrahieren
+    let listedAt: Date | null = null;
+    const dateStr = listing.onlineSince || listing.publishDate || listing.listingCreationDate || listing.createdAt;
+    if (dateStr) {
+      const parsed = new Date(dateStr);
+      if (!isNaN(parsed.getTime())) listedAt = parsed;
+    }
+
+    // Description
+    const descParts: string[] = [];
+    if (listing.teaser) descParts.push(listing.teaser);
+    if (listing.firstRegistrationYear) descParts.push(`EZ: ${listing.firstRegistrationYear}`);
+    if (listing.mileage !== undefined) descParts.push(`${listing.mileage.toLocaleString("de-CH")} km`);
+    if (listing.horsePower) descParts.push(`${listing.horsePower} PS`);
+    if (listing.transmissionTypeGroup) descParts.push(listing.transmissionTypeGroup);
+    if (listing.seller?.city) descParts.push(listing.seller.city);
+
+    return {
+      title: title.substring(0, 200),
+      price: priceRappen,
+      url,
+      imageUrl,
+      description: descParts.join(" | ").substring(0, 500) || undefined,
+      platform: this.platform,
+      scrapedAt: new Date(),
+      listedAt,
+    };
+  }
+
+  /**
+   * Fallback: Parse listing links and prices from HTML.
+   * AutoScout24 renders prices as "CHF&nbsp;33'900.–" with HTML entities.
    */
   private parseHtmlListings(html: string, options?: ScraperOptions): ScraperResult[] {
     const results: ScraperResult[] = [];
@@ -454,17 +579,26 @@ export class AutoScoutScraper extends BaseScraper {
       if (seenUrls.has(normalized)) continue;
       seenUrls.add(normalized);
 
-      const start = Math.max(0, linkMatch.index - 500);
-      const end = Math.min(html.length, linkMatch.index + 500);
+      // Use wider context for better matching (prices may not be immediately adjacent)
+      const start = Math.max(0, linkMatch.index - 2000);
+      const end = Math.min(html.length, linkMatch.index + 2000);
       const context = html.substring(start, end);
 
-      const priceMatch = context.match(/CHF\s*([\d''.,-]+)/);
+      // Price parsing: handles CHF&nbsp;33'900.– and CHF 33'900.– and CHF\xa033'900.–
+      // Also handles right single quote U+2019 (') as thousands separator
+      const priceMatch = context.match(/CHF(?:&nbsp;|\s|\u00a0)\s*([\d'''.,-]+)/);
       let price = 0;
       if (priceMatch) {
-        price = Math.round(
-          parseFloat(priceMatch[1].replace(/['']/g, "").replace(".–", "").replace(",", ".")) * 100
-        );
-        if (isNaN(price)) price = 0;
+        // Remove all quote variants (', ', '), trailing .– and ,
+        const cleaned = priceMatch[1]
+          .replace(/['''`]/g, "")  // all apostrophe/quote variants as thousands sep
+          .replace(/\.–$/, "")     // trailing .–
+          .replace(/,–$/, "")      // trailing ,–
+          .replace(/[–-]$/, "")    // trailing dash
+          .replace(/\.$/, "")      // trailing dot
+          .trim();
+        const parsed = parseFloat(cleaned.replace(",", "."));
+        price = isNaN(parsed) ? 0 : Math.round(parsed * 100);
       }
 
       if (price > 0) {
@@ -472,19 +606,39 @@ export class AutoScoutScraper extends BaseScraper {
         if (options?.maxPrice && price > options.maxPrice) continue;
       }
 
+      // Extract title from slug
       const slugMatch = href.match(/\/de\/d\/(.+?)-(\d+)$/);
       const title = slugMatch
         ? slugMatch[1].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
         : "Fahrzeug";
 
-      const imgMatch = context.match(/src="(https:\/\/listing-images\.autoscout24\.ch[^"]+)"/i);
+      // Extract listing ID from URL for matching image
+      const listingId = slugMatch ? slugMatch[2] : null;
+
+      // Image: prefer image matching this listing's ID
+      let imageUrl: string | null = null;
+      if (listingId) {
+        const specificImgMatch = context.match(
+          new RegExp(`src="(https://listing-images\\.autoscout24\\.ch/[^"]*/${listingId}/[^"]+)"`, "i")
+        );
+        if (specificImgMatch) {
+          imageUrl = specificImgMatch[1].replace(/&amp;/g, "&");
+        }
+      }
+      // Fallback: any listing image nearby
+      if (!imageUrl) {
+        const imgMatch = context.match(/src="(https:\/\/listing-images\.autoscout24\.ch[^"]+)"/i);
+        if (imgMatch) {
+          imageUrl = imgMatch[1].replace(/&amp;/g, "&");
+        }
+      }
 
       if (price > 0 || title !== "Fahrzeug") {
         results.push({
           title: title.substring(0, 200),
           price,
           url: `${this.baseUrl}${href}`,
-          imageUrl: imgMatch ? imgMatch[1] : null,
+          imageUrl,
           platform: this.platform,
           scrapedAt: new Date(),
         });

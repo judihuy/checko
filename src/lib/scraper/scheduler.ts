@@ -322,12 +322,21 @@ export async function runSearchJob(searchId: string): Promise<{
       }
     }
 
-    // In DB speichern
+    // In DB speichern — explizites Mapping, keine Spread-Operatoren
     if (alertsToCreate.length > 0) {
       await prisma.preisradarAlert.createMany({
         data: alertsToCreate.map((alert) => ({
-          ...alert,
           searchId,
+          title: alert.title,
+          price: alert.price,
+          platform: alert.platform,
+          url: alert.url,
+          imageUrl: alert.imageUrl,
+          description: alert.description,
+          priceScore: alert.priceScore,
+          aiAnalysis: alert.aiAnalysis,
+          isScam: alert.isScam,
+          listedAt: alert.listedAt,
         })),
       });
       newAlerts = alertsToCreate.length;

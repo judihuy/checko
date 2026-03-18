@@ -279,19 +279,20 @@ export class AutoScoutScraper extends BaseScraper {
   }
 
   /**
-   * Parse all formats: RSC → HTML → JSON-LD
+   * Parse all formats: RSC → JSON-LD → HTML
+   * JSON-LD is tried before HTML because it provides structured price data reliably.
    */
   private parseAllFormats(html: string, options?: ScraperOptions): ScraperResult[] {
     // Parse listings from RSC flight data
     const rscResults = this.parseRscFlightData(html, options);
     if (rscResults.length > 0) return rscResults;
 
-    // Fallback: Parse listing links from HTML
-    const htmlResults = this.parseHtmlListings(html, options);
-    if (htmlResults.length > 0) return htmlResults;
+    // Fallback: JSON-LD (reliable structured data with prices)
+    const jsonLdResults = this.parseJsonLd(html, options);
+    if (jsonLdResults.length > 0) return jsonLdResults;
 
-    // Fallback: JSON-LD
-    return this.parseJsonLd(html, options);
+    // Fallback: Parse listing links from HTML
+    return this.parseHtmlListings(html, options);
   }
 
   /**
@@ -610,6 +611,8 @@ export class AutoScoutScraper extends BaseScraper {
 
       // Image: prefer image matching this listing's ID
       let imageUrl: string | null = null;
+
+      // Strategy 1: src attribute with listing ID
       if (listingId) {
         const specificImgMatch = context.match(
           new RegExp(`src="(https://listing-images\\.autoscout24\\.ch/[^"]*/${listingId}/[^"]+)"`, "i")
@@ -618,7 +621,26 @@ export class AutoScoutScraper extends BaseScraper {
           imageUrl = specificImgMatch[1].replace(/&amp;/g, "&");
         }
       }
-      // Fallback: any listing image nearby
+
+      // Strategy 2: srcset attribute (AutoScout often uses srcset instead of src)
+      if (!imageUrl) {
+        // Match srcset with listing-images domain; pick the first URL from the srcset
+        const srcsetMatch = context.match(/srcset="([^"]*listing-images\.autoscout24\.ch[^"]*)"/i);
+        if (srcsetMatch) {
+          // srcset format: "url1 width1, url2 width2, ..." — take first URL
+          const srcsetValue = srcsetMatch[1].replace(/&amp;/g, "&");
+          const firstEntry = srcsetValue.split(",")[0].trim();
+          const srcsetUrl = firstEntry.split(/\s+/)[0];
+          if (srcsetUrl && srcsetUrl.startsWith("http")) {
+            // Normalize to a reasonable size (400px width)
+            const url = new URL(srcsetUrl);
+            url.searchParams.set("w", "400");
+            imageUrl = url.toString();
+          }
+        }
+      }
+
+      // Strategy 3: any listing image src nearby
       if (!imageUrl) {
         const imgMatch = context.match(/src="(https:\/\/listing-images\.autoscout24\.ch[^"]+)"/i);
         if (imgMatch) {
@@ -645,9 +667,12 @@ export class AutoScoutScraper extends BaseScraper {
 
   /**
    * Fallback: JSON-LD parsing
+   * Handles both ItemList (search results) and individual Product/Car entries.
+   * AutoScout24 embeds JSON-LD with "price": 94900 (CHF, not Rappen).
    */
   private parseJsonLd(html: string, options?: ScraperOptions): ScraperResult[] {
     const results: ScraperResult[] = [];
+    const seenUrls = new Set<string>();
 
     const jsonLdMatches = html.matchAll(
       /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi
@@ -656,50 +681,123 @@ export class AutoScoutScraper extends BaseScraper {
     for (const match of jsonLdMatches) {
       try {
         const jsonData = JSON.parse(match[1]);
-        const graphs = jsonData?.["@graph"] || [jsonData];
+        // Handle @graph arrays, plain arrays, and single objects
+        const items: Record<string, unknown>[] = Array.isArray(jsonData)
+          ? jsonData
+          : jsonData?.["@graph"]
+            ? (Array.isArray(jsonData["@graph"]) ? jsonData["@graph"] : [jsonData["@graph"]])
+            : [jsonData];
 
-        for (const graph of graphs) {
-          if (graph?.["@type"] !== "ItemList" || !Array.isArray(graph?.itemListElement)) continue;
-
-          for (const entry of graph.itemListElement) {
-            const item = entry?.item || entry;
-            if (!item?.name) continue;
-
-            let priceRaw = 0;
-            if (item.offers) {
-              const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
-              if (offers?.price) {
-                priceRaw = typeof offers.price === "number" ? offers.price : parseFloat(String(offers.price));
+        for (const item of items) {
+          // Process ItemList entries
+          if (item?.["@type"] === "ItemList" && Array.isArray(item?.itemListElement)) {
+            for (const entry of (item.itemListElement as Record<string, unknown>[])) {
+              const listItem = (entry?.item || entry) as Record<string, unknown>;
+              const result = this.jsonLdItemToResult(listItem, options, seenUrls);
+              if (result) {
+                results.push(result);
+                if (options?.limit && results.length >= options.limit) return results;
               }
             }
-            const price = Math.round((isNaN(priceRaw) ? 0 : priceRaw) * 100);
+            continue;
+          }
 
-            if (price > 0) {
-              if (options?.minPrice && price < options.minPrice) continue;
-              if (options?.maxPrice && price > options.maxPrice) continue;
+          // Process individual Product/Car/Vehicle items or anything with name+offers/price
+          const itemType = item?.["@type"];
+          if (
+            itemType === "Product" ||
+            itemType === "Car" ||
+            itemType === "Vehicle" ||
+            itemType === "IndividualProduct" ||
+            (item?.name && (item?.offers || item?.price))
+          ) {
+            const result = this.jsonLdItemToResult(item, options, seenUrls);
+            if (result) {
+              results.push(result);
+              if (options?.limit && results.length >= options.limit) return results;
             }
-
-            const url = item.url?.startsWith("http") ? item.url : `${this.baseUrl}${item.url || ""}`;
-            let imageUrl: string | null = null;
-            if (typeof item.image === "string") imageUrl = item.image;
-
-            results.push({
-              title: item.name,
-              price,
-              url,
-              imageUrl,
-              platform: this.platform,
-              scrapedAt: new Date(),
-            });
-
-            if (options?.limit && results.length >= options.limit) break;
           }
         }
       } catch {
-        // Skip
+        // Skip malformed JSON-LD
       }
     }
 
+    if (results.length > 0) {
+      console.log(`[AutoScout] JSON-LD: ${results.length} Ergebnisse`);
+    }
+
     return results;
+  }
+
+  /**
+   * Convert a single JSON-LD item to ScraperResult.
+   * Handles price extraction from offers.price (number or string).
+   */
+  private jsonLdItemToResult(
+    item: Record<string, unknown>,
+    options?: ScraperOptions,
+    seenUrls?: Set<string>
+  ): ScraperResult | null {
+    if (!item?.name) return null;
+
+    // Extract price from offers or direct price field
+    let priceRaw = 0;
+    if (item.offers) {
+      const offersData = item.offers as Record<string, unknown> | Record<string, unknown>[];
+      const offers: Record<string, unknown> = Array.isArray(offersData) ? offersData[0] : offersData;
+      if (offers) {
+        const val = offers.price ?? offers.lowPrice;
+        if (typeof val === "number") {
+          priceRaw = val;
+        } else if (typeof val === "string") {
+          priceRaw = parseFloat(val.replace(/['''`\s]/g, "").replace(",", "."));
+        }
+      }
+    } else if (typeof item.price === "number") {
+      priceRaw = item.price as number;
+    } else if (typeof item.price === "string") {
+      priceRaw = parseFloat((item.price as string).replace(/['''`\s]/g, "").replace(",", "."));
+    }
+
+    const price = Math.round((isNaN(priceRaw) ? 0 : priceRaw) * 100);
+
+    if (price > 0) {
+      if (options?.minPrice && price < options.minPrice) return null;
+      if (options?.maxPrice && price > options.maxPrice) return null;
+    }
+
+    const rawUrl = (item.url as string) || "";
+    const url = rawUrl.startsWith("http") ? rawUrl : `${this.baseUrl}${rawUrl}`;
+
+    if (seenUrls) {
+      if (seenUrls.has(url)) return null;
+      seenUrls.add(url);
+    }
+
+    // Image extraction
+    let imageUrl: string | null = null;
+    if (typeof item.image === "string") {
+      imageUrl = item.image as string;
+    } else if (Array.isArray(item.image) && typeof (item.image as string[])[0] === "string") {
+      imageUrl = (item.image as string[])[0];
+    } else if (item.image && typeof item.image === "object" && !Array.isArray(item.image)) {
+      const imgObj = item.image as Record<string, unknown>;
+      if (typeof imgObj.url === "string") imageUrl = imgObj.url as string;
+    }
+
+    const description = typeof item.description === "string"
+      ? (item.description as string).substring(0, 500)
+      : undefined;
+
+    return {
+      title: (item.name as string).substring(0, 200),
+      price,
+      url,
+      imageUrl,
+      description,
+      platform: this.platform,
+      scrapedAt: new Date(),
+    };
   }
 }

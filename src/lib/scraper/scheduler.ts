@@ -194,6 +194,17 @@ export async function runSearchJob(searchId: string): Promise<{
         console.log(`[Scheduler] Price filter: "${r.title.substring(0, 50)}" price ${r.price} > max ${search.maxPrice} → REMOVED`);
         return false;
       }
+      // When maxPrice is set and price is 0/unknown → exclude the result
+      // (likely "Preis auf Anfrage" or scraper failed to extract price)
+      if (search.maxPrice && r.price <= 0) {
+        console.log(`[Scheduler] Price filter: "${r.title.substring(0, 50)}" price=0 with maxPrice=${search.maxPrice} → REMOVED (unknown price)`);
+        return false;
+      }
+      // When minPrice is set and price is 0/unknown → also exclude
+      if (search.minPrice && r.price <= 0) {
+        console.log(`[Scheduler] Price filter: "${r.title.substring(0, 50)}" price=0 with minPrice=${search.minPrice} → REMOVED (unknown price)`);
+        return false;
+      }
       // Strict minPrice filter
       if (search.minPrice && r.price > 0 && r.price < search.minPrice) {
         return false;

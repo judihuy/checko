@@ -125,15 +125,7 @@ export class RicardoScraper extends BaseScraper {
       return [];
     }
 
-    let results = this.parseJsonLd(html, options, isVehicleSearch);
-    if (results.length === 0) {
-      results = this.parseHtmlListings(html, options, isVehicleSearch);
-    }
-    if (results.length === 0) {
-      results = this.parseNextData(html, options, isVehicleSearch);
-    }
-
-    return results;
+    return this.parseAllFormats(html, options, isVehicleSearch);
   }
 
   /**
@@ -161,18 +153,7 @@ export class RicardoScraper extends BaseScraper {
       return [];
     }
 
-    // Parse: zuerst JSON-LD versuchen, dann HTML-Elemente
-    let results = this.parseJsonLd(html, options, isVehicleSearch);
-    if (results.length === 0) {
-      results = this.parseHtmlListings(html, options, isVehicleSearch);
-    }
-
-    // Fallback: __NEXT_DATA__ (Next.js SSR data)
-    if (results.length === 0) {
-      results = this.parseNextData(html, options, isVehicleSearch);
-    }
-
-    return results;
+    return this.parseAllFormats(html, options, isVehicleSearch);
   }
 
   /**
@@ -205,14 +186,27 @@ export class RicardoScraper extends BaseScraper {
       throw new Error("Cloudflare-Challenge oder kurze Antwort erkannt");
     }
 
-    let results = this.parseJsonLd(html, options, isVehicleSearch);
-    if (results.length === 0) {
-      results = this.parseHtmlListings(html, options, isVehicleSearch);
-    }
-    if (results.length === 0) {
-      results = this.parseNextData(html, options, isVehicleSearch);
-    }
+    return this.parseAllFormats(html, options, isVehicleSearch);
+  }
 
+  /**
+   * Try all parsing strategies in order: JSON-LD → HTML → RSC → __NEXT_DATA__
+   */
+  private parseAllFormats(
+    html: string,
+    options?: ScraperOptions,
+    isVehicleSearch?: boolean
+  ): ScraperResult[] {
+    let results = this.parseJsonLd(html, options, isVehicleSearch);
+    if (results.length > 0) return results;
+
+    results = this.parseHtmlListings(html, options, isVehicleSearch);
+    if (results.length > 0) return results;
+
+    results = this.parseRscData(html, options, isVehicleSearch);
+    if (results.length > 0) return results;
+
+    results = this.parseNextData(html, options, isVehicleSearch);
     return results;
   }
 
@@ -333,7 +327,46 @@ export class RicardoScraper extends BaseScraper {
   }
 
   /**
-   * Parse listing links and prices from HTML structure
+   * Extract CHF price from a text string. Returns price in Rappen or 0.
+   * Handles: CHF 1'234.56, CHF&nbsp;1234.–, 1'234 CHF, Fr. 1234, etc.
+   */
+  private extractChfPrice(text: string): number {
+    // Try multiple price patterns
+    const patterns = [
+      // CHF 1'234.56 or CHF&nbsp;1'234.– or CHF\xa01234
+      /CHF(?:&nbsp;|\s|\u00a0)\s*([\d'''.,\u2009]+)/i,
+      // Fr. 1'234.56
+      /Fr\.?\s*([\d'''.,\u2009]+)/i,
+      // 1'234.56 CHF (price before currency)
+      /([\d'''.,\u2009]+)\s*(?:CHF|Fr\.?)/i,
+      // Standalone number patterns in price-like context (e.g., data attributes)
+      /price[^>]*>\s*([\d'''.,\u2009]+)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const cleaned = match[1]
+          .replace(/[\u2009\s]/g, "")      // thin space / whitespace
+          .replace(/['''`\u2019]/g, "")     // all apostrophe variants as thousands sep
+          .replace(/\.–$/, "")              // trailing .–
+          .replace(/,–$/, "")              // trailing ,–
+          .replace(/[–\-]$/, "")           // trailing dash
+          .replace(/\.$/, "")              // trailing dot
+          .trim();
+        const parsed = parseFloat(cleaned.replace(",", "."));
+        if (!isNaN(parsed) && parsed > 0) {
+          return Math.round(parsed * 100);
+        }
+      }
+    }
+    return 0;
+  }
+
+  /**
+   * Parse listing links and prices from HTML structure.
+   * Uses wider context and more aggressive price extraction to handle
+   * JS-rendered content from FlareSolverr/Puppeteer.
    */
   private parseHtmlListings(
     html: string,
@@ -344,26 +377,29 @@ export class RicardoScraper extends BaseScraper {
     const seenUrls = new Set<string>();
 
     // Ricardo article links: /de/a/{id} or /de/a/{slug}-{id}
-    const linkRegex = /href="(\/de\/a\/[^"]+)"/g;
+    // Also handle /fr/a/ and /en/a/ variants
+    const linkRegex = /href="(\/(?:de|fr|en|it)\/a\/[^"]+)"/g;
     let linkMatch;
 
     while ((linkMatch = linkRegex.exec(html)) !== null) {
       const href = linkMatch[1];
-      if (seenUrls.has(href)) continue;
-      seenUrls.add(href);
+      // Normalize to /de/a/ for dedup
+      const normalized = href.replace(/^\/(?:fr|en|it)\/a\//, "/de/a/");
+      if (seenUrls.has(normalized)) continue;
+      seenUrls.add(normalized);
 
-      // Context around the link for title/price extraction
-      const start = Math.max(0, linkMatch.index - 500);
-      const end = Math.min(html.length, linkMatch.index + 500);
+      // Use wider context for better matching (prices may be further away in React DOM)
+      const start = Math.max(0, linkMatch.index - 2000);
+      const end = Math.min(html.length, linkMatch.index + 2000);
       const context = html.substring(start, end);
 
-      // Title: text inside the link or nearby heading
-      const titleMatch = context.match(/(?:aria-label|title)="([^"]+)"/);
+      // Title: text inside the link or nearby heading/aria-label
+      const titleMatch = context.match(/(?:aria-label|title|alt)="([^"]{5,200})"/);
       let title = titleMatch ? titleMatch[1] : "";
 
-      // If no title from attributes, try to extract from tag content
+      // If no title from attributes, try to extract from tag content near the link
       if (!title) {
-        const textMatch = context.match(/>([^<]{5,100})</);
+        const textMatch = context.match(/>([^<]{5,150})</);
         if (textMatch) title = textMatch[1].trim();
       }
 
@@ -372,24 +408,31 @@ export class RicardoScraper extends BaseScraper {
       // Vehicle filter
       if (isVehicleSearch && this.isNonVehicleItem(title)) continue;
 
-      // Price: CHF XX or XX.XX CHF
-      const priceMatch = context.match(/(?:CHF|Fr\.?)\s*([\d''.,-]+)|(\d[\d'.,-]+)\s*(?:CHF|Fr\.?)/);
-      let price = 0;
-      if (priceMatch) {
-        const priceStr = (priceMatch[1] || priceMatch[2] || "0");
-        price = Math.round(
-          parseFloat(priceStr.replace(/['']/g, "").replace(".–", "").replace(",", ".")) * 100
-        );
-        if (isNaN(price)) price = 0;
-      }
+      // Price extraction with enhanced method
+      const price = this.extractChfPrice(context);
 
       if (price > 0) {
         if (options?.minPrice && price < options.minPrice) continue;
         if (options?.maxPrice && price > options.maxPrice) continue;
       }
 
-      // Image
+      // Image: Ricardo uses img.ricardostatic.ch
+      let imageUrl: string | null = null;
       const imgMatch = context.match(/src="(https:\/\/img\.ricardostatic\.ch[^"]+)"/i);
+      if (imgMatch) {
+        imageUrl = imgMatch[1];
+      }
+      // Also try srcset
+      if (!imageUrl) {
+        const srcsetMatch = context.match(/srcset="([^"]*img\.ricardostatic\.ch[^"]*)"/i);
+        if (srcsetMatch) {
+          const firstEntry = srcsetMatch[1].split(",")[0].trim();
+          const srcsetUrl = firstEntry.split(/\s+/)[0];
+          if (srcsetUrl && srcsetUrl.startsWith("http")) {
+            imageUrl = srcsetUrl;
+          }
+        }
+      }
 
       const fullUrl = `${this.baseUrl}${href}`;
 
@@ -397,7 +440,7 @@ export class RicardoScraper extends BaseScraper {
         title: title.substring(0, 200),
         price,
         url: fullUrl,
-        imageUrl: imgMatch ? imgMatch[1] : null,
+        imageUrl,
         platform: this.platform,
         scrapedAt: new Date(),
       });
@@ -407,6 +450,96 @@ export class RicardoScraper extends BaseScraper {
 
     if (results.length > 0) {
       console.log(`[Ricardo] HTML-Listings: ${results.length} Ergebnisse`);
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse Ricardo RSC flight data (Next.js App Router).
+   * Ricardo may embed article data in self.__next_f.push() chunks.
+   */
+  private parseRscData(
+    html: string,
+    options?: ScraperOptions,
+    isVehicleSearch?: boolean
+  ): ScraperResult[] {
+    const results: ScraperResult[] = [];
+
+    // Extract RSC chunks
+    const chunkPattern = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
+    let fullData = "";
+    let chunkMatch;
+    while ((chunkMatch = chunkPattern.exec(html)) !== null) {
+      try {
+        const unescaped = JSON.parse(`"${chunkMatch[1]}"`);
+        fullData += unescaped;
+      } catch {
+        // Skip malformed chunks
+      }
+    }
+
+    if (fullData.length < 100) return results;
+
+    console.log(`[Ricardo] RSC data extracted: ${fullData.length} chars`);
+
+    // Look for article-like objects with price fields
+    // Ricardo articles typically have: title/name, buyNowPrice/bidPrice/price, and an id
+    const articlePattern = /"(?:title|name)":"([^"]{3,200})"[^}]*?"(?:buyNowPrice|bidPrice|price|currentPrice)":\s*(\d+(?:\.\d+)?)/g;
+    let am;
+    const seenTitles = new Set<string>();
+
+    while ((am = articlePattern.exec(fullData)) !== null) {
+      const title = am[1];
+      const priceCHF = parseFloat(am[2]);
+
+      if (seenTitles.has(title)) continue;
+      seenTitles.add(title);
+
+      if (isVehicleSearch && this.isNonVehicleItem(title)) continue;
+
+      const priceRappen = Math.round(priceCHF * 100);
+      if (priceRappen > 0) {
+        if (options?.minPrice && priceRappen < options.minPrice) continue;
+        if (options?.maxPrice && priceRappen > options.maxPrice) continue;
+      }
+
+      // Try to find article ID nearby
+      const nearbyContext = fullData.substring(
+        Math.max(0, am.index - 200),
+        Math.min(fullData.length, am.index + 500)
+      );
+
+      let articleUrl = this.baseUrl;
+      const idMatch = nearbyContext.match(/"(?:id|articleId)":\s*(\d+)/);
+      if (idMatch) {
+        articleUrl = `${this.baseUrl}/de/a/${idMatch[1]}`;
+      }
+      // Also try URL field
+      const urlMatch = nearbyContext.match(/"url":"(\/(?:de|fr|en)\/a\/[^"]+)"/);
+      if (urlMatch) {
+        articleUrl = `${this.baseUrl}${urlMatch[1]}`;
+      }
+
+      // Image
+      let imageUrl: string | null = null;
+      const imgMatch = nearbyContext.match(/"(?:image(?:Url)?|thumbnail)":"(https?:\/\/[^"]+)"/);
+      if (imgMatch) imageUrl = imgMatch[1];
+
+      results.push({
+        title: title.substring(0, 200),
+        price: priceRappen,
+        url: articleUrl,
+        imageUrl,
+        platform: this.platform,
+        scrapedAt: new Date(),
+      });
+
+      if (options?.limit && results.length >= options.limit) break;
+    }
+
+    if (results.length > 0) {
+      console.log(`[Ricardo] RSC data: ${results.length} Ergebnisse`);
     }
 
     return results;

@@ -13,6 +13,7 @@
 
 import { BaseScraper, ScraperResult, ScraperOptions } from "./base";
 import { fetchViaFlareSolverr, isCloudflareChallenge, isFlareSolverrConfigured } from "./flaresolverr";
+import { parseSwissPrice, parseSwissPriceRappen } from "./price-utils";
 
 // Fuel type mapping
 const FUEL_TYPE_MAP: Record<string, string> = {
@@ -583,16 +584,7 @@ export class AutoScoutScraper extends BaseScraper {
       const priceMatch = context.match(/CHF(?:&nbsp;|\s|\u00a0)\s*([\d'''.,-]+)/);
       let price = 0;
       if (priceMatch) {
-        // Remove all quote variants (', ', '), trailing .– and ,
-        const cleaned = priceMatch[1]
-          .replace(/['''`]/g, "")  // all apostrophe/quote variants as thousands sep
-          .replace(/\.–$/, "")     // trailing .–
-          .replace(/,–$/, "")      // trailing ,–
-          .replace(/[–-]$/, "")    // trailing dash
-          .replace(/\.$/, "")      // trailing dot
-          .trim();
-        const parsed = parseFloat(cleaned.replace(",", "."));
-        price = isNaN(parsed) ? 0 : Math.round(parsed * 100);
+        price = parseSwissPriceRappen(priceMatch[1]);
       }
 
       if (price > 0) {
@@ -748,19 +740,13 @@ export class AutoScoutScraper extends BaseScraper {
       const offers: Record<string, unknown> = Array.isArray(offersData) ? offersData[0] : offersData;
       if (offers) {
         const val = offers.price ?? offers.lowPrice;
-        if (typeof val === "number") {
-          priceRaw = val;
-        } else if (typeof val === "string") {
-          priceRaw = parseFloat(val.replace(/['''`\s]/g, "").replace(",", "."));
-        }
+        priceRaw = parseSwissPrice(val as string | number);
       }
-    } else if (typeof item.price === "number") {
-      priceRaw = item.price as number;
-    } else if (typeof item.price === "string") {
-      priceRaw = parseFloat((item.price as string).replace(/['''`\s]/g, "").replace(",", "."));
+    } else {
+      priceRaw = parseSwissPrice(item.price as string | number);
     }
 
-    const price = Math.round((isNaN(priceRaw) ? 0 : priceRaw) * 100);
+    const price = parseSwissPriceRappen(priceRaw || 0);
 
     if (price > 0) {
       if (options?.minPrice && price < options.minPrice) return null;
